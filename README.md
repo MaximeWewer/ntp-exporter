@@ -233,27 +233,27 @@ The NTP exporter supports three deployment modes, each optimized for different u
 **Architecture:**
 
 ```text
-┌─────────────────────────────────────────┐
-│         Prometheus Server               │
-│                                         │
-│   Scrapes: /metrics every 60s           │
-└──────────────┬──────────────────────────┘
+┌─────────────────────────────────┐
+│         Prometheus Server       │
+│                                 │
+│   Scrapes: /metrics every 60s   │
+└──────────────┬──────────────────┘
                │
                v
-┌──────────────────────────────────────────┐
-│   NTP Exporter (Deployment)              │
-│   - 2+ replicas                          │
-│   - ClusterIP service                    │
-│   - Pod anti-affinity                    │
-└──────────────┬───────────────────────────┘
+┌─────────────────────────────────┐
+│   NTP Exporter (Deployment)     │
+│   - 2+ replicas                 │
+│   - ClusterIP service           │
+│   - Pod anti-affinity           │
+└──────────────┬──────────────────┘
                │
                v
-┌──────────────────────────────────────────┐
-│   External NTP Servers                   │
-│   - time.google.com                      │
-│   - time.cloudflare.com                  │
-│   - pool.ntp.org                         │
-└──────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│   External NTP Servers          │
+│   - time.google.com             │
+│   - time.cloudflare.com         │
+│   - pool.ntp.org                │
+└─────────────────────────────────┘
 ```
 
 **Configuration example:**
@@ -299,20 +299,20 @@ config:
 **Architecture:**
 
 ```text
-┌─────────────────────────────────────────┐
-│         Prometheus Server               │
-│                                         │
-│   Scrapes: /metrics every 30s           │
-└──────────────┬──────────────────────────┘
+┌──────────────────────────────────────┐
+│         Prometheus Server            │
+│                                      │
+│   Scrapes: /metrics every 30s        │
+└──────────────┬───────────────────────┘
                │
                v
-┌──────────────────────────────────────────┐
-│   NTP Exporter (Agent per host)          │
-│   ┌────────┐ ┌────────┐ ┌────────┐      │
-│   │ Host 1 │ │ Host 2 │ │ VM 3   │      │
-│   │(K8s/VM)│ │(Docker)│ │(Docker)│      │
-│   └────┬───┘ └────┬───┘ └────┬───┘      │
-└────────┼──────────┼──────────┼───────────┘
+┌──────────────────────────────────────┐
+│   NTP Exporter (Agent per host)      │
+│   ┌────────┐ ┌────────┐ ┌────────┐   │
+│   │ Host 1 │ │ Host 2 │ │ VM 3   │   │
+│   │(K8s/VM)│ │(Docker)│ │(Docker)│   │
+│   └────┬───┘ └────┬───┘ └────┬───┘   │
+└────────┼──────────┼──────────┼───────┘
          │          │          │
          v          v          v
     NTP Pools  NTP Pools  NTP Pools
@@ -366,23 +366,23 @@ tolerations:
 **Architecture:**
 
 ```text
-┌─────────────────────────────────────────┐
-│         Prometheus Server               │
-│                                         │
-│   Scrapes: /metrics every 30s           │
-└──────────────┬──────────────────────────┘
+┌──────────────────────────────────────┐
+│         Prometheus Server            │
+│                                      │
+│   Scrapes: /metrics every 30s        │
+└──────────────┬───────────────────────┘
                │
                v
-┌──────────────────────────────────────────┐
-│   NTP Exporter (DaemonSet)               │
-│   ┌──────────────────────────────┐      │
-│   │ Per Node:                    │      │
-│   │  - Query NTP servers         │      │
-│   │  - Read kernel timex state   │      │
-│   │  - Calculate divergence      │      │
-│   │  - Compute coherence score   │      │
-│   └──────────────────────────────┘      │
-└──────────────┬───────────────────────────┘
+┌──────────────────────────────────────┐
+│   NTP Exporter (DaemonSet)           │
+│   ┌──────────────────────────────┐   │
+│   │ Per Node:                    │   │
+│   │  - Query NTP servers         │   │
+│   │  - Read kernel timex state   │   │
+│   │  - Calculate divergence      │   │
+│   │  - Compute coherence score   │   │
+│   └──────────────────────────────┘   │
+└──────────────┬───────────────────────┘
                │
                v
     ┌──────────┴──────────┐
