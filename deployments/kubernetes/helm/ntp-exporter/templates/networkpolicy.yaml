@@ -1,0 +1,24 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: {{ include "ntp-exporter.networkPolicy.apiVersion" . }}
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ntp-exporter.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ntp-exporter.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ntp-exporter.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  - Egress
+  {{- with .Values.networkPolicy.ingress }}
+  ingress:
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+  {{- with .Values.networkPolicy.egress }}
+  egress:
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}

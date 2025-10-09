@@ -1,0 +1,73 @@
+# values-agent.yaml
+# Configuration for running NTP Exporter in agent mode (DaemonSet)
+# Use: helm install ntp-exporter . -f values-agent.yaml
+
+mode: agent
+
+# Run on all nodes including master
+tolerations:
+- effect: NoSchedule
+  key: node-role.kubernetes.io/master
+  operator: Exists
+- effect: NoSchedule
+  key: node-role.kubernetes.io/control-plane
+  operator: Exists
+
+# Higher resource allocation for DaemonSet
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Use host network for accurate time measurements
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+
+# Update strategy - limit concurrent updates
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+# Enable ServiceMonitor for Prometheus Operator
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  additionalLabels:
+    prometheus: kube-prometheus
+
+# Network policy for host network mode
+networkPolicy:
+  enabled: true
+  egress:
+  - to:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 123
+
+# NTP configuration optimized for agent mode
+config:
+  ntpServers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+  - 2.pool.ntp.org
+  - 3.pool.ntp.org
+  metricsPort: 9559
+  scrapeInterval: 30s
+  ntpTimeout: 10s
+  maxClockOffset: 50
+  logging:
+    level: info

@@ -1,0 +1,315 @@
+# =============================================================================
+# values-with-yaml-config.yaml
+# =============================================================================
+# Configuration for running NTP Exporter with a complete YAML config file
+# Uses a ConfigMap to mount the full configuration file
+# Use: helm install ntp-exporter . -f values-with-yaml-config.yaml
+# =============================================================================
+
+mode: agent
+
+# =============================================================================
+# IMAGE CONFIGURATION
+# =============================================================================
+image:
+  repository: ntp-exporter
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# =============================================================================
+# YAML CONFIG FILE - Full configuration via ConfigMap
+# =============================================================================
+# This will be mounted at /etc/ntp-exporter/config.yaml
+# You can customize this with the full YAML configuration structure
+configYaml:
+  enabled: true
+  # Full YAML configuration (matches config.example.yaml structure)
+  content: |
+    # ============================================================================
+    # NTP Exporter Configuration File
+    # ============================================================================
+
+    # ----------------------------------------------------------------------------
+    # SERVER - HTTP Prometheus server configuration
+    # ----------------------------------------------------------------------------
+    server:
+      address: "0.0.0.0"
+      port: 9559
+      read_timeout: 10s
+      write_timeout: 10s
+      enable_cors: false
+      allowed_origins: []
+      tls_enabled: false
+      tls_cert_file: ""
+      tls_key_file: ""
+
+    # ----------------------------------------------------------------------------
+    # NTP - NTP client configuration and query strategy
+    # ----------------------------------------------------------------------------
+    ntp:
+      servers:
+      - "pool.ntp.org"
+      - "time.google.com"
+      - "time.cloudflare.com"
+
+      # NTP pool configuration with selection strategy
+      pools:
+      - name: "pool.ntp.org"
+        strategy: "best_n"
+        max_servers: 4
+        fallback: ""
+
+      timeout: 5s
+      version: 4
+      samples_per_server: 3
+      max_concurrency: 10
+      enable_kernel: false
+
+      # Rate limiting
+      rate_limit:
+        enabled: false
+        global_rate: 1000
+        per_server_rate: 60
+        burst_size: 10
+        backoff_duration: 1m
+
+      # Circuit breaker
+      circuit_breaker:
+        enabled: true
+        max_requests: 3
+        interval: 60s
+        timeout: 30s
+        failure_threshold: 0.6
+
+      # Adaptive sampling
+      adaptive_sampling:
+        enabled: false
+        default_samples: 3
+        high_drift_samples: 10
+        drift_threshold: 50ms
+        max_duration: 30s
+
+      # Worker pool
+      worker_pool:
+        enabled: false
+        size: 5
+
+      # DNS cache
+      dns_cache:
+        enabled: true
+        min_ttl: 5m
+        max_ttl: 60m
+        cleanup_workers: 1
+
+    # ----------------------------------------------------------------------------
+    # LOGGING - Log configuration (JSON FORMAT ONLY)
+    # ----------------------------------------------------------------------------
+    logging:
+      level: "info"
+      enable_file: false
+      file_path: ""
+
+    # ----------------------------------------------------------------------------
+    # METRICS - Prometheus metrics configuration
+    # ----------------------------------------------------------------------------
+    metrics:
+      namespace: "ntp"
+      subsystem: ""
+      labels: {}
+
+# =============================================================================
+# KUBERNETES RESOURCES CONFIGURATION
+# =============================================================================
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# RBAC
+rbac:
+  create: true
+  annotations: {}
+
+# Pod Annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9559"
+  prometheus.io/path: "/metrics"
+
+# Pod Labels
+podLabels:
+  app.kubernetes.io/component: yaml-config
+
+# Pod Security Context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container Security Context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65534
+  capabilities:
+    drop:
+    - ALL
+    add:
+    - NET_BIND_SERVICE
+
+# Service
+service:
+  type: ClusterIP
+  port: 9559
+  targetPort: 9559
+  annotations: {}
+  labels: {}
+
+# ServiceMonitor for Prometheus Operator
+serviceMonitor:
+  enabled: true
+  namespace: ""
+  additionalLabels:
+    prometheus: kube-prometheus
+  interval: 30s
+  scrapeTimeout: 10s
+  honorLabels: true
+  relabelings: []
+  metricRelabelings: []
+
+# Network Policy
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: monitoring
+      ports:
+      - protocol: TCP
+        port: 9559
+  egress:
+    # Allow DNS
+    - to:
+      - namespaceSelector: {}
+        podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+      ports:
+      - protocol: UDP
+        port: 53
+    # Allow NTP (port 123)
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: UDP
+        port: 123
+    # Allow HTTPS
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: TCP
+        port: 443
+
+# Resources
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+    operator: Exists
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
+    operator: Exists
+
+# Affinity
+affinity: {}
+
+# Priority class
+priorityClassName: ""
+
+# Additional volumes (ConfigMap will be added automatically)
+volumes: []
+
+# Additional volume mounts (ConfigMap will be added automatically)
+volumeMounts: []
+
+# Additional environment variables
+env:
+  # Override log level via environment variable
+  - name: LOG_LEVEL
+    value: "info"
+
+# Environment from ConfigMaps or Secrets
+envFrom: []
+
+# Liveness probe
+livenessProbe:
+  httpGet:
+    path: /metrics
+    port: 9559
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+# Update strategy for DaemonSet
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+# Deployment strategy (only used in probe mode)
+deploymentStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# Host network mode
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+
+# Termination grace period
+terminationGracePeriodSeconds: 30
+
+# =============================================================================
+# USAGE NOTES
+# =============================================================================
+# This configuration uses a ConfigMap to mount the complete YAML configuration
+# file at /etc/ntp-exporter/config.yaml
+#
+# To customize the configuration:
+# 1. Edit the 'configYaml.content' section above
+# 2. Deploy with: helm install ntp-exporter . -f values-with-yaml-config.yaml
+#
+# The ConfigMap allows you to use advanced features not available via env vars:
+# - NTP pools with selection strategies (best_n, round_robin, all)
+# - Fine-tuned circuit breaker settings
+# - Adaptive sampling configuration
+# - Worker pool settings
+# - DNS cache customization
+# - TLS/HTTPS configuration
+# - CORS settings
+#
+# Environment variables can still override YAML values if needed

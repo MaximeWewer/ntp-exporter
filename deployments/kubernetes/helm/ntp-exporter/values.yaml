@@ -1,0 +1,213 @@
+# Default values for ntp-exporter
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Deployment mode: "agent" for DaemonSet, "probe" for Deployment
+mode: agent
+
+# Number of replicas (only used in probe mode)
+replicaCount: 1
+
+image:
+  repository: ntp-exporter
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# NTP Exporter configuration
+config:
+  # NTP servers to query
+  ntpServers:
+    - pool.ntp.org
+    - time.google.com
+    - time.cloudflare.com
+
+  # Port to expose metrics on
+  metricsPort: 9559
+
+  # Scrape interval (used for documentation)
+  scrapeInterval: 30s
+
+  # NTP query timeout
+  ntpTimeout: 5s
+
+  # Maximum clock offset threshold (milliseconds)
+  maxClockOffset: 100
+
+  # Logging configuration
+  logging:
+    level: info
+    format: json
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+rbac:
+  # Specifies whether RBAC resources should be created
+  create: true
+  # Additional annotations for RBAC resources
+  annotations: {}
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9559"
+  prometheus.io/path: "/metrics"
+
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65534
+  capabilities:
+    drop:
+    - ALL
+    add:
+    - NET_BIND_SERVICE
+
+service:
+  type: ClusterIP
+  port: 9559
+  targetPort: 9559
+  annotations: {}
+  labels: {}
+
+# ServiceMonitor for Prometheus Operator
+serviceMonitor:
+  # Enable ServiceMonitor creation
+  enabled: false
+  # Namespace where ServiceMonitor should be created (defaults to release namespace)
+  namespace: ""
+  # Additional labels for ServiceMonitor
+  additionalLabels: {}
+  # Scrape interval
+  interval: 30s
+  # Scrape timeout
+  scrapeTimeout: 10s
+  # HonorLabels chooses the metric's labels on collisions with target labels
+  honorLabels: true
+  # RelabelConfigs to apply to samples before ingestion
+  relabelings: []
+  # MetricRelabelConfigs to apply to samples before ingestion
+  metricRelabelings: []
+
+# Network Policy
+networkPolicy:
+  # Enable network policy
+  enabled: false
+  # Ingress rules
+  ingress:
+    # Allow Prometheus to scrape metrics
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: monitoring
+      ports:
+      - protocol: TCP
+        port: 9559
+  # Egress rules
+  egress:
+    # Allow DNS
+    - to:
+      - namespaceSelector: {}
+        podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+      ports:
+      - protocol: UDP
+        port: 53
+    # Allow NTP (port 123)
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: UDP
+        port: 123
+    # Allow HTTPS for external NTP servers
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: TCP
+        port: 443
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Node selector for pod assignment
+nodeSelector: {}
+
+# Tolerations for pod assignment
+tolerations: []
+
+# Affinity for pod assignment
+affinity: {}
+
+# Priority class name
+priorityClassName: ""
+
+# Additional volumes
+volumes: []
+
+# Additional volume mounts
+volumeMounts: []
+
+# Additional environment variables
+env: []
+
+# Additional environment variables from ConfigMaps or Secrets
+envFrom: []
+
+# Liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /metrics
+    port: 9559
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+# Update strategy for DaemonSet
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+# Deployment strategy (only used in probe mode)
+deploymentStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# Host network mode (useful for accurate NTP measurements)
+hostNetwork: false
+
+# DNS policy
+dnsPolicy: ClusterFirst
+
+# Termination grace period seconds
+terminationGracePeriodSeconds: 30

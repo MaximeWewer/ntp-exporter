@@ -1,0 +1,117 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }}.
+
+The NTP Exporter has been deployed in {{ .Values.mode }} mode.
+
+{{- if eq .Values.mode "agent" }}
+
+AGENT MODE (DaemonSet):
+  The NTP Exporter is running on every node in your cluster.
+
+  To verify the deployment:
+    kubectl get daemonset {{ include "ntp-exporter.fullname" . }} -n {{ .Release.Namespace }}
+    kubectl get pods -l app.kubernetes.io/name={{ include "ntp-exporter.name" . }} -n {{ .Release.Namespace }}
+
+{{- else }}
+
+PROBE MODE (Deployment):
+  The NTP Exporter is running with {{ .Values.replicaCount }} replica(s).
+
+  To verify the deployment:
+    kubectl get deployment {{ include "ntp-exporter.fullname" . }} -n {{ .Release.Namespace }}
+    kubectl get pods -l app.kubernetes.io/name={{ include "ntp-exporter.name" . }} -n {{ .Release.Namespace }}
+
+{{- end }}
+
+METRICS ENDPOINT:
+  The NTP Exporter exposes Prometheus metrics on port {{ .Values.config.metricsPort }}.
+
+  To access metrics locally:
+    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "ntp-exporter.fullname" . }} {{ .Values.config.metricsPort }}:{{ .Values.config.metricsPort }}
+    curl http://localhost:{{ .Values.config.metricsPort }}/metrics
+
+NTP SERVERS:
+  Configured NTP servers:
+  {{- range .Values.config.ntpServers }}
+  - {{ . }}
+  {{- end }}
+
+{{- if .Values.serviceMonitor.enabled }}
+
+PROMETHEUS SERVICEMONITOR:
+  A ServiceMonitor has been created for Prometheus Operator integration.
+
+  To verify:
+    kubectl get servicemonitor {{ include "ntp-exporter.fullname" . }} -n {{ include "ntp-exporter.serviceMonitor.namespace" . }}
+
+  Scrape interval: {{ .Values.serviceMonitor.interval }}
+  Scrape timeout: {{ .Values.serviceMonitor.scrapeTimeout }}
+
+{{- else }}
+
+PROMETHEUS INTEGRATION:
+  To enable automatic Prometheus scraping, configure your Prometheus instance with:
+
+  scrape_configs:
+  - job_name: 'ntp-exporter'
+    kubernetes_sd_configs:
+    - role: endpoints
+      namespaces:
+        names:
+        - {{ .Release.Namespace }}
+    relabel_configs:
+    - source_labels: [__meta_kubernetes_service_name]
+      action: keep
+      regex: {{ include "ntp-exporter.fullname" . }}
+    - source_labels: [__meta_kubernetes_endpoint_port_name]
+      action: keep
+      regex: metrics
+
+  Alternatively, enable the ServiceMonitor:
+    helm upgrade {{ .Release.Name }} {{ .Chart.Name }} --set serviceMonitor.enabled=true
+
+{{- end }}
+
+{{- if .Values.networkPolicy.enabled }}
+
+NETWORK POLICY:
+  Network policies are enabled to restrict traffic.
+  Ensure your Prometheus instance can reach the metrics endpoint.
+
+{{- end }}
+
+MONITORING:
+  Check the logs:
+    kubectl logs -l app.kubernetes.io/name={{ include "ntp-exporter.name" . }} -n {{ .Release.Namespace }}
+
+  Check pod status:
+    kubectl describe pods -l app.kubernetes.io/name={{ include "ntp-exporter.name" . }} -n {{ .Release.Namespace }}
+
+GRAFANA DASHBOARD:
+  Import the NTP Exporter dashboard for visualization.
+  Dashboard ID: [To be created]
+
+TROUBLESHOOTING:
+  If metrics are not being scraped:
+  1. Verify pods are running
+  2. Check network policies allow Prometheus access
+  3. Verify ServiceMonitor labels match Prometheus configuration
+  4. Check NTP servers are reachable from pods
+  5. Review logs for errors
+
+DOCUMENTATION:
+  For more information, visit:
+  https://github.com/yourusername/ntp_exporter
+
+UPGRADE:
+  To upgrade this release:
+    helm upgrade {{ .Release.Name }} {{ .Chart.Name }} -f values.yaml
+
+  To switch between agent and probe modes:
+    helm upgrade {{ .Release.Name }} {{ .Chart.Name }} -f values-agent.yaml
+    helm upgrade {{ .Release.Name }} {{ .Chart.Name }} -f values-probe.yaml
+
+UNINSTALL:
+  To uninstall this release:
+    helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}

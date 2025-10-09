@@ -1,0 +1,75 @@
+# =============================================================================
+# NTP Exporter - Docker Compose with YAML configuration file
+# =============================================================================
+# Use case: Complete configuration via mounted YAML file
+# Allows managing all advanced options (pools, strategies, etc.)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # NTP Exporter - Configuration via complete YAML
+  # ---------------------------------------------------------------------------
+  ntp-exporter:
+    image: ntp-exporter:${VERSION:-latest}
+    container_name: ntp-exporter-yaml
+    hostname: ntp-exporter-yaml
+
+    ports:
+      - "${EXPORTER_PORT:-9559}:9559"
+
+    # Volume: mounting the YAML configuration file
+    volumes:
+      # Mounting the main configuration file
+      - type: bind
+        source: ../config/config-example.yaml
+        target: /etc/ntp-exporter/config.yaml
+        read_only: true
+
+      # Optional: mounting TLS certificates
+      # - type: bind
+      #   source: ./certs/server.crt
+      #   target: /etc/ntp-exporter/certs/server.crt
+      #   read_only: true
+      # - type: bind
+      #   source: ./certs/server.key
+      #   target: /etc/ntp-exporter/certs/server.key
+      #   read_only: true
+
+      # Optional: mounting volume for file logs
+      # - type: bind
+      #   source: ./logs
+      #   target: /var/log/ntp-exporter
+
+    # Environment variables (optional, override YAML)
+    environment:
+      # Minimal variables for selective override
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+
+      # Possible override of NTP servers via env var
+      # NTP_SERVERS: "${NTP_SERVERS:-}"
+
+      # Labels for identification
+      NODE_NAME: "${HOSTNAME:-yaml-config-node}"
+
+    # Command: explicitly specify the configuration file
+    command:
+      - "--config"
+      - "/etc/ntp-exporter/config.yaml"
+
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9559/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

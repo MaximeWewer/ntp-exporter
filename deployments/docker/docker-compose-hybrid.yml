@@ -1,0 +1,128 @@
+# =============================================================================
+# NTP Exporter - MODE HYBRID
+# =============================================================================
+# Use case: Local servers + remote pools
+# Scrape by Prometheus every 30s
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # NTP Exporter Hybrid - Complete configuration
+  # ---------------------------------------------------------------------------
+  ntp-exporter-hybrid:
+    image: ntp-exporter:${VERSION:-latest}
+    container_name: ntp-exporter-hybrid
+    hostname: ntp-exporter-hybrid
+
+    ports:
+      - "${EXPORTER_PORT:-9559}:9559"
+
+    # Environment variables - Complete configuration HYBRID mode
+    environment:
+      # -----------------------------------------------------------------------
+      # SERVER - Prometheus HTTP server configuration
+      # -----------------------------------------------------------------------
+      NTP_EXPORTER_ADDRESS: "${EXPORTER_ADDRESS:-0.0.0.0}"
+      NTP_EXPORTER_PORT: "${EXPORTER_PORT:-9559}"
+      SERVER_READ_TIMEOUT: "${SERVER_READ_TIMEOUT:-15s}"
+      SERVER_WRITE_TIMEOUT: "${SERVER_WRITE_TIMEOUT:-15s}"
+
+      # TLS/HTTPS
+      TLS_ENABLED: "${TLS_ENABLED:-false}"
+      TLS_CERT_FILE: "${TLS_CERT_FILE:-}"
+      TLS_KEY_FILE: "${TLS_KEY_FILE:-}"
+
+      # CORS
+      ENABLE_CORS: "${ENABLE_CORS:-false}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
+
+      # -----------------------------------------------------------------------
+      # NTP - NTP client configuration
+      # -----------------------------------------------------------------------
+      # NTP servers (mixed: local + reliable public)
+      NTP_SERVERS: "${NTP_SERVERS:-127.0.0.1,time.google.com,time.cloudflare.com}"
+
+      # Request configuration
+      NTP_TIMEOUT: "${NTP_TIMEOUT:-5s}"
+      NTP_VERSION: "${NTP_VERSION:-4}"
+      NTP_SAMPLES: "${NTP_SAMPLES:-5}"
+      NTP_MAX_CONCURRENCY: "${NTP_MAX_CONCURRENCY:-15}"
+
+      # Kernel sync (enabled if Linux)
+      NTP_ENABLE_KERNEL: "${NTP_ENABLE_KERNEL:-true}"
+
+      # -----------------------------------------------------------------------
+      # RATE LIMIT - Rate limiting
+      # -----------------------------------------------------------------------
+      RATE_LIMIT_ENABLED: "${RATE_LIMIT_ENABLED:-true}"
+      RATE_LIMIT_GLOBAL: "${RATE_LIMIT_GLOBAL:-800}"
+      RATE_LIMIT_PER_SERVER: "${RATE_LIMIT_PER_SERVER:-50}"
+      RATE_LIMIT_BURST_SIZE: "${RATE_LIMIT_BURST_SIZE:-8}"
+      RATE_LIMIT_BACKOFF_DURATION: "${RATE_LIMIT_BACKOFF_DURATION:-90s}"
+
+      # -----------------------------------------------------------------------
+      # CIRCUIT BREAKER - Protection against failing servers
+      # -----------------------------------------------------------------------
+      CIRCUIT_BREAKER_ENABLED: "${CIRCUIT_BREAKER_ENABLED:-true}"
+      CIRCUIT_BREAKER_MAX_REQUESTS: "${CIRCUIT_BREAKER_MAX_REQUESTS:-4}"
+      CIRCUIT_BREAKER_INTERVAL: "${CIRCUIT_BREAKER_INTERVAL:-60s}"
+      CIRCUIT_BREAKER_TIMEOUT: "${CIRCUIT_BREAKER_TIMEOUT:-30s}"
+      CIRCUIT_BREAKER_FAILURE_THRESHOLD: "${CIRCUIT_BREAKER_FAILURE_THRESHOLD:-0.6}"
+
+      # -----------------------------------------------------------------------
+      # ADAPTIVE SAMPLING - Adaptive sampling (enabled for pools)
+      # -----------------------------------------------------------------------
+      ADAPTIVE_SAMPLING_ENABLED: "${ADAPTIVE_SAMPLING_ENABLED:-true}"
+      ADAPTIVE_SAMPLING_DEFAULT_SAMPLES: "${ADAPTIVE_SAMPLING_DEFAULT_SAMPLES:-5}"
+      ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES: "${ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES:-12}"
+      ADAPTIVE_SAMPLING_DRIFT_THRESHOLD: "${ADAPTIVE_SAMPLING_DRIFT_THRESHOLD:-50ms}"
+      ADAPTIVE_SAMPLING_MAX_DURATION: "${ADAPTIVE_SAMPLING_MAX_DURATION:-30s}"
+
+      # -----------------------------------------------------------------------
+      # WORKER POOL - Worker pool (enabled, moderate size)
+      # -----------------------------------------------------------------------
+      WORKER_POOL_ENABLED: "${WORKER_POOL_ENABLED:-true}"
+      WORKER_POOL_SIZE: "${WORKER_POOL_SIZE:-6}"
+
+      # -----------------------------------------------------------------------
+      # DNS CACHE - DNS cache
+      # -----------------------------------------------------------------------
+      DNS_CACHE_ENABLED: "${DNS_CACHE_ENABLED:-true}"
+      DNS_CACHE_MIN_TTL: "${DNS_CACHE_MIN_TTL:-8m}"
+      DNS_CACHE_MAX_TTL: "${DNS_CACHE_MAX_TTL:-45m}"
+      DNS_CACHE_CLEANUP_WORKERS: "${DNS_CACHE_CLEANUP_WORKERS:-1}"
+
+      # -----------------------------------------------------------------------
+      # LOGGING - Logging configuration
+      # -----------------------------------------------------------------------
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      LOG_ENABLE_FILE: "${LOG_ENABLE_FILE:-false}"
+      LOG_FILE_PATH: "${LOG_FILE_PATH:-}"
+
+      # -----------------------------------------------------------------------
+      # METRICS - Prometheus metrics configuration
+      # -----------------------------------------------------------------------
+      METRICS_NAMESPACE: "${METRICS_NAMESPACE:-ntp}"
+      METRICS_SUBSYSTEM: "${METRICS_SUBSYSTEM:-}"
+
+      # Additional labels (example)
+      REGION: "${REGION:-eu-west-1}"
+      DEPLOYMENT_MODE: "hybrid"
+
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9559/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,96 @@
+# values-hybrid.yaml
+# Configuration for running NTP Exporter in hybrid mode (DaemonSet with kernel monitoring)
+# Use: helm install ntp-exporter . -f values-hybrid.yaml
+
+mode: hybrid
+
+# Run on all nodes including master
+tolerations:
+- effect: NoSchedule
+  key: node-role.kubernetes.io/master
+  operator: Exists
+- effect: NoSchedule
+  key: node-role.kubernetes.io/control-plane
+  operator: Exists
+
+# Higher resource allocation for hybrid mode with kernel monitoring
+resources:
+  limits:
+    cpu: 300m
+    memory: 384Mi
+  requests:
+    cpu: 150m
+    memory: 192Mi
+
+# REQUIRED: Host network for accurate time measurements
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+
+# REQUIRED: Privileged mode for kernel timex access (adjtimex syscall)
+podSecurityContext:
+  runAsNonRoot: false # Required for privileged access
+  runAsUser: 0 # Run as root for SYS_TIME capability
+  fsGroup: 0
+
+securityContext:
+  privileged: true
+  allowPrivilegeEscalation: true # Required when privileged=true
+  readOnlyRootFilesystem: true
+  runAsNonRoot: false
+  runAsUser: 0
+  capabilities:
+    drop:
+    - ALL
+    add:
+    - SYS_TIME # Required for adjtimex syscall
+
+# Update strategy - limit concurrent updates
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+# Enable ServiceMonitor for Prometheus Operator
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  additionalLabels:
+    prometheus: kube-prometheus
+
+# Network policy for host network mode
+networkPolicy:
+  enabled: true
+  egress:
+  - to:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 123
+
+# NTP configuration optimized for hybrid mode
+config:
+  ntpServers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+  metricsPort: 9561 # Different port to avoid conflicts
+  scrapeInterval: 30s
+  ntpTimeout: 10s
+  maxClockOffset: 50
+  enableKernel: true # CRITICAL: Enable kernel monitoring
+  logging:
+    level: info
+
+# Labels to identify hybrid mode
+podLabels:
+  app.kubernetes.io/component: hybrid
+  app.kubernetes.io/mode: daemonset-kernel
+  monitoring.ntp/kernel-enabled: "true"

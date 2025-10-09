@@ -1,0 +1,128 @@
+# =============================================================================
+# NTP Exporter - MODE AGENT
+# =============================================================================
+# Use case: Local agent on each machine, frequent scrape (10s)
+# Deployment: DaemonSet, systemd on each node
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # NTP Exporter Agent - Complete configuration
+  # ---------------------------------------------------------------------------
+  ntp-exporter-agent:
+    image: ntp-exporter:${VERSION:-latest}
+    container_name: ntp-exporter-agent
+    hostname: ntp-exporter-agent
+
+    ports:
+      - "${EXPORTER_PORT:-9559}:9559"
+
+    # Environment variables - Complete configuration AGENT mode
+    environment:
+      # -----------------------------------------------------------------------
+      # SERVER - Prometheus HTTP server configuration
+      # -----------------------------------------------------------------------
+      NTP_EXPORTER_ADDRESS: "${EXPORTER_ADDRESS:-0.0.0.0}"
+      NTP_EXPORTER_PORT: "${EXPORTER_PORT:-9559}"
+      SERVER_READ_TIMEOUT: "${SERVER_READ_TIMEOUT:-5s}"
+      SERVER_WRITE_TIMEOUT: "${SERVER_WRITE_TIMEOUT:-5s}"
+
+      # TLS/HTTPS
+      TLS_ENABLED: "${TLS_ENABLED:-false}"
+      TLS_CERT_FILE: "${TLS_CERT_FILE:-}"
+      TLS_KEY_FILE: "${TLS_KEY_FILE:-}"
+
+      # CORS
+      ENABLE_CORS: "${ENABLE_CORS:-false}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
+
+      # -----------------------------------------------------------------------
+      # NTP - NTP client configuration
+      # -----------------------------------------------------------------------
+      # NTP servers (prefer local server + public fallback)
+      NTP_SERVERS: "${NTP_SERVERS:-127.0.0.1,pool.ntp.org}"
+
+      # Request configuration
+      NTP_TIMEOUT: "${NTP_TIMEOUT:-2s}"
+      NTP_VERSION: "${NTP_VERSION:-4}"
+      NTP_SAMPLES: "${NTP_SAMPLES:-1}"
+      NTP_MAX_CONCURRENCY: "${NTP_MAX_CONCURRENCY:-5}"
+
+      # Kernel sync (Linux only)
+      NTP_ENABLE_KERNEL: "${NTP_ENABLE_KERNEL:-true}"
+
+      # -----------------------------------------------------------------------
+      # RATE LIMIT - Rate limiting
+      # -----------------------------------------------------------------------
+      RATE_LIMIT_ENABLED: "${RATE_LIMIT_ENABLED:-false}"
+      RATE_LIMIT_GLOBAL: "${RATE_LIMIT_GLOBAL:-1000}"
+      RATE_LIMIT_PER_SERVER: "${RATE_LIMIT_PER_SERVER:-60}"
+      RATE_LIMIT_BURST_SIZE: "${RATE_LIMIT_BURST_SIZE:-10}"
+      RATE_LIMIT_BACKOFF_DURATION: "${RATE_LIMIT_BACKOFF_DURATION:-1m}"
+
+      # -----------------------------------------------------------------------
+      # CIRCUIT BREAKER - Protection against failing servers
+      # -----------------------------------------------------------------------
+      CIRCUIT_BREAKER_ENABLED: "${CIRCUIT_BREAKER_ENABLED:-true}"
+      CIRCUIT_BREAKER_MAX_REQUESTS: "${CIRCUIT_BREAKER_MAX_REQUESTS:-3}"
+      CIRCUIT_BREAKER_INTERVAL: "${CIRCUIT_BREAKER_INTERVAL:-30s}"
+      CIRCUIT_BREAKER_TIMEOUT: "${CIRCUIT_BREAKER_TIMEOUT:-15s}"
+      CIRCUIT_BREAKER_FAILURE_THRESHOLD: "${CIRCUIT_BREAKER_FAILURE_THRESHOLD:-0.5}"
+
+      # -----------------------------------------------------------------------
+      # ADAPTIVE SAMPLING - Adaptive sampling (disabled in agent mode)
+      # -----------------------------------------------------------------------
+      ADAPTIVE_SAMPLING_ENABLED: "${ADAPTIVE_SAMPLING_ENABLED:-false}"
+      ADAPTIVE_SAMPLING_DEFAULT_SAMPLES: "${ADAPTIVE_SAMPLING_DEFAULT_SAMPLES:-3}"
+      ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES: "${ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES:-10}"
+      ADAPTIVE_SAMPLING_DRIFT_THRESHOLD: "${ADAPTIVE_SAMPLING_DRIFT_THRESHOLD:-50ms}"
+      ADAPTIVE_SAMPLING_MAX_DURATION: "${ADAPTIVE_SAMPLING_MAX_DURATION:-30s}"
+
+      # -----------------------------------------------------------------------
+      # WORKER POOL - Worker pool (disabled in agent mode)
+      # -----------------------------------------------------------------------
+      WORKER_POOL_ENABLED: "${WORKER_POOL_ENABLED:-false}"
+      WORKER_POOL_SIZE: "${WORKER_POOL_SIZE:-5}"
+
+      # -----------------------------------------------------------------------
+      # DNS CACHE - DNS cache
+      # -----------------------------------------------------------------------
+      DNS_CACHE_ENABLED: "${DNS_CACHE_ENABLED:-true}"
+      DNS_CACHE_MIN_TTL: "${DNS_CACHE_MIN_TTL:-10m}"
+      DNS_CACHE_MAX_TTL: "${DNS_CACHE_MAX_TTL:-60m}"
+      DNS_CACHE_CLEANUP_WORKERS: "${DNS_CACHE_CLEANUP_WORKERS:-1}"
+
+      # -----------------------------------------------------------------------
+      # LOGGING - Logging configuration
+      # -----------------------------------------------------------------------
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      LOG_ENABLE_FILE: "${LOG_ENABLE_FILE:-false}"
+      LOG_FILE_PATH: "${LOG_FILE_PATH:-}"
+
+      # -----------------------------------------------------------------------
+      # METRICS - Prometheus metrics configuration
+      # -----------------------------------------------------------------------
+      METRICS_NAMESPACE: "${METRICS_NAMESPACE:-ntp}"
+      METRICS_SUBSYSTEM: "${METRICS_SUBSYSTEM:-}"
+
+      # Additional labels (example)
+      NODE_NAME: "${HOSTNAME:-agent-node}"
+      DEPLOYMENT_MODE: "agent"
+
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9559/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

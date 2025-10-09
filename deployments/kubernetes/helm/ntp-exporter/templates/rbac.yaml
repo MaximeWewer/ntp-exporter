@@ -1,0 +1,60 @@
+{{- if .Values.serviceAccount.create -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "ntp-exporter.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ntp-exporter.labels" . | nindent 4 }}
+  {{- with .Values.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.rbac.create -}}
+apiVersion: {{ include "ntp-exporter.rbac.apiVersion" . }}
+kind: ClusterRole
+metadata:
+  name: {{ include "ntp-exporter.fullname" . }}
+  labels:
+    {{- include "ntp-exporter.labels" . | nindent 4 }}
+  {{- with .Values.rbac.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes/metrics
+  verbs:
+  - get
+---
+apiVersion: {{ include "ntp-exporter.rbac.apiVersion" . }}
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "ntp-exporter.fullname" . }}
+  labels:
+    {{- include "ntp-exporter.labels" . | nindent 4 }}
+  {{- with .Values.rbac.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "ntp-exporter.fullname" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ntp-exporter.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}

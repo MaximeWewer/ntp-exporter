@@ -1,0 +1,341 @@
+# =============================================================================
+# values-with-all-options.yaml
+# =============================================================================
+# Complete reference configuration for NTP Exporter Helm chart
+# Shows all available options with their default values and documentation
+# Use this as a reference to customize your deployment
+# =============================================================================
+
+# Deployment mode: "agent" for DaemonSet, "probe" for Deployment, "hybrid" for DaemonSet with kernel
+mode: agent
+
+# Number of replicas (only used in probe mode)
+replicaCount: 1
+
+# =============================================================================
+# IMAGE CONFIGURATION
+# =============================================================================
+image:
+  repository: ntp-exporter
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# =============================================================================
+# NTP EXPORTER CONFIGURATION
+# =============================================================================
+config:
+  # ---------------------------------------------------------------------------
+  # SERVER - Prometheus HTTP server configuration
+  # ---------------------------------------------------------------------------
+  metricsPort: 9559
+  address: "0.0.0.0"
+
+  # Timeouts
+  readTimeout: 10s
+  writeTimeout: 10s
+
+  # TLS/HTTPS configuration
+  tls:
+    enabled: false
+    certFile: ""
+    keyFile: ""
+
+  # CORS configuration
+  cors:
+    enabled: false
+    allowedOrigins: []
+
+  # ---------------------------------------------------------------------------
+  # NTP - NTP client configuration
+  # ---------------------------------------------------------------------------
+  # List of NTP servers to query
+  ntpServers:
+    - pool.ntp.org
+    - time.google.com
+    - time.cloudflare.com
+
+  # NTP query timeout
+  ntpTimeout: 5s
+
+  # NTP protocol version (2, 3, 4)
+  ntpVersion: 4
+
+  # Number of samples per server
+  samplesPerServer: 3
+
+  # Maximum number of concurrent queries
+  maxConcurrency: 10
+
+  # Enable kernel synchronization check (Linux only)
+  enableKernel: false
+
+  # Scrape interval (used for documentation)
+  scrapeInterval: 30s
+
+  # Maximum clock offset threshold (milliseconds)
+  maxClockOffset: 100
+
+  # ---------------------------------------------------------------------------
+  # RATE LIMIT - NTP query rate limiting
+  # ---------------------------------------------------------------------------
+  rateLimit:
+    enabled: false
+    globalRate: 1000
+    perServerRate: 60
+    burstSize: 10
+    backoffDuration: 1m
+
+  # ---------------------------------------------------------------------------
+  # CIRCUIT BREAKER - Protection against failing servers
+  # ---------------------------------------------------------------------------
+  circuitBreaker:
+    enabled: true
+    maxRequests: 3
+    interval: 60s
+    timeout: 30s
+    failureThreshold: 0.6
+
+  # ---------------------------------------------------------------------------
+  # ADAPTIVE SAMPLING - Adaptive sampling based on drift
+  # ---------------------------------------------------------------------------
+  adaptiveSampling:
+    enabled: false
+    defaultSamples: 3
+    highDriftSamples: 10
+    driftThreshold: 50ms
+    maxDuration: 30s
+
+  # ---------------------------------------------------------------------------
+  # WORKER POOL - Worker pool for parallel queries
+  # ---------------------------------------------------------------------------
+  workerPool:
+    enabled: false
+    size: 5
+
+  # ---------------------------------------------------------------------------
+  # DNS CACHE - DNS cache for NTP hostname resolution
+  # ---------------------------------------------------------------------------
+  dnsCache:
+    enabled: true
+    minTTL: 5m
+    maxTTL: 60m
+    cleanupWorkers: 1
+
+  # ---------------------------------------------------------------------------
+  # LOGGING - Log configuration
+  # ---------------------------------------------------------------------------
+  logging:
+    level: info
+    format: json
+    enableFile: false
+    filePath: ""
+
+  # ---------------------------------------------------------------------------
+  # METRICS - Prometheus metrics configuration
+  # ---------------------------------------------------------------------------
+  metrics:
+    namespace: ntp
+    subsystem: ""
+    labels: {}
+
+# =============================================================================
+# KUBERNETES RESOURCES CONFIGURATION
+# =============================================================================
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# RBAC
+rbac:
+  create: true
+  annotations: {}
+
+# Pod Annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9559"
+  prometheus.io/path: "/metrics"
+
+# Pod Labels
+podLabels: {}
+
+# Pod Security Context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container Security Context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65534
+  capabilities:
+    drop:
+    - ALL
+    add:
+    - NET_BIND_SERVICE
+
+# Service
+service:
+  type: ClusterIP
+  port: 9559
+  targetPort: 9559
+  annotations: {}
+  labels: {}
+
+# ServiceMonitor for Prometheus Operator
+serviceMonitor:
+  enabled: false
+  namespace: ""
+  additionalLabels: {}
+  interval: 30s
+  scrapeTimeout: 10s
+  honorLabels: true
+  relabelings: []
+  metricRelabelings: []
+
+# Network Policy
+networkPolicy:
+  enabled: false
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: monitoring
+      ports:
+      - protocol: TCP
+        port: 9559
+  egress:
+    # Allow DNS
+    - to:
+      - namespaceSelector: {}
+        podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+      ports:
+      - protocol: UDP
+        port: 53
+    # Allow NTP (port 123)
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: UDP
+        port: 123
+    # Allow HTTPS for external NTP servers
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: TCP
+        port: 443
+
+# Resources
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Node selector for pod assignment
+nodeSelector: {}
+
+# Tolerations for pod assignment
+tolerations: []
+
+# Affinity for pod assignment
+affinity: {}
+
+# Priority class name
+priorityClassName: ""
+
+# Additional volumes
+volumes: []
+# Example:
+# - name: config
+#   configMap:
+#     name: ntp-exporter-config
+
+# Additional volume mounts
+volumeMounts: []
+# Example:
+# - name: config
+#   mountPath: /etc/ntp-exporter
+#   readOnly: true
+
+# Additional environment variables
+env: []
+# Example:
+# - name: NODE_NAME
+#   valueFrom:
+#     fieldRef:
+#       fieldPath: spec.nodeName
+
+# Additional environment variables from ConfigMaps or Secrets
+envFrom: []
+# Example:
+# - configMapRef:
+#     name: ntp-exporter-config
+
+# Liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /metrics
+    port: 9559
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+# Readiness probe configuration (optional)
+readinessProbe: {}
+# Example:
+# httpGet:
+#   path: /health
+#   port: 9559
+# initialDelaySeconds: 5
+# periodSeconds: 5
+
+# Update strategy for DaemonSet
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+# Deployment strategy (only used in probe mode)
+deploymentStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# Host network mode (useful for accurate NTP measurements)
+hostNetwork: false
+
+# DNS policy
+dnsPolicy: ClusterFirst
+
+# Termination grace period seconds
+terminationGracePeriodSeconds: 30
+
+# =============================================================================
+# CONFIGURATION EXAMPLES BY MODE
+# =============================================================================
+# See separate files for pre-configured modes:
+# - values-agent.yaml: Agent mode (DaemonSet, frequent scrape)
+# - values-probe.yaml: Probe mode (Deployment, centralized monitoring)
+# - values-hybrid.yaml: Hybrid mode (DaemonSet with kernel monitoring)
+# - values-with-yaml-config.yaml: Configuration via YAML ConfigMap

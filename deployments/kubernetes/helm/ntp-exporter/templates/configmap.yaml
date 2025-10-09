@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ntp-exporter.configMapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ntp-exporter.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    # NTP Exporter Configuration
+    ntp:
+      servers:
+      {{- range .Values.config.ntpServers }}
+      - {{ . }}
+      {{- end }}
+      timeout: {{ .Values.config.ntpTimeout }}
+      max_clock_offset: {{ .Values.config.maxClockOffset }}
+      {{- if .Values.config.enableKernel }}
+      enable_kernel: {{ .Values.config.enableKernel }}
+      {{- end }}
+
+    metrics:
+      port: {{ .Values.config.metricsPort }}
+      path: /metrics
+
+    logging:
+      level: {{ .Values.config.logging.level }}
+      format: {{ .Values.config.logging.format }}
+
+    {{- if eq .Values.mode "agent" }}
+    mode: agent
+    {{- else if eq .Values.mode "hybrid" }}
+    mode: hybrid
+    {{- else }}
+    mode: probe
+    {{- end }}

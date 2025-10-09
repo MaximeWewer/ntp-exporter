@@ -1,0 +1,288 @@
+# ============================================================================
+# NTP Exporter Configuration File
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# SERVER - HTTP Prometheus server configuration
+# ----------------------------------------------------------------------------
+server:
+  # HTTP server listen address
+  # Values: valid IP address or "0.0.0.0" for all interfaces
+  # Default: "0.0.0.0"
+  address: "0.0.0.0"
+
+  # HTTP server listen port
+  # Values: 1-65535
+  # Default: 9559
+  port: 9559
+
+  # HTTP request read timeout
+  # Values: valid Go duration (e.g., "10s", "1m", "500ms")
+  # Default: 10s
+  read_timeout: 10s
+
+  # HTTP response write timeout
+  # Values: valid Go duration (e.g., "10s", "1m", "500ms")
+  # Default: 10s
+  write_timeout: 10s
+
+  # Enable CORS (Cross-Origin Resource Sharing) support
+  # Values: true, false
+  # Default: false
+  enable_cors: false
+
+  # List of allowed origins for CORS (if enable_cors: true)
+  # Values: list of full URLs (e.g., ["https://grafana.example.com"])
+  # Default: []
+  allowed_origins: []
+
+  # Enable TLS/HTTPS
+  # Values: true, false
+  # Default: false
+  tls_enabled: false
+
+  # Path to TLS certificate file (if tls_enabled: true)
+  # Values: absolute path to .crt or .pem file
+  # Default: ""
+  tls_cert_file: ""
+
+  # Path to TLS private key file (if tls_enabled: true)
+  # Values: absolute path to .key or .pem file
+  # Default: ""
+  tls_key_file: ""
+
+# ----------------------------------------------------------------------------
+# NTP - NTP client configuration and query strategy
+# ----------------------------------------------------------------------------
+ntp:
+  # List of individual NTP servers to query
+  # Values: list of hostnames or IPs (e.g., ["pool.ntp.org", "time.google.com"])
+  # Default: ["pool.ntp.org"]
+  servers:
+  - "pool.ntp.org"
+  - "time.google.com"
+  - "time.cloudflare.com"
+  # NTP pool configuration with selection strategy
+  # A pool resolves to multiple IPs via DNS and applies a strategy
+  pools:
+  # Pool name (must be DNS resolvable)
+  - name: "pool.ntp.org"
+
+    # Server selection strategy for the pool
+    # Available values:
+    #   - "best_n": selects the N best servers (sorted by offset)
+    #   - "round_robin": circular rotation between all servers
+    #   - "all": queries all servers in the pool
+    # Default: "best_n"
+    strategy: "best_n"
+
+    # Maximum number of servers to use from the pool (for best_n/round_robin)
+    # Values: positive integer (1-100)
+    # Default: 4
+    max_servers: 4
+
+    # Fallback pool if the primary pool fails (optional)
+    # Values: another pool name or ""
+    # Default: ""
+    fallback: ""
+  # Timeout for each individual NTP query
+  # Values: valid Go duration (e.g., "5s", "500ms")
+  # Default: 5s
+  timeout: 5s
+
+  # NTP protocol version to use
+  # Values: 2, 3, 4
+  # Default: 4
+  version: 4
+
+  # Number of samples to collect per server (averaged for precision)
+  # Values: positive integer (1-100)
+  # Default: 3
+  samples_per_server: 3
+
+  # Maximum number of concurrent (parallel) queries
+  # Values: positive integer (1-1000)
+  # Default: 10
+  max_concurrency: 10
+
+  # Enable kernel synchronization check (Linux only)
+  # Uses adjtimex() system call to check STA_UNSYNC status
+  # Values: true, false
+  # Default: false
+  enable_kernel: false
+
+  # ----------------------------------------------------------------------------
+  # RATE LIMIT - NTP query rate limiting
+  # Protects against overloading public NTP servers
+  # ----------------------------------------------------------------------------
+  rate_limit:
+    # Enable rate limiting
+    # Values: true, false
+    # Default: false
+    enabled: false
+
+    # Global request limit per second (all servers combined)
+    # Values: positive integer (1-10000)
+    # Default: 1000
+    global_rate: 1000
+
+    # Request limit per minute for an individual server
+    # Values: positive integer (1-1000)
+    # Default: 60
+    per_server_rate: 60
+
+    # Allowed burst size (temporary burst above the limit)
+    # Values: positive integer (1-100)
+    # Default: 10
+    burst_size: 10
+
+    # Backoff duration after limit exceeded
+    # Values: valid Go duration (e.g., "1m", "30s")
+    # Default: 1m
+    backoff_duration: 1m
+
+  # ----------------------------------------------------------------------------
+  # CIRCUIT BREAKER - Protection against failing servers
+  # Opens circuit after X consecutive failures, avoids hammering a dead server
+  # ENABLED BY DEFAULT for resilience
+  # ----------------------------------------------------------------------------
+  circuit_breaker:
+    # Enable circuit breaker
+    # Values: true, false
+    # Default: true
+    enabled: true
+
+    # Number of requests allowed in half-open state (recovery test)
+    # Values: positive integer (1-100)
+    # Default: 3
+    max_requests: 3
+
+    # Interval to reset failure counters
+    # Values: valid Go duration (e.g., "60s", "1m")
+    # Default: 60s
+    interval: 60s
+
+    # Timeout before transitioning to half-open state (recovery attempt)
+    # Values: valid Go duration (e.g., "30s", "1m")
+    # Default: 30s
+    timeout: 30s
+
+    # Failure ratio that triggers circuit opening
+    # Values: float between 0.0 and 1.0 (e.g., 0.6 = 60% failures)
+    # Default: 0.6
+    failure_threshold: 0.6
+
+  # ----------------------------------------------------------------------------
+  # ADAPTIVE SAMPLING - Adaptive sampling based on drift
+  # Automatically increases samples if server drifts too much
+  # DISABLED BY DEFAULT (CPU/network overhead)
+  # ----------------------------------------------------------------------------
+  adaptive_sampling:
+    # Enable adaptive sampling
+    # Values: true, false
+    # Default: false
+    enabled: false
+
+    # Default number of samples (if no drift)
+    # Values: positive integer (1-50)
+    # Default: 3
+    default_samples: 3
+
+    # Number of samples if drift detected (> drift_threshold)
+    # Values: positive integer (1-100)
+    # Default: 10
+    high_drift_samples: 10
+
+    # Drift threshold that triggers high sampling
+    # Values: valid Go duration (e.g., "50ms", "100ms")
+    # Default: 50ms
+    drift_threshold: 50ms
+
+    # Maximum time budget for adaptive sampling
+    # Values: valid Go duration (e.g., "30s", "1m")
+    # Default: 30s
+    max_duration: 30s
+
+  # ----------------------------------------------------------------------------
+  # WORKER POOL - Worker pool for parallel queries
+  # Executes NTP queries in parallel via a worker pool
+  # DISABLED BY DEFAULT (sequential processing)
+  # ----------------------------------------------------------------------------
+  worker_pool:
+    # Enable worker pool
+    # Values: true, false
+    # Default: false
+    enabled: false
+
+    # Pool size (number of concurrent workers)
+    # Values: positive integer (1-100)
+    # Default: 5
+    size: 5
+
+  # ----------------------------------------------------------------------------
+  # DNS CACHE - DNS cache for NTP hostname resolution
+  # Reduces repeated DNS queries, improves performance
+  # ENABLED BY DEFAULT
+  # ----------------------------------------------------------------------------
+  dns_cache:
+    # Enable DNS cache
+    # Values: true, false
+    # Default: true
+    enabled: true
+
+    # Minimum TTL for cache entries
+    # Values: valid Go duration (e.g., "5m", "10m")
+    # Default: 5m
+    min_ttl: 5m
+
+    # Maximum TTL for cache entries
+    # Values: valid Go duration (e.g., "60m", "2h")
+    # Default: 60m
+    max_ttl: 60m
+
+    # Number of workers for cache cleanup
+    # Values: positive integer (1-10)
+    # Default: 1
+    cleanup_workers: 1
+
+# ----------------------------------------------------------------------------
+# LOGGING - Log configuration (JSON FORMAT ONLY)
+# The zerolog library used produces ONLY structured JSON
+# ----------------------------------------------------------------------------
+logging:
+  # Log verbosity level
+  # Available values: "trace", "debug", "info", "warn", "error", "fatal", "panic"
+  # Default: "info"
+  level: "info"
+
+  # Enable file output (if output: "file")
+  # Values: true, false
+  # Default: false
+  enable_file: false
+
+  # Log file path (if enable_file: true)
+  # Values: absolute path to file (e.g., "/var/log/ntp-exporter.log")
+  # Default: ""
+  file_path: ""
+
+# ----------------------------------------------------------------------------
+# METRICS - Prometheus metrics configuration
+# ----------------------------------------------------------------------------
+metrics:
+  # Prometheus namespace for all metrics
+  # All metrics will be prefixed with "namespace_"
+  # Values: alphanumeric string + underscore
+  # Default: "ntp"
+  namespace: "ntp"
+
+  # Prometheus subsystem (optional, adds hierarchy level)
+  # Metrics become "namespace_subsystem_name"
+  # Values: alphanumeric string + underscore or ""
+  # Default: ""
+  subsystem: ""
+
+  # Additional labels to add to ALL metrics
+  # Useful for multi-instance identification (e.g., datacenter, region)
+  # Values: key-value map (e.g., {datacenter: "us-east-1", env: "prod"})
+  # Default: {}
+  labels: {}

@@ -1,0 +1,128 @@
+# =============================================================================
+# NTP Exporter - MODE PROBE
+# =============================================================================
+# Use case: Centralized exporter querying multiple remote NTP servers
+# Scrape by Prometheus every 60s or more
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # NTP Exporter Probe - Complete configuration
+  # ---------------------------------------------------------------------------
+  ntp-exporter-probe:
+    image: ntp-exporter:${VERSION:-latest}
+    container_name: ntp-exporter-probe
+    hostname: ntp-exporter-probe
+
+    ports:
+      - "${EXPORTER_PORT:-9559}:9559"
+
+    # Environment variables - Complete configuration PROBE mode
+    environment:
+      # -----------------------------------------------------------------------
+      # SERVER - Prometheus HTTP server configuration
+      # -----------------------------------------------------------------------
+      NTP_EXPORTER_ADDRESS: "${EXPORTER_ADDRESS:-0.0.0.0}"
+      NTP_EXPORTER_PORT: "${EXPORTER_PORT:-9559}"
+      SERVER_READ_TIMEOUT: "${SERVER_READ_TIMEOUT:-30s}"
+      SERVER_WRITE_TIMEOUT: "${SERVER_WRITE_TIMEOUT:-30s}"
+
+      # TLS/HTTPS
+      TLS_ENABLED: "${TLS_ENABLED:-false}"
+      TLS_CERT_FILE: "${TLS_CERT_FILE:-}"
+      TLS_KEY_FILE: "${TLS_KEY_FILE:-}"
+
+      # CORS
+      ENABLE_CORS: "${ENABLE_CORS:-false}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
+
+      # -----------------------------------------------------------------------
+      # NTP - NTP client configuration
+      # -----------------------------------------------------------------------
+      # Remote NTP servers (high precision)
+      NTP_SERVERS: "${NTP_SERVERS:-time.google.com,time.cloudflare.com,ntp1.example.com,ntp2.example.com}"
+
+      # Request configuration
+      NTP_TIMEOUT: "${NTP_TIMEOUT:-10s}"
+      NTP_VERSION: "${NTP_VERSION:-4}"
+      NTP_SAMPLES: "${NTP_SAMPLES:-10}"
+      NTP_MAX_CONCURRENCY: "${NTP_MAX_CONCURRENCY:-20}"
+
+      # Kernel sync (disabled in probe mode)
+      NTP_ENABLE_KERNEL: "${NTP_ENABLE_KERNEL:-false}"
+
+      # -----------------------------------------------------------------------
+      # RATE LIMIT - Rate limiting (important in probe mode)
+      # -----------------------------------------------------------------------
+      RATE_LIMIT_ENABLED: "${RATE_LIMIT_ENABLED:-true}"
+      RATE_LIMIT_GLOBAL: "${RATE_LIMIT_GLOBAL:-500}"
+      RATE_LIMIT_PER_SERVER: "${RATE_LIMIT_PER_SERVER:-30}"
+      RATE_LIMIT_BURST_SIZE: "${RATE_LIMIT_BURST_SIZE:-5}"
+      RATE_LIMIT_BACKOFF_DURATION: "${RATE_LIMIT_BACKOFF_DURATION:-2m}"
+
+      # -----------------------------------------------------------------------
+      # CIRCUIT BREAKER - Protection against failing servers
+      # -----------------------------------------------------------------------
+      CIRCUIT_BREAKER_ENABLED: "${CIRCUIT_BREAKER_ENABLED:-true}"
+      CIRCUIT_BREAKER_MAX_REQUESTS: "${CIRCUIT_BREAKER_MAX_REQUESTS:-5}"
+      CIRCUIT_BREAKER_INTERVAL: "${CIRCUIT_BREAKER_INTERVAL:-120s}"
+      CIRCUIT_BREAKER_TIMEOUT: "${CIRCUIT_BREAKER_TIMEOUT:-60s}"
+      CIRCUIT_BREAKER_FAILURE_THRESHOLD: "${CIRCUIT_BREAKER_FAILURE_THRESHOLD:-0.6}"
+
+      # -----------------------------------------------------------------------
+      # ADAPTIVE SAMPLING - Adaptive sampling (enabled in probe mode)
+      # -----------------------------------------------------------------------
+      ADAPTIVE_SAMPLING_ENABLED: "${ADAPTIVE_SAMPLING_ENABLED:-true}"
+      ADAPTIVE_SAMPLING_DEFAULT_SAMPLES: "${ADAPTIVE_SAMPLING_DEFAULT_SAMPLES:-10}"
+      ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES: "${ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES:-20}"
+      ADAPTIVE_SAMPLING_DRIFT_THRESHOLD: "${ADAPTIVE_SAMPLING_DRIFT_THRESHOLD:-50ms}"
+      ADAPTIVE_SAMPLING_MAX_DURATION: "${ADAPTIVE_SAMPLING_MAX_DURATION:-45s}"
+
+      # -----------------------------------------------------------------------
+      # WORKER POOL - Worker pool (enabled in probe mode)
+      # -----------------------------------------------------------------------
+      WORKER_POOL_ENABLED: "${WORKER_POOL_ENABLED:-true}"
+      WORKER_POOL_SIZE: "${WORKER_POOL_SIZE:-10}"
+
+      # -----------------------------------------------------------------------
+      # DNS CACHE - DNS cache
+      # -----------------------------------------------------------------------
+      DNS_CACHE_ENABLED: "${DNS_CACHE_ENABLED:-true}"
+      DNS_CACHE_MIN_TTL: "${DNS_CACHE_MIN_TTL:-5m}"
+      DNS_CACHE_MAX_TTL: "${DNS_CACHE_MAX_TTL:-30m}"
+      DNS_CACHE_CLEANUP_WORKERS: "${DNS_CACHE_CLEANUP_WORKERS:-2}"
+
+      # -----------------------------------------------------------------------
+      # LOGGING - Logging configuration
+      # -----------------------------------------------------------------------
+      LOG_LEVEL: "${LOG_LEVEL:-debug}"
+      LOG_ENABLE_FILE: "${LOG_ENABLE_FILE:-false}"
+      LOG_FILE_PATH: "${LOG_FILE_PATH:-}"
+
+      # -----------------------------------------------------------------------
+      # METRICS - Prometheus metrics configuration
+      # -----------------------------------------------------------------------
+      METRICS_NAMESPACE: "${METRICS_NAMESPACE:-ntp}"
+      METRICS_SUBSYSTEM: "${METRICS_SUBSYSTEM:-probe}"
+
+      # Additional labels (example)
+      DATACENTER: "${DATACENTER:-us-east-1}"
+      DEPLOYMENT_MODE: "probe"
+
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9559/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

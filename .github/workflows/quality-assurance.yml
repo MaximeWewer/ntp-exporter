@@ -1,0 +1,355 @@
+name: Quality Assurance
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+      - '!.github/workflows/quality-assurance.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: 'Run full test suite'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+env:
+  GO_VERSION: '1.24.0'
+  GOLANGCI_LINT_VERSION: 'v1.61'
+  GOSEC_VERSION: '2.18.2'
+
+jobs:
+  # =============================================================================
+  # Job 1: Pre-check - Code formatting and basic linting
+  # =============================================================================
+  pre-check:
+    name: Code Formatting & Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-environment
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Verify Go modules
+        run: |
+          go mod download
+          go mod verify
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Check code formatting
+        run: |
+          if [ -n "$(gofmt -s -l .)" ]; then
+            echo "The following files are not properly formatted:"
+            gofmt -s -l .
+            echo ""
+            echo "Please run: gofmt -s -w ."
+            exit 1
+          fi
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          args: --timeout=5m --config=.golangci.yml
+          skip-cache: false
+          skip-pkg-cache: false
+          skip-build-cache: false
+
+  # =============================================================================
+  # Job 2: Unit Tests with Coverage
+  # =============================================================================
+  unit-tests:
+    name: Unit Tests & Coverage
+    runs-on: ubuntu-latest
+    needs: pre-check
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_tests == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-environment
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run unit tests with coverage
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./... \
+            -coverpkg=./... \
+            -timeout=10m \
+            -short
+
+      - name: Generate coverage report
+        run: |
+          go tool cover -func=coverage.out -o=coverage.txt
+          go tool cover -html=coverage.out -o=coverage.html
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage.out
+            coverage.txt
+            coverage.html
+          retention-days: 30
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Total coverage: ${COVERAGE}%"
+          THRESHOLD=70
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "Coverage ${COVERAGE}% is below threshold ${THRESHOLD}%"
+            exit 1
+          fi
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.out
+          flags: unittests
+          name: codecov-ntp-exporter
+          fail_ci_if_error: false
+          verbose: true
+
+  # =============================================================================
+  # Job 3: Integration Tests
+  # =============================================================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: pre-check
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_tests == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-environment
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run integration tests
+        run: |
+          go test -v -race ./... \
+            -run Integration \
+            -timeout=15m \
+            -coverprofile=integration-coverage.out
+
+      - name: Upload integration coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-coverage
+          path: integration-coverage.out
+          retention-days: 30
+
+  # =============================================================================
+  # Job 4: Build Verification
+  # =============================================================================
+  build-verification:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    needs: pre-check
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          # Exclude unsupported combinations if needed
+          - goos: windows
+            goarch: arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-environment
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build binary for ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -v \
+            -ldflags="-w -s -X 'main.version=dev' -extldflags '-static'" \
+            -o ntp-exporter-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }} \
+            ./cmd/ntp-exporter
+
+      - name: Verify binary
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: |
+          chmod +x ntp-exporter-${{ matrix.goos }}-${{ matrix.goarch }}
+          ./ntp-exporter-${{ matrix.goos }}-${{ matrix.goarch }} --version || true
+          file ntp-exporter-${{ matrix.goos }}-${{ matrix.goarch }}
+
+  # =============================================================================
+  # Job 5: Static Analysis
+  # =============================================================================
+  static-analysis:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+    needs: pre-check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-environment
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run staticcheck
+        uses: dominikh/staticcheck-action@v1
+        with:
+          version: "latest"
+          install-go: false
+          cache-key: ${{ matrix.go }}
+
+      - name: Check for ineffectual assignments
+        run: |
+          go install github.com/gordonklaus/ineffassign@latest
+          ineffassign ./...
+
+      - name: Detect common mistakes
+        run: |
+          go install github.com/kisielk/errcheck@latest
+          errcheck -ignoretests -blank ./...
+
+  # =============================================================================
+  # Job 6: Security Scanning
+  # =============================================================================
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: pre-check
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go-environment
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: '-fmt sarif -out gosec.sarif ./...'
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gosec.sarif
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Check for known vulnerabilities
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  # =============================================================================
+  # Job 7: Test Summary
+  # =============================================================================
+  test-summary:
+    name: Test Suite Summary
+    runs-on: ubuntu-latest
+    needs: [pre-check, unit-tests, integration-tests, build-verification, static-analysis, security-scan]
+    if: always()
+    steps:
+      - name: Check job results
+        run: |
+          echo "Pre-check: ${{ needs.pre-check.result }}"
+          echo "Unit Tests: ${{ needs.unit-tests.result }}"
+          echo "Integration Tests: ${{ needs.integration-tests.result }}"
+          echo "Build Verification: ${{ needs.build-verification.result }}"
+          echo "Static Analysis: ${{ needs.static-analysis.result }}"
+          echo "Security Scan: ${{ needs.security-scan.result }}"
+
+      - name: Generate summary
+        run: |
+          echo "## Quality Assurance Pipeline Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-check | ${{ needs.pre-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Verification | ${{ needs.build-verification.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Static Analysis | ${{ needs.static-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if any job failed
+        if: |
+          needs.pre-check.result == 'failure' ||
+          needs.unit-tests.result == 'failure' ||
+          needs.integration-tests.result == 'failure' ||
+          needs.build-verification.result == 'failure' ||
+          needs.static-analysis.result == 'failure' ||
+          needs.security-scan.result == 'failure'
+        run: exit 1
