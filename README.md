@@ -153,13 +153,13 @@ Get started in 3 steps:
 ```bash
 # Probe Mode: Monitor external NTP servers from a central location
 cd deployments/docker
-docker-compose -f docker-compose-probe.yml up -d
+docker compose -f docker-compose-probe.yml up -d
 
 # Agent Mode: Monitor time sync on each host/node
-docker-compose -f docker-compose-agent.yml up -d
+docker compose -f docker-compose-agent.yml up -d
 
 # Hybrid Mode: Agent mode + kernel monitoring
-docker-compose -f docker-compose-hybrid.yml up -d
+docker compose -f docker-compose-hybrid.yml up -d
 ```
 
 **2. Verify the exporter is running:**
