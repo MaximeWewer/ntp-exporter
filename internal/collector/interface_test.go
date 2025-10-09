@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -178,7 +179,7 @@ func TestRegistryCollectAll(t *testing.T) {
 				t.Errorf("Unexpected error: %v", err)
 			}
 			if tt.expectError && err != nil && tt.errorMessage != "" {
-				if !contains(err.Error(), tt.errorMessage) {
+				if !strings.Contains(err.Error(), tt.errorMessage) {
 					t.Errorf("Error message %q does not contain %q", err.Error(), tt.errorMessage)
 				}
 			}
@@ -226,25 +227,6 @@ func (c *contextAwareCollector) Enabled() bool {
 	return c.enabled
 }
 
-// Helper function
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || findSubstring(s, substr))
-}
-
-func findSubstring(s, substr string) bool {
-	if len(substr) == 0 {
-		return true
-	}
-	if len(substr) > len(s) {
-		return false
-	}
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
 
 func BenchmarkRegistryCollectAll(b *testing.B) {
 	r := NewRegistry()
