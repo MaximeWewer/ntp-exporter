@@ -86,12 +86,15 @@ func (c *HybridCollector) updateKernelMetrics(kernelState *ntp.KernelTimex) {
 	m.KernelPrecisionSeconds.WithLabelValues(c.nodeName).Set(kernelState.GetPrecisionSeconds())
 	m.KernelStatusCode.WithLabelValues(c.nodeName).Set(float64(kernelState.StatusCode))
 
-	// Sync status (1=synced, 0=unsynced)
-	syncValue := float64(0)
+	// Sync status: only set the current status with value 1
+	// This prevents having both synchronized=1 and unsynchronized=0 at the same time
 	if kernelState.IsSynchronized() {
-		syncValue = 1
+		m.KernelSyncStatus.WithLabelValues(c.nodeName, "synchronized").Set(1)
+		m.KernelSyncStatus.DeleteLabelValues(c.nodeName, "unsynchronized")
+	} else {
+		m.KernelSyncStatus.WithLabelValues(c.nodeName, "unsynchronized").Set(1)
+		m.KernelSyncStatus.DeleteLabelValues(c.nodeName, "synchronized")
 	}
-	m.KernelSyncStatus.WithLabelValues(c.nodeName, kernelState.SyncStatus).Set(syncValue)
 
 	logger.SafeDebug("collector", "Kernel metrics updated", map[string]interface{}{
 		"node":         c.nodeName,
