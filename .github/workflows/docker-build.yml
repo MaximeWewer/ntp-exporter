@@ -24,7 +24,6 @@ permissions:
 env:
   GO_VERSION: '1.24.0'
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   # =============================================================================
@@ -43,6 +42,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set image name to lowercase
+        id: image-name
+        run: |
+          echo "name=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -60,7 +64,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ steps.image-name.outputs.name }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
