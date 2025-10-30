@@ -68,7 +68,7 @@ jobs:
         id: build
         uses: docker/build-push-action@v6
         with:
-          context: ./deployements
+          context: ./deployments
           platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64,linux/arm/v7' }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
