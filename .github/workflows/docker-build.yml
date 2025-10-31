@@ -1,260 +1,204 @@
-name: Docker Build (Development)
+name: Build and release
 
 on:
-  push:
-    branches:
-      - main
-      - master
-      - develop
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
   workflow_dispatch:
     inputs:
-      platforms:
-        description: 'Target platforms for build'
+      force_version:
+        # Versioning pattern (number only): YEAR.MONTH.INDEX_OF_TAG (+1 at eatch tag)
+        description: 'Force a specific version (optional, format: YYYY.MM.X)'
         required: false
-        default: 'linux/amd64,linux/arm64'
         type: string
 
 env:
-  GO_VERSION: '1.24.0'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  IMAGE_DESCRIPTION: Prometheus exporter for NTP
+  IMAGE_DESCRIPTION: NTP exporter for Prometheus
 
 # Default permissions for all jobs
 permissions:
   contents: read
 
 jobs:
-  # =============================================================================
-  # Job 1: Prepare Build - Convert repository name to lowercase
-  # =============================================================================
   prepare-build:
-    name: Prepare Build
     runs-on: ubuntu-latest
     permissions:
       contents: read
+
     outputs:
+      version: ${{ steps.version.outputs.version }}
       name_lower: ${{ steps.repo.outputs.name_lower }}
-      branch: ${{ steps.branch.outputs.branch }}
-      sha_short: ${{ steps.sha.outputs.sha_short }}
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Convert repository name to lowercase
-        id: repo
-        run: |
-          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "Repository name converted to lowercase: $REPO_LOWER"
-          echo "name_lower=$REPO_LOWER" >> $GITHUB_OUTPUT
+    - name: Generate version
+      id: version
+      run: |
+        if [ -n "${{ github.event.inputs.force_version }}" ]; then
+          VERSION="${{ github.event.inputs.force_version }}"
+          echo "Using forced version: $VERSION"
+        else
+          # Fetch all tags from remote to ensure we have the latest
+          git fetch --tags
+          
+          # Get current year and month
+          YEAR_MONTH=$(date +'%Y.%m')
+          
+          # Get the highest existing tag for current year.month and increment
+          LATEST_TAG=$(git tag -l "v${YEAR_MONTH}.*" | sort -V | tail -n 1)
+          
+          if [ -z "$LATEST_TAG" ]; then
+            # No tags for this year.month, start with .1
+            VERSION="${YEAR_MONTH}.1"
+          else
+            # Extract patch version and increment
+            PATCH_VERSION=$(echo "$LATEST_TAG" | sed 's/^v.*\.//' )
+            NEW_PATCH=$((PATCH_VERSION + 1))
+            VERSION="${YEAR_MONTH}.${NEW_PATCH}"
+          fi
+        fi
 
-      - name: Extract branch name
-        id: branch
-        run: |
-          BRANCH=${GITHUB_REF#refs/heads/}
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+        echo "Generated version: $VERSION"
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Get short SHA
-        id: sha
-        run: |
-          SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
-          echo "sha_short=$SHA_SHORT" >> $GITHUB_OUTPUT
+    - name: Convert repository name to lowercase
+      id: repo
+      run: |
+        REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+        echo "Repository name converted to lowercase: $REPO_LOWER"
+        echo "name_lower=$REPO_LOWER" >> $GITHUB_OUTPUT
 
-  # =============================================================================
-  # Job 2: Build Multi-Architecture Images
-  # =============================================================================
   build-multiarch-images:
-    name: Build ${{ matrix.platform }}
     needs: prepare-build
+
     permissions:
       contents: read
       packages: write
+
     strategy:
       fail-fast: false
       matrix:
         platform:
-          - linux/amd64
-          - linux/arm64
-          - linux/arm/v7
+        - linux/amd64
+        - linux/arm64
+
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract platform architecture
-        run: |
-          # Convert linux/amd64 -> amd64, linux/arm/v7 -> armv7
-          PLATFORM_ARCH=$(echo "${{ matrix.platform }}" | sed 's/linux\///' | sed 's/\//-/')
-          echo "PLATFORM_ARCH=${PLATFORM_ARCH}" >> $GITHUB_ENV
+    - name: Extract platform architecture
+      run: |
+        echo "PLATFORM_ARCH=${platform##*/}" >> $GITHUB_ENV
+      env:
+        platform: ${{ matrix.platform }}
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          platforms: ${{ matrix.platform }}
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        platforms: ${{ matrix.platform }}
 
-      - name: Generate Docker metadata and labels
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ needs.prepare-build.outputs.name_lower }}
-          tags: |
-            type=raw,value=${{ needs.prepare-build.outputs.branch }}-${{ needs.prepare-build.outputs.sha_short }}-${{ env.PLATFORM_ARCH }}
-          labels: |
-            org.opencontainers.image.title=NTP Prometheus Exporter
-            org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }} (${{ env.PLATFORM_ARCH }})
-            org.opencontainers.image.version=dev-${{ needs.prepare-build.outputs.sha_short }}
-            org.opencontainers.image.vendor=Maxime Wewer
-            org.opencontainers.image.licenses=Apache-2.0
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.url=https://github.com/${{ github.repository }}
-            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/README.md
-            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-            org.opencontainers.image.revision=${{ github.sha }}
+    - name: Generate Docker metadata and labels
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ needs.prepare-build.outputs.name_lower }}
+        tags: |
+          type=raw,value=${{ needs.prepare-build.outputs.version }}-${{ env.PLATFORM_ARCH }}
+        # annotations: |
+        labels: |
+          org.opencontainers.image.title=NTP exporter for Prometheus
+          org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }} (${{ env.PLATFORM_ARCH }})
+          org.opencontainers.image.version=${{ needs.prepare-build.outputs.version }}
+          org.opencontainers.image.vendor=Maxime Wewer
+          org.opencontainers.image.licenses=MIT
+          org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          org.opencontainers.image.url=https://github.com/${{ github.repository }}
+          org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/README.md
+          org.opencontainers.image.created={{ date 'YYYY-MM-DDTHH:mm:ss' tz='Europe/Paris' }}
+          org.opencontainers.image.revision=${{ github.sha }}
 
-      - name: Build and push platform-specific image
-        id: build
-        uses: docker/build-push-action@v6
-        env:
-          DOCKER_BUILD_SUMMARY: false
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          push: true
-          provenance: false
-          sbom: false
-          build-args: |
-            VERSION=dev-${{ github.sha }}
-            COMMIT=${{ github.sha }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ env.PLATFORM_ARCH }}
-          cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_ARCH }}
-          outputs: type=image,oci-mediatypes=true
+    - name: Build and push platform-specific image
+      id: build
+      uses: docker/build-push-action@v6
+      env:
+        DOCKER_BUILD_SUMMARY: false
+      with:
+        context: .
+        platforms: ${{ matrix.platform }}
+        push: true
+        provenance: false # Disable provenance to avoid unknown/unknown
+        sbom: false # Disable sbom to avoid unknown/unknown
+        build-args: |
+          VERSION=${{ needs.prepare-build.outputs.version }}
+        tags: ${{ steps.meta.outputs.tags }}
+        annotations: ${{ steps.meta.outputs.annotations }}
+        labels: ${{ steps.meta.outputs.labels }}
+        # https://docs.github.com/fr/packages/working-with-a-github-packages-registry/working-with-the-container-registry#adding-a-description-to-multi-arch-images
+        # GitHub Container Registry (GHCR) supports both OCI and Docker v2 Schema 2 formats.
+        # However, to ensure that annotations (such as description) are preserved at
+        # the multi-architecture manifest level, images must be pushed in OCI format.
+        # Setting `oci-mediatypes=true` ensures that the images are built and pushed using OCI-compliant media types.
+        # This allows proper annotation of the manifest index later using `docker buildx imagetools create`.
+        outputs: type=image,oci-mediatypes=true
 
-  # =============================================================================
-  # Job 3: Create Multi-Architecture Manifest
-  # =============================================================================
   create-multiarch-manifest:
-    name: Create Multi-Arch Manifest
     needs:
-      - prepare-build
-      - build-multiarch-images
+    - prepare-build
+    - build-multiarch-images
+
     permissions:
       contents: read
       packages: write
+
     runs-on: ubuntu-latest
-    outputs:
-      image-tag: ${{ steps.final-tag.outputs.tag }}
+
     steps:
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate multiarch manifest metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ needs.prepare-build.outputs.name_lower }}
-          tags: |
-            type=ref,event=branch
-            type=raw,value=${{ needs.prepare-build.outputs.branch }}
-            type=raw,value=dev-${{ needs.prepare-build.outputs.branch }}-${{ needs.prepare-build.outputs.sha_short }}
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-      - name: Create multiarch manifest and push
-        run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            --annotation='index:org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}' \
-            --annotation='index:org.opencontainers.image.source=https://github.com/${{ github.repository }}' \
-            --annotation='index:org.opencontainers.image.licenses=Apache-2.0' \
-            ${{ env.REGISTRY }}/${{ needs.prepare-build.outputs.name_lower }}:${{ needs.prepare-build.outputs.branch }}-${{ needs.prepare-build.outputs.sha_short }}-amd64 \
-            ${{ env.REGISTRY }}/${{ needs.prepare-build.outputs.name_lower }}:${{ needs.prepare-build.outputs.branch }}-${{ needs.prepare-build.outputs.sha_short }}-arm64 \
-            ${{ env.REGISTRY }}/${{ needs.prepare-build.outputs.name_lower }}:${{ needs.prepare-build.outputs.branch }}-${{ needs.prepare-build.outputs.sha_short }}-arm-v7
+    - name: Generate multiarch manifest metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ needs.prepare-build.outputs.name_lower }}
+        annotations: |
+          type=org.opencontainers.image.description,value=${{ env.IMAGE_DESCRIPTION }}
+        tags: |
+          type=raw,value=${{ needs.prepare-build.outputs.version }}
+          type=raw,value=latest
 
-      - name: Set final tag for next jobs
-        id: final-tag
-        run: |
-          TAG="${{ env.REGISTRY }}/${{ needs.prepare-build.outputs.name_lower }}:${{ needs.prepare-build.outputs.branch }}"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+    - name: Create multiarch manifest and push
+      # This step creates a manifest list for the Docker images built for different platforms.
+      # It uses the `docker buildx imagetools create` command to create the manifest list.
+      id: manifest-annotate
+      run: |
+        docker buildx imagetools create \
+          $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+          --annotation='index:org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}' \
+          --annotation='index:org.opencontainers.image.source=https://github.com/${{ github.repository }}' \
+          --annotation='index:org.opencontainers.image.licenses=MIT' \
+          ${{ env.REGISTRY }}/${{ needs.prepare-build.outputs.name_lower }}:${{ needs.prepare-build.outputs.version }}-amd64 \
+          ${{ env.REGISTRY }}/${{ needs.prepare-build.outputs.name_lower }}:${{ needs.prepare-build.outputs.version }}-arm64
 
-      - name: Inspect multiarch manifest
-        run: |
-          docker buildx imagetools inspect '${{ steps.final-tag.outputs.tag }}'
-
-  # =============================================================================
-  # Job 4: Image analysis and security scanning
-  # =============================================================================
-  image-report:
-    name: Image Analysis & Security Scan
-    runs-on: ubuntu-latest
-    needs:
-      - prepare-build
-      - create-multiarch-manifest
-    permissions:
-      contents: read
-      packages: read
-      security-events: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull multiarch image
-        run: |
-          docker pull ${{ needs.create-multiarch-manifest.outputs.image-tag }}
-
-      - name: Analyze image size
-        run: |
-          echo "## Docker Image Analysis" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Image Size" >> $GITHUB_STEP_SUMMARY
-          docker images ${{ needs.create-multiarch-manifest.outputs.image-tag }} --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          echo "### Image Layers" >> $GITHUB_STEP_SUMMARY
-          docker history ${{ needs.create-multiarch-manifest.outputs.image-tag }} --human --format "table {{.CreatedBy}}\t{{.Size}}" | head -n 20 >> $GITHUB_STEP_SUMMARY
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ needs.create-multiarch-manifest.outputs.image-tag }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-
-      - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-      - name: Generate vulnerability summary
-        run: |
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy image \
-            --severity HIGH,CRITICAL \
-            --format table \
-            ${{ needs.create-multiarch-manifest.outputs.image-tag }} >> $GITHUB_STEP_SUMMARY || true
+    - name: Inspect multiarch manifest
+      id: inspect
+      run: |
+        docker buildx imagetools inspect '${{ env.REGISTRY }}/${{ needs.prepare-build.outputs.name_lower }}:${{ needs.prepare-build.outputs.version }}'
