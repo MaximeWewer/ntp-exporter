@@ -11,8 +11,10 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 {{- end }}
----
 {{- if .Values.rbac.create -}}
+{{- if .Values.serviceAccount.create }}
+---
+{{- end }}
 apiVersion: {{ include "ntp-exporter.rbac.apiVersion" . }}
 kind: ClusterRole
 metadata:
