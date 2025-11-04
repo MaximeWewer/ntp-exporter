@@ -34,11 +34,25 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
       version_without_v: ${{ steps.get_version.outputs.version_without_v }}
       is_prerelease: ${{ steps.get_version.outputs.is_prerelease }}
+      image_name_lower: ${{ steps.lowercase.outputs.image_name_lower }}
+      repository_owner_lower: ${{ steps.lowercase.outputs.repository_owner_lower }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Convert names to lowercase
+        id: lowercase
+        run: |
+          IMAGE_NAME_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
+          echo "image_name_lower=${IMAGE_NAME_LOWER}" >> $GITHUB_OUTPUT
+          echo "repository_owner_lower=${OWNER_LOWER}" >> $GITHUB_OUTPUT
+
+          echo "Image name (lowercase): ${IMAGE_NAME_LOWER}"
+          echo "Repository owner (lowercase): ${OWNER_LOWER}"
 
       - name: Extract version from tag
         id: get_version
@@ -193,19 +207,13 @@ jobs:
         with:
           platforms: ${{ matrix.platform }}
 
-      - name: Convert repository name to lowercase
-        id: repo
-        run: |
-          REPO_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
-          echo "name_lower=$REPO_LOWER" >> $GITHUB_OUTPUT
-
       - name: Generate Docker metadata and labels
         id: meta
         uses: docker/metadata-action@v5
         env:
           PLATFORM_ARCH: ${{ env.PLATFORM_ARCH }}
         with:
-          images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name_lower }}
+          images: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}
           tags: |
             type=raw,value=${{ needs.prepare.outputs.version }}-${{ env.PLATFORM_ARCH }}
           labels: |
@@ -260,17 +268,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Convert repository name to lowercase
-        id: repo
-        run: |
-          REPO_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
-          echo "name_lower=$REPO_LOWER" >> $GITHUB_OUTPUT
-
       - name: Generate multiarch manifest metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name_lower }}
+          images: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}
           annotations: |
             type=org.opencontainers.image.description,value=Modern NTP monitoring exporter for Prometheus
           tags: |
@@ -285,18 +287,18 @@ jobs:
             --annotation='index:org.opencontainers.image.description=Modern NTP monitoring exporter for Prometheus' \
             --annotation='index:org.opencontainers.image.source=https://github.com/${{ github.repository }}' \
             --annotation='index:org.opencontainers.image.licenses=Apache-2.0' \
-            ${{ env.REGISTRY }}/${{ steps.repo.outputs.name_lower }}:${{ needs.prepare.outputs.version }}-amd64 \
-            ${{ env.REGISTRY }}/${{ steps.repo.outputs.name_lower }}:${{ needs.prepare.outputs.version }}-arm64
+            ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-amd64 \
+            ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-arm64
 
       - name: Inspect multiarch manifest
         id: inspect
         run: |
-          docker buildx imagetools inspect '${{ env.REGISTRY }}/${{ steps.repo.outputs.name_lower }}:${{ needs.prepare.outputs.version }}'
+          docker buildx imagetools inspect '${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}'
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name_lower }}:${{ needs.prepare.outputs.version }}
+          image: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}
           format: spdx-json
           output-file: sbom.spdx.json
 
@@ -354,8 +356,7 @@ jobs:
       - name: Push Helm chart to OCI registry
         run: |
           CHART_FILE="ntp-exporter-${{ needs.prepare.outputs.version_without_v }}.tgz"
-          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          helm push "${CHART_FILE}" oci://${{ env.REGISTRY }}/${OWNER_LOWER}/charts
+          helm push "${CHART_FILE}" oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts
 
       - name: Upload Helm chart artifact
         uses: actions/upload-artifact@v4
@@ -408,10 +409,6 @@ jobs:
           # Get previous tag
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ needs.prepare.outputs.version }}^ 2>/dev/null || echo "")
 
-          # Convert owner to lowercase for OCI registry
-          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          REPO_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
-
           # Generate changelog
           cat << EOF > release_notes.md
           ## NTP Exporter ${{ needs.prepare.outputs.version }}
@@ -438,7 +435,7 @@ jobs:
           Multi-architecture Docker images are available:
 
           \`\`\`bash
-          docker pull ${{ env.REGISTRY }}/${REPO_LOWER}:${{ needs.prepare.outputs.version }}
+          docker pull ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}
           \`\`\`
 
           Supported platforms:
@@ -451,7 +448,7 @@ jobs:
           Install the Helm chart:
 
           \`\`\`bash
-          helm install ntp-exporter oci://${{ env.REGISTRY }}/${OWNER_LOWER}/charts/ntp-exporter \\
+          helm install ntp-exporter oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/ntp-exporter \\
             --version ${{ needs.prepare.outputs.version_without_v }}
           \`\`\`
 
@@ -491,19 +488,17 @@ jobs:
 
       - name: Generate release summary
         run: |
-          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          REPO_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
           cat << EOF >> $GITHUB_STEP_SUMMARY
           ## Release ${{ needs.prepare.outputs.version }} Created Successfully
 
           ### Artifacts Published
 
           #### Docker Images
-          - \`${{ env.REGISTRY }}/${REPO_LOWER}:${{ needs.prepare.outputs.version }}\`
-          - \`${{ env.REGISTRY }}/${REPO_LOWER}:latest\`
+          - \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}\`
+          - \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:latest\`
 
           #### Helm Chart
-          - \`oci://${{ env.REGISTRY }}/${OWNER_LOWER}/charts/ntp-exporter:${{ needs.prepare.outputs.version_without_v }}\`
+          - \`oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/ntp-exporter:${{ needs.prepare.outputs.version_without_v }}\`
 
           #### Binaries
           - Linux (amd64, arm64, armv7)
@@ -512,8 +507,8 @@ jobs:
 
           ### Links
           - [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.version }})
-          - [Docker Image](https://${{ env.REGISTRY }}/${REPO_LOWER})
-          - [Helm Chart Registry](https://${{ env.REGISTRY }}/${OWNER_LOWER}/charts/ntp-exporter)
+          - [Docker Image](https://${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }})
+          - [Helm Chart Registry](https://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/ntp-exporter)
           EOF
 
   # =============================================================================
@@ -526,8 +521,8 @@ jobs:
     steps:
       - name: Verify Docker image
         run: |
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }}
-          docker inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }}
+          docker pull ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}
+          docker inspect ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}
 
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -540,8 +535,7 @@ jobs:
 
       - name: Verify Helm chart
         run: |
-          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          helm pull oci://${{ env.REGISTRY }}/${OWNER_LOWER}/charts/ntp-exporter \
+          helm pull oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/ntp-exporter \
             --version ${{ needs.prepare.outputs.version_without_v }}
 
           helm show chart ntp-exporter-${{ needs.prepare.outputs.version_without_v }}.tgz
