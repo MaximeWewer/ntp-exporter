@@ -354,7 +354,8 @@ jobs:
       - name: Push Helm chart to OCI registry
         run: |
           CHART_FILE="ntp-exporter-${{ needs.prepare.outputs.version_without_v }}.tgz"
-          helm push "${CHART_FILE}" oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          helm push "${CHART_FILE}" oci://${{ env.REGISTRY }}/${OWNER_LOWER}/charts
 
       - name: Upload Helm chart artifact
         uses: actions/upload-artifact@v4
@@ -407,6 +408,10 @@ jobs:
           # Get previous tag
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ needs.prepare.outputs.version }}^ 2>/dev/null || echo "")
 
+          # Convert owner to lowercase for OCI registry
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
+
           # Generate changelog
           cat << EOF > release_notes.md
           ## NTP Exporter ${{ needs.prepare.outputs.version }}
@@ -433,7 +438,7 @@ jobs:
           Multi-architecture Docker images are available:
 
           \`\`\`bash
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }}
+          docker pull ${{ env.REGISTRY }}/${REPO_LOWER}:${{ needs.prepare.outputs.version }}
           \`\`\`
 
           Supported platforms:
@@ -446,7 +451,7 @@ jobs:
           Install the Helm chart:
 
           \`\`\`bash
-          helm install ntp-exporter oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/ntp-exporter \\
+          helm install ntp-exporter oci://${{ env.REGISTRY }}/${OWNER_LOWER}/charts/ntp-exporter \\
             --version ${{ needs.prepare.outputs.version_without_v }}
           \`\`\`
 
@@ -486,17 +491,19 @@ jobs:
 
       - name: Generate release summary
         run: |
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
           cat << EOF >> $GITHUB_STEP_SUMMARY
           ## Release ${{ needs.prepare.outputs.version }} Created Successfully
 
           ### Artifacts Published
 
           #### Docker Images
-          - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.version }}\`
-          - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`
+          - \`${{ env.REGISTRY }}/${REPO_LOWER}:${{ needs.prepare.outputs.version }}\`
+          - \`${{ env.REGISTRY }}/${REPO_LOWER}:latest\`
 
           #### Helm Chart
-          - \`oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/ntp-exporter:${{ needs.prepare.outputs.version_without_v }}\`
+          - \`oci://${{ env.REGISTRY }}/${OWNER_LOWER}/charts/ntp-exporter:${{ needs.prepare.outputs.version_without_v }}\`
 
           #### Binaries
           - Linux (amd64, arm64, armv7)
@@ -505,8 +512,8 @@ jobs:
 
           ### Links
           - [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.version }})
-          - [Docker Image](https://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }})
-          - [Helm Chart Registry](https://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/ntp-exporter)
+          - [Docker Image](https://${{ env.REGISTRY }}/${REPO_LOWER})
+          - [Helm Chart Registry](https://${{ env.REGISTRY }}/${OWNER_LOWER}/charts/ntp-exporter)
           EOF
 
   # =============================================================================
@@ -533,7 +540,8 @@ jobs:
 
       - name: Verify Helm chart
         run: |
-          helm pull oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/ntp-exporter \
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          helm pull oci://${{ env.REGISTRY }}/${OWNER_LOWER}/charts/ntp-exporter \
             --version ${{ needs.prepare.outputs.version_without_v }}
 
           helm show chart ntp-exporter-${{ needs.prepare.outputs.version_without_v }}.tgz
