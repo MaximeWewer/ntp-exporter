@@ -5,16 +5,16 @@ type: application
 version: 1.0.0
 appVersion: "1.0.0"
 keywords:
-  - ntp
-  - prometheus
-  - exporter
-  - monitoring
-  - time-synchronization
-home: https://github.com/yourusername/ntp_exporter
+- ntp
+- prometheus
+- exporter
+- monitoring
+- time-synchronization
+home: https://github.com/MaximeWewer/ntp-exporter
 sources:
-  - https://github.com/yourusername/ntp_exporter
+- https://github.com/MaximeWewer/ntp-exporter
 maintainers:
-  - name: NTP Exporter Team
-    email: maintainers@example.com
+- name: NTP Exporter Team
+  email: maintainers@example.com
 icon: https://raw.githubusercontent.com/prometheus/prometheus/main/documentation/images/prometheus-logo.svg
 kubeVersion: ">=1.19.0-0"
