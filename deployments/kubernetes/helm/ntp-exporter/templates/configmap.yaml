@@ -8,29 +8,114 @@ metadata:
 data:
   config.yaml: |
     # NTP Exporter Configuration
+    server:
+      address: {{ .Values.config.address | default "0.0.0.0" }}
+      port: {{ .Values.config.metricsPort | default 9559 }}
+      read_timeout: {{ .Values.config.readTimeout | default "10s" }}
+      write_timeout: {{ .Values.config.writeTimeout | default "10s" }}
+      {{- if .Values.config.tls }}
+      {{- if .Values.config.tls.enabled }}
+      tls_enabled: {{ .Values.config.tls.enabled }}
+      tls_cert_file: {{ .Values.config.tls.certFile | default "" }}
+      tls_key_file: {{ .Values.config.tls.keyFile | default "" }}
+      {{- end }}
+      {{- end }}
+      {{- if .Values.config.cors }}
+      {{- if .Values.config.cors.enabled }}
+      enable_cors: {{ .Values.config.cors.enabled }}
+      {{- if .Values.config.cors.allowedOrigins }}
+      allowed_origins:
+      {{- range .Values.config.cors.allowedOrigins }}
+      - {{ . }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+
     ntp:
       servers:
       {{- range .Values.config.ntpServers }}
       - {{ . }}
       {{- end }}
-      timeout: {{ .Values.config.ntpTimeout }}
-      max_clock_offset: {{ .Values.config.maxClockOffset }}
+      timeout: {{ .Values.config.ntpTimeout | default "5s" }}
+      version: {{ .Values.config.ntpVersion | default 4 }}
+      samples_per_server: {{ .Values.config.samplesPerServer | default 3 }}
+      max_concurrency: {{ .Values.config.maxConcurrency | default 10 }}
       {{- if .Values.config.enableKernel }}
       enable_kernel: {{ .Values.config.enableKernel }}
       {{- end }}
 
-    metrics:
-      port: {{ .Values.config.metricsPort }}
-      path: /metrics
+      {{- if .Values.config.rateLimit }}
+      rate_limit:
+        enabled: {{ .Values.config.rateLimit.enabled | default false }}
+        {{- if .Values.config.rateLimit.enabled }}
+        global_rate: {{ .Values.config.rateLimit.globalRate | default 1000 }}
+        per_server_rate: {{ .Values.config.rateLimit.perServerRate | default 60 }}
+        burst_size: {{ .Values.config.rateLimit.burstSize | default 10 }}
+        backoff_duration: {{ .Values.config.rateLimit.backoffDuration | default "1m" }}
+        {{- end }}
+      {{- end }}
+
+      {{- if .Values.config.circuitBreaker }}
+      circuit_breaker:
+        enabled: {{ .Values.config.circuitBreaker.enabled | default true }}
+        {{- if .Values.config.circuitBreaker.enabled }}
+        max_requests: {{ .Values.config.circuitBreaker.maxRequests | default 3 }}
+        interval: {{ .Values.config.circuitBreaker.interval | default "60s" }}
+        timeout: {{ .Values.config.circuitBreaker.timeout | default "30s" }}
+        failure_threshold: {{ .Values.config.circuitBreaker.failureThreshold | default 0.6 }}
+        {{- end }}
+      {{- end }}
+
+      {{- if .Values.config.adaptiveSampling }}
+      adaptive_sampling:
+        enabled: {{ .Values.config.adaptiveSampling.enabled | default false }}
+        {{- if .Values.config.adaptiveSampling.enabled }}
+        default_samples: {{ .Values.config.adaptiveSampling.defaultSamples | default 3 }}
+        high_drift_samples: {{ .Values.config.adaptiveSampling.highDriftSamples | default 10 }}
+        drift_threshold: {{ .Values.config.adaptiveSampling.driftThreshold | default "50ms" }}
+        max_duration: {{ .Values.config.adaptiveSampling.maxDuration | default "30s" }}
+        {{- end }}
+      {{- end }}
+
+      {{- if .Values.config.workerPool }}
+      worker_pool:
+        enabled: {{ .Values.config.workerPool.enabled | default false }}
+        {{- if .Values.config.workerPool.enabled }}
+        size: {{ .Values.config.workerPool.size | default 5 }}
+        {{- end }}
+      {{- end }}
+
+      {{- if .Values.config.dnsCache }}
+      dns_cache:
+        enabled: {{ .Values.config.dnsCache.enabled | default true }}
+        {{- if .Values.config.dnsCache.enabled }}
+        min_ttl: {{ .Values.config.dnsCache.minTTL | default "5m" }}
+        max_ttl: {{ .Values.config.dnsCache.maxTTL | default "60m" }}
+        cleanup_workers: {{ .Values.config.dnsCache.cleanupWorkers | default 1 }}
+        {{- end }}
+      {{- end }}
 
     logging:
       level: {{ .Values.config.logging.level }}
       format: {{ .Values.config.logging.format }}
+      output: {{ .Values.config.logging.output | default "stdout" }}
+      {{- if .Values.config.logging.enableFile }}
+      enable_file: {{ .Values.config.logging.enableFile }}
+      file_path: {{ .Values.config.logging.filePath | default "" }}
+      {{- end }}
 
-    {{- if eq .Values.mode "agent" }}
-    mode: agent
-    {{- else if eq .Values.mode "hybrid" }}
-    mode: hybrid
-    {{- else }}
-    mode: probe
-    {{- end }}
+    metrics:
+      {{- if .Values.config.metrics }}
+      namespace: {{ .Values.config.metrics.namespace | default "ntp" }}
+      subsystem: {{ .Values.config.metrics.subsystem | default "" }}
+      {{- if .Values.config.metrics.labels }}
+      labels:
+        {{- range $key, $value := .Values.config.metrics.labels }}
+        {{ $key }}: {{ $value }}
+        {{- end }}
+      {{- end }}
+      {{- else }}
+      namespace: ntp
+      subsystem: ""
+      {{- end }}

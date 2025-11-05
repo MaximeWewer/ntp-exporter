@@ -45,9 +45,11 @@ spec:
           {{- toYaml .Values.securityContext | nindent 10 }}
         image: {{ include "ntp-exporter.image" . }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
-        {{- if .Values.args }}
         args:
+        {{- if .Values.args }}
         {{- toYaml .Values.args | nindent 8 }}
+        {{- else }}
+        - --config=/etc/ntp-exporter/config.yaml
         {{- end }}
         ports:
         - name: metrics
