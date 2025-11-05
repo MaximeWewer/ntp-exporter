@@ -163,9 +163,13 @@ func runCollectionLoop(
 		logger.Warn("main", "Initial collection failed")
 	}
 
-	// Collection interval (30 seconds by default)
-	ticker := time.NewTicker(30 * time.Second)
+	// Collection interval using configured scrape_interval
+	ticker := time.NewTicker(cfg.NTP.ScrapeInterval)
 	defer ticker.Stop()
+
+	logger.SafeInfo("main", "Collection loop started", map[string]interface{}{
+		"scrape_interval": cfg.NTP.ScrapeInterval,
+	})
 
 	for {
 		select {

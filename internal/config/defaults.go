@@ -41,6 +41,12 @@ func ApplyDefaults(cfg *Config) {
 	if cfg.NTP.MaxConcurrency == 0 {
 		cfg.NTP.MaxConcurrency = 10
 	}
+	if cfg.NTP.ScrapeInterval == 0 {
+		cfg.NTP.ScrapeInterval = 30 * time.Second
+	}
+	if cfg.NTP.MaxClockOffset == 0 {
+		cfg.NTP.MaxClockOffset = 100 * time.Millisecond
+	}
 
 	// Rate limiting defaults
 	if cfg.NTP.RateLimit.GlobalRate == 0 {

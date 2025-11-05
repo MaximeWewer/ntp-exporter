@@ -41,6 +41,8 @@ data:
       version: {{ .Values.config.ntpVersion | default 4 }}
       samples_per_server: {{ .Values.config.samplesPerServer | default 3 }}
       max_concurrency: {{ .Values.config.maxConcurrency | default 10 }}
+      scrape_interval: {{ .Values.config.scrapeInterval | default "30s" }}
+      max_clock_offset: {{ .Values.config.maxClockOffset | default "100ms" }}
       {{- if .Values.config.enableKernel }}
       enable_kernel: {{ .Values.config.enableKernel }}
       {{- end }}

@@ -23,6 +23,7 @@
 //   NTP:
 //     - NTP_SERVERS (comma-separated), NTP_TIMEOUT, NTP_VERSION
 //     - NTP_SAMPLES, NTP_MAX_CONCURRENCY, NTP_ENABLE_KERNEL
+//     - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET
 //
 //   RATE_LIMIT:
 //     - RATE_LIMIT_ENABLED, RATE_LIMIT_GLOBAL, RATE_LIMIT_PER_SERVER
@@ -95,6 +96,8 @@ type NTPConfig struct {
 	SamplesPerServer int                    `yaml:"samples_per_server"`
 	MaxConcurrency   int                    `yaml:"max_concurrency"`
 	EnableKernel     bool                   `yaml:"enable_kernel"`
+	ScrapeInterval   time.Duration          `yaml:"scrape_interval"`    // Interval between NTP collections
+	MaxClockOffset   time.Duration          `yaml:"max_clock_offset"`   // Maximum acceptable clock offset threshold
 	RateLimit        RateLimitConfig        `yaml:"rate_limit"`
 	CircuitBreaker   CircuitBreakerConfig   `yaml:"circuit_breaker"`
 	AdaptiveSampling AdaptiveSamplingConfig `yaml:"adaptive_sampling"`
@@ -291,6 +294,16 @@ func applyEnvOverrides(cfg *Config) {
 	if maxConcurrency := os.Getenv("NTP_MAX_CONCURRENCY"); maxConcurrency != "" {
 		if c, err := strconv.Atoi(maxConcurrency); err == nil {
 			cfg.NTP.MaxConcurrency = c
+		}
+	}
+	if scrapeInterval := os.Getenv("NTP_SCRAPE_INTERVAL"); scrapeInterval != "" {
+		if s, err := time.ParseDuration(scrapeInterval); err == nil {
+			cfg.NTP.ScrapeInterval = s
+		}
+	}
+	if maxClockOffset := os.Getenv("NTP_MAX_CLOCK_OFFSET"); maxClockOffset != "" {
+		if m, err := time.ParseDuration(maxClockOffset); err == nil {
+			cfg.NTP.MaxClockOffset = m
 		}
 	}
 

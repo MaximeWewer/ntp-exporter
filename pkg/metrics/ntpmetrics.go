@@ -7,16 +7,17 @@ import (
 // NTPMetrics encapsulates all NTP exporter metrics
 type NTPMetrics struct {
 	// Base NTP Metrics
-	OffsetSeconds      *prometheus.GaugeVec
-	RTTSeconds         *prometheus.GaugeVec
-	ServerReachable    *prometheus.GaugeVec
-	Stratum            *prometheus.GaugeVec
-	ReferenceTimestamp *prometheus.GaugeVec
-	RootDelay          *prometheus.GaugeVec
-	RootDispersion     *prometheus.GaugeVec
-	RootDistance       *prometheus.GaugeVec
-	Precision          *prometheus.GaugeVec
-	LeapIndicator      *prometheus.GaugeVec
+	OffsetSeconds       *prometheus.GaugeVec
+	ClockOffsetExceeded *prometheus.GaugeVec // 1 if offset exceeds max threshold, 0 otherwise
+	RTTSeconds          *prometheus.GaugeVec
+	ServerReachable     *prometheus.GaugeVec
+	Stratum             *prometheus.GaugeVec
+	ReferenceTimestamp  *prometheus.GaugeVec
+	RootDelay           *prometheus.GaugeVec
+	RootDispersion      *prometheus.GaugeVec
+	RootDistance        *prometheus.GaugeVec
+	Precision           *prometheus.GaugeVec
+	LeapIndicator       *prometheus.GaugeVec
 
 	// Quality Metrics
 	JitterSeconds    *prometheus.GaugeVec
@@ -83,6 +84,15 @@ func NewNTPMetricsWithConfig(namespace, subsystem string) *NTPMetrics {
 				Help:      "Time offset between local clock and NTP server in seconds",
 			},
 			[]string{"server", "stratum", "version"},
+		),
+		ClockOffsetExceeded: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Subsystem: subsystem,
+				Name:      "clock_offset_exceeded",
+				Help:      "Whether the clock offset exceeds the configured threshold (1 = exceeded, 0 = within limits)",
+			},
+			[]string{"server"},
 		),
 		RTTSeconds: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -514,6 +524,7 @@ func (m *NTPMetrics) getAllMetrics() []prometheus.Collector {
 	return []prometheus.Collector{
 		// Base metrics
 		m.OffsetSeconds,
+		m.ClockOffsetExceeded,
 		m.RTTSeconds,
 		m.ServerReachable,
 		m.Stratum,

@@ -175,6 +175,13 @@ func (c *BaseCollector) updateMetrics(resp *ntp.Response) {
 		labels["version"],
 	).Set(resp.Offset.Seconds())
 
+	// Check if offset exceeds configured threshold
+	offsetExceeded := 0.0
+	if resp.Offset.Abs() > cfg.NTP.MaxClockOffset {
+		offsetExceeded = 1.0
+	}
+	m.ClockOffsetExceeded.WithLabelValues(resp.Server).Set(offsetExceeded)
+
 	m.RTTSeconds.WithLabelValues(resp.Server).Set(resp.RTT.Seconds())
 	m.Stratum.WithLabelValues(resp.Server).Set(float64(resp.Stratum))
 	m.ReferenceTimestamp.WithLabelValues(resp.Server).Set(float64(resp.ReferenceTime.Unix()))
