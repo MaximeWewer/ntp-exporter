@@ -118,6 +118,8 @@ ntp:
   timeout: 5s
   version: 4
   samples_per_server: 3
+  scrape_interval: 30s
+  max_clock_offset: 100ms
   enable_kernel: true
 
 logging:
@@ -180,7 +182,7 @@ curl http://localhost:9559/metrics
 **1. Add the Helm repository :**
 
 ```bash
-helm repo add ntp-exporter https://your-repo-url
+helm repo add ntp-exporter oci://ghcr.io/maximewewer/charts
 helm repo update
 ```
 
@@ -637,6 +639,7 @@ Available in **all modes** (prefix varies by mode):
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `{prefix}_offset_seconds` | Gauge | server, stratum, version | Time offset between local clock and NTP server |
+| `{prefix}_clock_offset_exceeded` | Gauge | server | Whether the clock offset exceeds the configured threshold (1=exceeded, 0=within limits) |
 | `{prefix}_rtt_seconds` | Gauge | server | Round-trip time to NTP server |
 | `{prefix}_jitter_seconds` | Gauge | server | Jitter calculated from multiple samples |
 | `{prefix}_stability_seconds` | Gauge | server | Stability of time offset (standard deviation) |
@@ -726,6 +729,8 @@ Complete list of environment variables (Docker/Docker Compose):
 | `NTP_VERSION` | NTP protocol version (2, 3, 4) | `4` |
 | `NTP_SAMPLES` | Samples per server for statistics | `3` |
 | `NTP_MAX_CONCURRENCY` | Maximum concurrent queries | `10` |
+| `NTP_SCRAPE_INTERVAL` | Interval between NTP collections | `30s` |
+| `NTP_MAX_CLOCK_OFFSET` | Maximum acceptable clock offset threshold | `100ms` |
 | `NTP_ENABLE_KERNEL` | Enable kernel monitoring (Linux only) | `false` |
 
 #### Rate limiting
@@ -839,6 +844,16 @@ groups:
         annotations:
           summary: "Critical time drift detected on {{ $labels.server }}"
           description: "Time offset is {{ $value }}s, exceeding 100ms threshold"
+
+      # Clock Offset Exceeded Configured Threshold
+      - alert: NTPClockOffsetExceeded
+        expr: ntp_clock_offset_exceeded == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NTP clock offset exceeded threshold on {{ $labels.server }}"
+          description: "The clock offset on {{ $labels.server }} has exceeded the configured max_clock_offset threshold"
 
       # Server Unreachable
       - alert: NTPServerUnreachable
