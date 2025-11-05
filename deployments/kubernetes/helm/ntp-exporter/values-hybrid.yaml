@@ -84,7 +84,7 @@ config:
   metricsPort: 9561 # Different port to avoid conflicts
   scrapeInterval: 30s
   ntpTimeout: 10s
-  maxClockOffset: 50
+  maxClockOffset: 50ms
   enableKernel: true # CRITICAL: Enable kernel monitoring
   logging:
     level: info

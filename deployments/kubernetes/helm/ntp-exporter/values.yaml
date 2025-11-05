@@ -35,8 +35,8 @@ config:
   # NTP query timeout
   ntpTimeout: 5s
 
-  # Maximum clock offset threshold (milliseconds)
-  maxClockOffset: 100
+  # Maximum clock offset threshold
+  maxClockOffset: 100ms
 
   # Logging configuration
   logging:

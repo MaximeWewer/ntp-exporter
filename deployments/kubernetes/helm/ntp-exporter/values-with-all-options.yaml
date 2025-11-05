@@ -77,8 +77,8 @@ config:
   # Scrape interval (used for documentation)
   scrapeInterval: 30s
 
-  # Maximum clock offset threshold (milliseconds)
-  maxClockOffset: 100
+  # Maximum clock offset threshold
+  maxClockOffset: 100ms
 
   # ---------------------------------------------------------------------------
   # RATE LIMIT - NTP query rate limiting
