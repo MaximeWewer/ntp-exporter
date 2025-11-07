@@ -32,7 +32,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.version }}
-      version_without_v: ${{ steps.get_version.outputs.version_without_v }}
       is_prerelease: ${{ steps.get_version.outputs.is_prerelease }}
       image_name_lower: ${{ steps.lowercase.outputs.image_name_lower }}
       repository_owner_lower: ${{ steps.lowercase.outputs.repository_owner_lower }}
@@ -93,7 +92,6 @@ jobs:
           fi
 
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "version_without_v=${VERSION#v}" >> $GITHUB_OUTPUT
 
           # Check if this is a pre-release (contains -, alpha, beta, rc)
           if [[ "$VERSION" =~ - ]]; then
@@ -361,7 +359,7 @@ jobs:
 
       - name: Update Chart version
         run: |
-          VERSION="${{ needs.prepare.outputs.version_without_v }}"
+          VERSION="${{ needs.prepare.outputs.version }}"
 
           # Update Chart.yaml with new version
           sed -i "s/^version:.*/version: ${VERSION}/" ${{ env.HELM_CHART_PATH }}/Chart.yaml
@@ -380,12 +378,12 @@ jobs:
       - name: Package Helm chart
         run: |
           helm package ${{ env.HELM_CHART_PATH }} \
-            --version ${{ needs.prepare.outputs.version_without_v }} \
+            --version ${{ needs.prepare.outputs.version }} \
             --app-version ${{ needs.prepare.outputs.version }}
 
       - name: Push Helm chart to OCI registry
         run: |
-          CHART_FILE="ntp-exporter-${{ needs.prepare.outputs.version_without_v }}.tgz"
+          CHART_FILE="ntp-exporter-${{ needs.prepare.outputs.version }}.tgz"
           helm push "${CHART_FILE}" oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts
 
       - name: Upload Helm chart artifact
@@ -396,12 +394,67 @@ jobs:
           retention-days: 90
 
   # =============================================================================
-  # Job 6: Create GitHub Release
+  # Job 6: Publish Helm Chart to GitHub Pages (Traditional Helm Repo)
+  # =============================================================================
+  publish-helm-repo:
+    name: Publish Helm Chart to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: [prepare, build-helm]
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Create gh-pages branch if it doesn't exist
+        run: |
+          # Check if gh-pages branch exists
+          if ! git ls-remote --exit-code --heads origin gh-pages; then
+            echo "Creating gh-pages branch..."
+            git checkout --orphan gh-pages
+            git reset --hard
+            git commit --allow-empty -m "Initialize gh-pages branch"
+            git push origin gh-pages
+            git checkout main
+          fi
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Download Helm chart artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: helm-chart
+          path: .cr-release-packages
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.7.0
+        with:
+          charts_dir: deployments/kubernetes/helm
+          skip_existing: true
+          mark_as_latest: true
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CR_SKIP_EXISTING: "true"
+
+  # =============================================================================
+  # Job 7: Create GitHub Release
   # =============================================================================
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [prepare, build-binaries, create-multiarch-manifest, build-helm]
+    needs: [prepare, build-binaries, create-multiarch-manifest, build-helm, publish-helm-repo]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -473,13 +526,21 @@ jobs:
           - linux/arm64
           - linux/arm/v7
 
-          ### Helm Chart (OCI)
+          ### Helm Chart
 
-          Install the Helm chart:
+          #### Option 1: Traditional Helm Repository (Recommended for public access)
+
+          \`\`\`bash
+          helm repo add ntp-exporter https://${{ github.repository_owner }}.github.io/ntp-exporter
+          helm repo update
+          helm install my-ntp-exporter ntp-exporter/ntp-exporter --version ${{ needs.prepare.outputs.version }}
+          \`\`\`
+
+          #### Option 2: OCI Registry
 
           \`\`\`bash
           helm install ntp-exporter oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/ntp-exporter \\
-            --version ${{ needs.prepare.outputs.version_without_v }}
+            --version ${{ needs.prepare.outputs.version }}
           \`\`\`
 
           ### Binary Downloads
@@ -528,7 +589,8 @@ jobs:
           - \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:latest\`
 
           #### Helm Chart
-          - \`oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/ntp-exporter:${{ needs.prepare.outputs.version_without_v }}\`
+          - Traditional Repo: \`https://${{ github.repository_owner }}.github.io/ntp-exporter\`
+          - OCI Registry: \`oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/ntp-exporter:${{ needs.prepare.outputs.version }}\`
 
           #### Binaries
           - Linux (amd64, arm64, armv7)
@@ -542,7 +604,7 @@ jobs:
           EOF
 
   # =============================================================================
-  # Job 7: Post-Release Verification
+  # Job 8: Post-Release Verification
   # =============================================================================
   verify-release:
     name: Verify Release
@@ -566,9 +628,9 @@ jobs:
       - name: Verify Helm chart
         run: |
           helm pull oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/ntp-exporter \
-            --version ${{ needs.prepare.outputs.version_without_v }}
+            --version ${{ needs.prepare.outputs.version }}
 
-          helm show chart ntp-exporter-${{ needs.prepare.outputs.version_without_v }}.tgz
+          helm show chart ntp-exporter-${{ needs.prepare.outputs.version }}.tgz
 
       - name: Verification summary
         run: |
