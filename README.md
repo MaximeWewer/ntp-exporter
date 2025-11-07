@@ -182,25 +182,25 @@ curl http://localhost:9559/metrics
 **1. Add the Helm repository :**
 
 ```bash
-helm repo add ntp-exporter oci://ghcr.io/maximewewer/charts
-helm repo update
+helm install ntp-exporter oci://ghcr.io/maximewewer/charts/ntp-exporter \
+  --version 2025.11.1 -f values.yaml --namespace monitoring --create-namespace
 ```
 
 **2. Install using pre-configured values:**
 
 ```bash
 # Probe Mode: Centralized deployment
-helm install ntp-exporter ./deployments/kubernetes/helm/ntp-exporter \
+helm install ntp-exporter oci://ghcr.io/maximewewer/charts/ntp-exporter \
   -f deployments/kubernetes/helm/ntp-exporter/values-probe.yaml \
   --namespace monitoring --create-namespace
 
 # Agent Mode: DaemonSet on every node
-helm install ntp-exporter ./deployments/kubernetes/helm/ntp-exporter \
+helm install ntp-exporter oci://ghcr.io/maximewewer/charts/ntp-exporter \
   -f deployments/kubernetes/helm/ntp-exporter/values-agent.yaml \
   --namespace monitoring --create-namespace
 
 # Hybrid Mode: DaemonSet with kernel monitoring
-helm install ntp-exporter ./deployments/kubernetes/helm/ntp-exporter \
+helm install ntp-exporter oci://ghcr.io/maximewewer/charts/ntp-exporter \
   -f deployments/kubernetes/helm/ntp-exporter/values-hybrid.yaml \
   --namespace monitoring --create-namespace
 ```
