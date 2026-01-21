@@ -3,13 +3,13 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*.*.*'
-      - 'v*.*.*-*'
+      - '*.*.*'
+      - '*.*.*-*'
   workflow_dispatch:
     inputs:
       force_version:
-        # Versioning pattern (number only): YEAR.MONTH.INDEX_OF_TAG (+1 at each tag)
-        description: 'Force a specific version (optional, format: YYYY.MM.X or v*.*.*)'
+        # Versioning pattern: YEAR.MONTH.INDEX_OF_TAG (+1 at each tag)
+        description: 'Force a specific version (optional, format: YYYY.MM.X)'
         required: false
         type: string
 
@@ -59,14 +59,14 @@ jobs:
           # If triggered by a tag push, use the tag
           if [ "${{ github.event_name }}" == "push" ]; then
             VERSION=${GITHUB_REF#refs/tags/}
+            # Remove 'v' prefix if present (for backward compatibility with old tags)
+            VERSION="${VERSION#v}"
             echo "Using tag: $VERSION"
           # If force_version is provided in workflow_dispatch, use it
           elif [ -n "${{ github.event.inputs.force_version }}" ]; then
             VERSION="${{ github.event.inputs.force_version }}"
-            # Add 'v' prefix if not present and version looks like X.Y.Z
-            if [[ ! "$VERSION" =~ ^v ]] && [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-              VERSION="v${VERSION}"
-            fi
+            # Remove 'v' prefix if present
+            VERSION="${VERSION#v}"
             echo "Using forced version: $VERSION"
           else
             # Auto-generate version based on YEAR.MONTH.INDEX pattern
@@ -77,16 +77,17 @@ jobs:
             YEAR_MONTH=$(date +'%Y.%m')
 
             # Get the highest existing tag for current year.month and increment
-            LATEST_TAG=$(git tag -l "v${YEAR_MONTH}.*" | sort -V | tail -n 1)
+            # Check both with and without 'v' prefix for backward compatibility
+            LATEST_TAG=$(git tag -l "${YEAR_MONTH}.*" "v${YEAR_MONTH}.*" | sed 's/^v//' | sort -V | tail -n 1)
 
             if [ -z "$LATEST_TAG" ]; then
               # No tags for this year.month, start with .1
-              VERSION="v${YEAR_MONTH}.1"
+              VERSION="${YEAR_MONTH}.1"
             else
               # Extract patch version and increment
-              PATCH_VERSION=$(echo "$LATEST_TAG" | sed 's/^v.*\.//')
+              PATCH_VERSION=$(echo "$LATEST_TAG" | sed 's/^.*\.//')
               NEW_PATCH=$((PATCH_VERSION + 1))
-              VERSION="v${YEAR_MONTH}.${NEW_PATCH}"
+              VERSION="${YEAR_MONTH}.${NEW_PATCH}"
             fi
             echo "Auto-generated version: $VERSION"
           fi
@@ -363,10 +364,10 @@ jobs:
 
           # Update Chart.yaml with new version
           sed -i "s/^version:.*/version: ${VERSION}/" ${{ env.HELM_CHART_PATH }}/Chart.yaml
-          sed -i "s/^appVersion:.*/appVersion: \"${{ needs.prepare.outputs.version }}\"/" ${{ env.HELM_CHART_PATH }}/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" ${{ env.HELM_CHART_PATH }}/Chart.yaml
 
           # Update image tag in values.yaml
-          sed -i "s/tag:.*/tag: \"${{ needs.prepare.outputs.version }}\"/" ${{ env.HELM_CHART_PATH }}/values.yaml
+          sed -i "s/tag:.*/tag: \"${VERSION}\"/" ${{ env.HELM_CHART_PATH }}/values.yaml
 
           echo "Updated Chart.yaml and values.yaml"
           cat ${{ env.HELM_CHART_PATH }}/Chart.yaml
