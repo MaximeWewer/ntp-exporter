@@ -377,3 +377,66 @@ func BenchmarkLoadFromEnvVarsOnly(b *testing.B) {
 		_, _ = LoadFromEnvVarsOnly()
 	}
 }
+
+func TestLoadFromYamlWithEnvOverrides_MissingFileIsFatal(t *testing.T) {
+	cfg, err := LoadFromYamlWithEnvOverrides(filepath.Join(t.TempDir(), "missing.yaml"))
+	assert.Error(t, err)
+	assert.Nil(t, cfg)
+}
+
+func TestLoadFromYamlWithEnvOverrides_InvalidYAMLIsFatal(t *testing.T) {
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte("ntp: [unclosed"), 0o644))
+
+	cfg, err := LoadFromYamlWithEnvOverrides(configFile)
+	assert.Error(t, err)
+	assert.Nil(t, cfg)
+}
+
+func TestLoadFromYamlFile_UnknownKeyRejected(t *testing.T) {
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte("ntp:\n  servers: [time.google.com]\n  scrape_intervall: 30s\n"), 0o644))
+
+	cfg, err := LoadFromYamlFile(configFile)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "scrape_intervall")
+	assert.Nil(t, cfg)
+}
+
+func TestLoadFromEnvVarsOnly_InvalidValueIsFatal(t *testing.T) {
+	t.Setenv("NTP_TIMEOUT", "abc")
+
+	cfg, err := LoadFromEnvVarsOnly()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "NTP_TIMEOUT")
+	assert.Nil(t, cfg)
+}
+
+func TestLoadFromEnvVarsOnly_Pools(t *testing.T) {
+	t.Setenv("NTP_POOLS", "pool.ntp.org, europe.pool.ntp.org:all:3")
+
+	cfg, err := LoadFromEnvVarsOnly()
+	require.NoError(t, err)
+	require.Len(t, cfg.NTP.Pools, 2)
+	assert.Equal(t, PoolConfig{Name: "pool.ntp.org", Strategy: "best_n", MaxServers: 4}, cfg.NTP.Pools[0])
+	assert.Equal(t, PoolConfig{Name: "europe.pool.ntp.org", Strategy: "all", MaxServers: 3}, cfg.NTP.Pools[1])
+	assert.Empty(t, cfg.NTP.Servers, "default servers must not be added when pools are configured")
+}
+
+func TestLoadFromEnvVarsOnly_InvalidPools(t *testing.T) {
+	t.Setenv("NTP_POOLS", "pool.ntp.org:all:x")
+
+	_, err := LoadFromEnvVarsOnly()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "NTP_POOLS")
+}
+
+func TestLoadFromYamlFile_PoolDefaults(t *testing.T) {
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte("ntp:\n  pools:\n    - name: pool.ntp.org\n"), 0o644))
+
+	cfg, err := LoadFromYamlFile(configFile)
+	require.NoError(t, err)
+	assert.Equal(t, 4, cfg.NTP.Pools[0].MaxServers)
+	assert.Equal(t, "best_n", cfg.NTP.Pools[0].Strategy)
+}

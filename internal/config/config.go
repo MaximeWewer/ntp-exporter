@@ -2,68 +2,68 @@
 //
 // Available functions:
 //
-//   LoadFromEnvVarsOnly()                     - Environment variables ONLY
-//                                               Use: Docker, Kubernetes (no ConfigMap)
+//	LoadFromEnvVarsOnly()                     - Environment variables ONLY
+//	                                            Use: Docker, Kubernetes (no ConfigMap)
 //
-//   LoadFromYamlFile(path)                    - YAML file ONLY (no env overrides)
-//                                               Use: Local development, testing
+//	LoadFromYamlFile(path)                    - YAML file ONLY (no env overrides)
+//	                                            Use: Local development, testing
 //
-//   LoadFromYamlWithEnvOverrides(path)        - YAML base + Environment overrides
-//                                               Use: Kubernetes (ConfigMap + env vars)
-//                                               Priority: Env Vars > YAML > Defaults
+//	LoadFromYamlWithEnvOverrides(path)        - YAML base + Environment overrides
+//	                                            Use: Kubernetes (ConfigMap + env vars)
+//	                                            Priority: Env Vars > YAML > Defaults
 //
 // Environment variables supported:
 //
-//   SERVER:
-//     - NTP_EXPORTER_ADDRESS, NTP_EXPORTER_PORT
-//     - SERVER_READ_TIMEOUT, SERVER_WRITE_TIMEOUT
-//     - TLS_ENABLED, TLS_CERT_FILE, TLS_KEY_FILE
-//     - ENABLE_CORS, ALLOWED_ORIGINS (comma-separated)
+//	SERVER:
+//	  - NTP_EXPORTER_ADDRESS, NTP_EXPORTER_PORT
+//	  - SERVER_READ_TIMEOUT, SERVER_WRITE_TIMEOUT
+//	  - TLS_ENABLED, TLS_CERT_FILE, TLS_KEY_FILE
+//	  - ENABLE_CORS, ALLOWED_ORIGINS (comma-separated)
 //
-//   NTP:
-//     - NTP_SERVERS (comma-separated), NTP_TIMEOUT, NTP_VERSION
-//     - NTP_SAMPLES, NTP_MAX_CONCURRENCY, NTP_ENABLE_KERNEL
-//     - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET
+//	NTP:
+//	  - NTP_SERVERS (comma-separated), NTP_TIMEOUT, NTP_VERSION
+//	  - NTP_POOLS (comma-separated name[:strategy[:max_servers]])
+//	  - NTP_SAMPLES, NTP_MAX_CONCURRENCY, NTP_ENABLE_KERNEL
+//	  - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET
 //
-//   RATE_LIMIT:
-//     - RATE_LIMIT_ENABLED, RATE_LIMIT_GLOBAL, RATE_LIMIT_PER_SERVER
-//     - RATE_LIMIT_BURST_SIZE, RATE_LIMIT_BACKOFF_DURATION
+//	RATE_LIMIT:
+//	  - RATE_LIMIT_ENABLED, RATE_LIMIT_GLOBAL, RATE_LIMIT_PER_SERVER
+//	  - RATE_LIMIT_BURST_SIZE, RATE_LIMIT_BACKOFF_DURATION
 //
-//   CIRCUIT_BREAKER:
-//     - CIRCUIT_BREAKER_ENABLED, CIRCUIT_BREAKER_MAX_REQUESTS
-//     - CIRCUIT_BREAKER_INTERVAL, CIRCUIT_BREAKER_TIMEOUT
-//     - CIRCUIT_BREAKER_FAILURE_THRESHOLD
+//	CIRCUIT_BREAKER:
+//	  - CIRCUIT_BREAKER_ENABLED, CIRCUIT_BREAKER_MAX_REQUESTS
+//	  - CIRCUIT_BREAKER_INTERVAL, CIRCUIT_BREAKER_TIMEOUT
+//	  - CIRCUIT_BREAKER_FAILURE_THRESHOLD
 //
-//   ADAPTIVE_SAMPLING:
-//     - ADAPTIVE_SAMPLING_ENABLED, ADAPTIVE_SAMPLING_DEFAULT_SAMPLES
-//     - ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES, ADAPTIVE_SAMPLING_DRIFT_THRESHOLD
-//     - ADAPTIVE_SAMPLING_MAX_DURATION
+//	ADAPTIVE_SAMPLING:
+//	  - ADAPTIVE_SAMPLING_ENABLED, ADAPTIVE_SAMPLING_DEFAULT_SAMPLES
+//	  - ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES, ADAPTIVE_SAMPLING_DRIFT_THRESHOLD
+//	  - ADAPTIVE_SAMPLING_MAX_DURATION
 //
-//   WORKER_POOL:
-//     - WORKER_POOL_ENABLED, WORKER_POOL_SIZE
+//	WORKER_POOL:
+//	  - WORKER_POOL_ENABLED, WORKER_POOL_SIZE
 //
-//   DNS_CACHE:
-//     - DNS_CACHE_ENABLED, DNS_CACHE_MIN_TTL, DNS_CACHE_MAX_TTL
-//     - DNS_CACHE_CLEANUP_WORKERS
+//	DNS_CACHE:
+//	  - DNS_CACHE_ENABLED, DNS_CACHE_MIN_TTL, DNS_CACHE_MAX_TTL
+//	  - DNS_CACHE_CLEANUP_WORKERS
 //
-//   LOGGING:
-//     - LOG_LEVEL (trace|debug|info|warn|error|fatal|panic)
-//     - LOG_ENABLE_FILE, LOG_FILE_PATH
-//     - Note: LOG_FORMAT is NOT supported (JSON only)
+//	LOGGING:
+//	  - LOG_LEVEL (trace|debug|info|warn|error|fatal|panic)
+//	  - LOG_FORMAT (json|console), LOG_ENABLE_FILE, LOG_FILE_PATH
 //
-//   METRICS:
-//     - METRICS_NAMESPACE, METRICS_SUBSYSTEM
-//
+//	METRICS:
+//	  - METRICS_NAMESPACE, METRICS_SUBSYSTEM
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/goccy/go-yaml"
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
 )
 
 // Config represents the complete application configuration
@@ -96,8 +96,8 @@ type NTPConfig struct {
 	SamplesPerServer int                    `yaml:"samples_per_server"`
 	MaxConcurrency   int                    `yaml:"max_concurrency"`
 	EnableKernel     bool                   `yaml:"enable_kernel"`
-	ScrapeInterval   time.Duration          `yaml:"scrape_interval"`    // Interval between NTP collections
-	MaxClockOffset   time.Duration          `yaml:"max_clock_offset"`   // Maximum acceptable clock offset threshold
+	ScrapeInterval   time.Duration          `yaml:"scrape_interval"`  // Interval between NTP collections
+	MaxClockOffset   time.Duration          `yaml:"max_clock_offset"` // Maximum acceptable clock offset threshold
 	RateLimit        RateLimitConfig        `yaml:"rate_limit"`
 	CircuitBreaker   CircuitBreakerConfig   `yaml:"circuit_breaker"`
 	AdaptiveSampling AdaptiveSamplingConfig `yaml:"adaptive_sampling"`
@@ -173,24 +173,14 @@ type MetricsConfig struct {
 // LoadFromYamlFile reads configuration from a YAML file only (no env var overrides)
 // Use case: Local development, testing
 func LoadFromYamlFile(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	cfg, err := readYamlFile(path)
 	if err != nil {
-		logger.Error("config", "Failed to read config file", err)
-		return nil, fmt.Errorf("failed to read config file %s: %w", path, err)
+		return nil, err
 	}
 
-	cfg := &Config{}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		logger.Error("config", "Failed to parse config file", err)
-		return nil, fmt.Errorf("failed to parse YAML config file %s: %w", path, err)
-	}
-
-	// Apply defaults
 	ApplyDefaults(cfg)
 
-	// Validate configuration
 	if err := Validate(cfg); err != nil {
-		logger.Error("config", "Invalid configuration", err)
 		return nil, fmt.Errorf("configuration validation failed for %s: %w", path, err)
 	}
 
@@ -200,262 +190,25 @@ func LoadFromYamlFile(path string) (*Config, error) {
 // LoadFromYamlWithEnvOverrides loads base config from YAML, then overrides with environment variables
 // Use case: Kubernetes with ConfigMaps + env vars, Docker with config file + env vars
 // Priority: Environment Variables > YAML File > Defaults
+// Any error (missing file, invalid YAML, unknown key, invalid env value) is fatal:
+// the exporter never silently falls back to default servers.
 func LoadFromYamlWithEnvOverrides(path string) (*Config, error) {
-	// First, try to load from YAML file
-	cfg, err := LoadFromYamlFile(path)
+	cfg, err := readYamlFile(path)
 	if err != nil {
-		logger.Warn("config", "Failed to load YAML config file, falling back to env vars only")
-		// If file doesn't exist, start from defaults
-		cfg = &Config{}
-		ApplyDefaults(cfg)
+		return nil, err
 	}
 
-	// Override with environment variables
-	applyEnvOverrides(cfg)
+	if err := applyEnvOverrides(cfg); err != nil {
+		return nil, err
+	}
 
-	// Validate final configuration
+	ApplyDefaults(cfg)
+
 	if err := Validate(cfg); err != nil {
-		logger.Error("config", "Invalid configuration after env overrides", err)
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 
 	return cfg, nil
-}
-
-// applyEnvOverrides applies environment variable overrides to an existing config
-func applyEnvOverrides(cfg *Config) {
-	// ---------------------------------------------------------------------------
-	// SERVER - HTTP Server configuration
-	// ---------------------------------------------------------------------------
-	if addr := os.Getenv("NTP_EXPORTER_ADDRESS"); addr != "" {
-		cfg.Server.Address = addr
-	}
-	if port := os.Getenv("NTP_EXPORTER_PORT"); port != "" {
-		if p, err := strconv.Atoi(port); err == nil {
-			cfg.Server.Port = p
-		}
-	}
-	if readTimeout := os.Getenv("SERVER_READ_TIMEOUT"); readTimeout != "" {
-		if t, err := time.ParseDuration(readTimeout); err == nil {
-			cfg.Server.ReadTimeout = t
-		}
-	}
-	if writeTimeout := os.Getenv("SERVER_WRITE_TIMEOUT"); writeTimeout != "" {
-		if t, err := time.ParseDuration(writeTimeout); err == nil {
-			cfg.Server.WriteTimeout = t
-		}
-	}
-	if tlsEnabled := os.Getenv("TLS_ENABLED"); tlsEnabled != "" {
-		if b, err := strconv.ParseBool(tlsEnabled); err == nil {
-			cfg.Server.TLSEnabled = b
-		}
-	}
-	if tlsCert := os.Getenv("TLS_CERT_FILE"); tlsCert != "" {
-		cfg.Server.TLSCertFile = tlsCert
-	}
-	if tlsKey := os.Getenv("TLS_KEY_FILE"); tlsKey != "" {
-		cfg.Server.TLSKeyFile = tlsKey
-	}
-	if enableCORS := os.Getenv("ENABLE_CORS"); enableCORS != "" {
-		if b, err := strconv.ParseBool(enableCORS); err == nil {
-			cfg.Server.EnableCORS = b
-		}
-	}
-	if allowedOrigins := os.Getenv("ALLOWED_ORIGINS"); allowedOrigins != "" {
-		cfg.Server.AllowedOrigins = parseCommaSeparated(allowedOrigins)
-	}
-
-	// ---------------------------------------------------------------------------
-	// NTP - NTP client configuration
-	// ---------------------------------------------------------------------------
-	if servers := os.Getenv("NTP_SERVERS"); servers != "" {
-		cfg.NTP.Servers = parseCommaSeparated(servers)
-	}
-	if enableKernel := os.Getenv("NTP_ENABLE_KERNEL"); enableKernel != "" {
-		if k, err := strconv.ParseBool(enableKernel); err == nil {
-			cfg.NTP.EnableKernel = k
-		}
-	}
-	if timeout := os.Getenv("NTP_TIMEOUT"); timeout != "" {
-		if t, err := time.ParseDuration(timeout); err == nil {
-			cfg.NTP.Timeout = t
-		}
-	}
-	if version := os.Getenv("NTP_VERSION"); version != "" {
-		if v, err := strconv.Atoi(version); err == nil {
-			cfg.NTP.Version = v
-		}
-	}
-	if samples := os.Getenv("NTP_SAMPLES"); samples != "" {
-		if s, err := strconv.Atoi(samples); err == nil {
-			cfg.NTP.SamplesPerServer = s
-		}
-	}
-	if maxConcurrency := os.Getenv("NTP_MAX_CONCURRENCY"); maxConcurrency != "" {
-		if c, err := strconv.Atoi(maxConcurrency); err == nil {
-			cfg.NTP.MaxConcurrency = c
-		}
-	}
-	if scrapeInterval := os.Getenv("NTP_SCRAPE_INTERVAL"); scrapeInterval != "" {
-		if s, err := time.ParseDuration(scrapeInterval); err == nil {
-			cfg.NTP.ScrapeInterval = s
-		}
-	}
-	if maxClockOffset := os.Getenv("NTP_MAX_CLOCK_OFFSET"); maxClockOffset != "" {
-		if m, err := time.ParseDuration(maxClockOffset); err == nil {
-			cfg.NTP.MaxClockOffset = m
-		}
-	}
-
-	// ---------------------------------------------------------------------------
-	// RATE LIMIT - Rate limiting configuration
-	// ---------------------------------------------------------------------------
-	if rateLimitEnabled := os.Getenv("RATE_LIMIT_ENABLED"); rateLimitEnabled != "" {
-		if b, err := strconv.ParseBool(rateLimitEnabled); err == nil {
-			cfg.NTP.RateLimit.Enabled = b
-		}
-	}
-	if globalRate := os.Getenv("RATE_LIMIT_GLOBAL"); globalRate != "" {
-		if r, err := strconv.Atoi(globalRate); err == nil {
-			cfg.NTP.RateLimit.GlobalRate = r
-		}
-	}
-	if perServerRate := os.Getenv("RATE_LIMIT_PER_SERVER"); perServerRate != "" {
-		if r, err := strconv.Atoi(perServerRate); err == nil {
-			cfg.NTP.RateLimit.PerServerRate = r
-		}
-	}
-	if burstSize := os.Getenv("RATE_LIMIT_BURST_SIZE"); burstSize != "" {
-		if b, err := strconv.Atoi(burstSize); err == nil {
-			cfg.NTP.RateLimit.BurstSize = b
-		}
-	}
-	if backoffDuration := os.Getenv("RATE_LIMIT_BACKOFF_DURATION"); backoffDuration != "" {
-		if d, err := time.ParseDuration(backoffDuration); err == nil {
-			cfg.NTP.RateLimit.BackoffDuration = d
-		}
-	}
-
-	// ---------------------------------------------------------------------------
-	// CIRCUIT BREAKER - Circuit breaker configuration
-	// ---------------------------------------------------------------------------
-	if cbEnabled := os.Getenv("CIRCUIT_BREAKER_ENABLED"); cbEnabled != "" {
-		if b, err := strconv.ParseBool(cbEnabled); err == nil {
-			cfg.NTP.CircuitBreaker.Enabled = b
-		}
-	}
-	if maxRequests := os.Getenv("CIRCUIT_BREAKER_MAX_REQUESTS"); maxRequests != "" {
-		if r, err := strconv.ParseUint(maxRequests, 10, 32); err == nil {
-			cfg.NTP.CircuitBreaker.MaxRequests = uint32(r)
-		}
-	}
-	if cbInterval := os.Getenv("CIRCUIT_BREAKER_INTERVAL"); cbInterval != "" {
-		if i, err := time.ParseDuration(cbInterval); err == nil {
-			cfg.NTP.CircuitBreaker.Interval = i
-		}
-	}
-	if cbTimeout := os.Getenv("CIRCUIT_BREAKER_TIMEOUT"); cbTimeout != "" {
-		if t, err := time.ParseDuration(cbTimeout); err == nil {
-			cfg.NTP.CircuitBreaker.Timeout = t
-		}
-	}
-	if failureThreshold := os.Getenv("CIRCUIT_BREAKER_FAILURE_THRESHOLD"); failureThreshold != "" {
-		if f, err := strconv.ParseFloat(failureThreshold, 64); err == nil {
-			cfg.NTP.CircuitBreaker.FailureThreshold = f
-		}
-	}
-
-	// ---------------------------------------------------------------------------
-	// ADAPTIVE SAMPLING - Adaptive sampling configuration
-	// ---------------------------------------------------------------------------
-	if asEnabled := os.Getenv("ADAPTIVE_SAMPLING_ENABLED"); asEnabled != "" {
-		if b, err := strconv.ParseBool(asEnabled); err == nil {
-			cfg.NTP.AdaptiveSampling.Enabled = b
-		}
-	}
-	if defaultSamples := os.Getenv("ADAPTIVE_SAMPLING_DEFAULT_SAMPLES"); defaultSamples != "" {
-		if s, err := strconv.Atoi(defaultSamples); err == nil {
-			cfg.NTP.AdaptiveSampling.DefaultSamples = s
-		}
-	}
-	if highDriftSamples := os.Getenv("ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES"); highDriftSamples != "" {
-		if s, err := strconv.Atoi(highDriftSamples); err == nil {
-			cfg.NTP.AdaptiveSampling.HighDriftSamples = s
-		}
-	}
-	if driftThreshold := os.Getenv("ADAPTIVE_SAMPLING_DRIFT_THRESHOLD"); driftThreshold != "" {
-		if d, err := time.ParseDuration(driftThreshold); err == nil {
-			cfg.NTP.AdaptiveSampling.DriftThreshold = d
-		}
-	}
-	if maxDuration := os.Getenv("ADAPTIVE_SAMPLING_MAX_DURATION"); maxDuration != "" {
-		if d, err := time.ParseDuration(maxDuration); err == nil {
-			cfg.NTP.AdaptiveSampling.MaxDuration = d
-		}
-	}
-
-	// ---------------------------------------------------------------------------
-	// WORKER POOL - Worker pool configuration
-	// ---------------------------------------------------------------------------
-	if wpEnabled := os.Getenv("WORKER_POOL_ENABLED"); wpEnabled != "" {
-		if b, err := strconv.ParseBool(wpEnabled); err == nil {
-			cfg.NTP.WorkerPool.Enabled = b
-		}
-	}
-	if wpSize := os.Getenv("WORKER_POOL_SIZE"); wpSize != "" {
-		if s, err := strconv.Atoi(wpSize); err == nil {
-			cfg.NTP.WorkerPool.Size = s
-		}
-	}
-
-	// ---------------------------------------------------------------------------
-	// DNS CACHE - DNS cache configuration
-	// ---------------------------------------------------------------------------
-	if dnsCacheEnabled := os.Getenv("DNS_CACHE_ENABLED"); dnsCacheEnabled != "" {
-		if b, err := strconv.ParseBool(dnsCacheEnabled); err == nil {
-			cfg.NTP.DNSCache.Enabled = b
-		}
-	}
-	if minTTL := os.Getenv("DNS_CACHE_MIN_TTL"); minTTL != "" {
-		if t, err := time.ParseDuration(minTTL); err == nil {
-			cfg.NTP.DNSCache.MinTTL = t
-		}
-	}
-	if maxTTL := os.Getenv("DNS_CACHE_MAX_TTL"); maxTTL != "" {
-		if t, err := time.ParseDuration(maxTTL); err == nil {
-			cfg.NTP.DNSCache.MaxTTL = t
-		}
-	}
-	if cleanupWorkers := os.Getenv("DNS_CACHE_CLEANUP_WORKERS"); cleanupWorkers != "" {
-		if w, err := strconv.Atoi(cleanupWorkers); err == nil {
-			cfg.NTP.DNSCache.CleanupWorkers = w
-		}
-	}
-
-	// ---------------------------------------------------------------------------
-	// LOGGING - Logging configuration
-	// ---------------------------------------------------------------------------
-	if level := os.Getenv("LOG_LEVEL"); level != "" {
-		cfg.Logging.Level = level
-	}
-	if enableFile := os.Getenv("LOG_ENABLE_FILE"); enableFile != "" {
-		if b, err := strconv.ParseBool(enableFile); err == nil {
-			cfg.Logging.EnableFile = b
-		}
-	}
-	if filePath := os.Getenv("LOG_FILE_PATH"); filePath != "" {
-		cfg.Logging.FilePath = filePath
-	}
-
-	// ---------------------------------------------------------------------------
-	// METRICS - Prometheus metrics configuration
-	// ---------------------------------------------------------------------------
-	if namespace := os.Getenv("METRICS_NAMESPACE"); namespace != "" {
-		cfg.Metrics.Namespace = namespace
-	}
-	if subsystem := os.Getenv("METRICS_SUBSYSTEM"); subsystem != "" {
-		cfg.Metrics.Subsystem = subsystem
-	}
 }
 
 // LoadFromEnvVarsOnly loads configuration from environment variables only (no YAML file)
@@ -463,17 +216,217 @@ func applyEnvOverrides(cfg *Config) {
 // Priority: Environment Variables > Defaults
 func LoadFromEnvVarsOnly() (*Config, error) {
 	cfg := &Config{}
+
+	if err := applyEnvOverrides(cfg); err != nil {
+		return nil, err
+	}
+
 	ApplyDefaults(cfg)
 
-	// Apply environment variable overrides
-	applyEnvOverrides(cfg)
-
 	if err := Validate(cfg); err != nil {
-		logger.Error("config", "Invalid configuration from environment", err)
 		return nil, fmt.Errorf("environment configuration validation failed: %w", err)
 	}
 
 	return cfg, nil
+}
+
+// readYamlFile parses a YAML file strictly: unknown keys are rejected
+func readYamlFile(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file %s: %w", path, err)
+	}
+
+	cfg := &Config{}
+	if err := yaml.UnmarshalWithOptions(data, cfg, yaml.DisallowUnknownField()); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML config file %s: %w", path, err)
+	}
+
+	return cfg, nil
+}
+
+// envReader reads typed environment variables and accumulates parse errors
+type envReader struct {
+	errs []error
+}
+
+func (e *envReader) fail(name, value string, err error) {
+	e.errs = append(e.errs, fmt.Errorf("invalid value %q for %s: %w", value, name, err))
+}
+
+func (e *envReader) string(name string, dst *string) {
+	if v, ok := os.LookupEnv(name); ok && v != "" {
+		*dst = v
+	}
+}
+
+func (e *envReader) list(name string, dst *[]string) {
+	if v, ok := os.LookupEnv(name); ok && v != "" {
+		*dst = parseCommaSeparated(v)
+	}
+}
+
+func (e *envReader) int(name string, dst *int) {
+	if v, ok := os.LookupEnv(name); ok && v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			e.fail(name, v, err)
+			return
+		}
+		*dst = n
+	}
+}
+
+func (e *envReader) uint32(name string, dst *uint32) {
+	if v, ok := os.LookupEnv(name); ok && v != "" {
+		n, err := strconv.ParseUint(v, 10, 32)
+		if err != nil {
+			e.fail(name, v, err)
+			return
+		}
+		*dst = uint32(n)
+	}
+}
+
+func (e *envReader) float(name string, dst *float64) {
+	if v, ok := os.LookupEnv(name); ok && v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			e.fail(name, v, err)
+			return
+		}
+		*dst = f
+	}
+}
+
+func (e *envReader) bool(name string, dst *bool) {
+	if v, ok := os.LookupEnv(name); ok && v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			e.fail(name, v, err)
+			return
+		}
+		*dst = b
+	}
+}
+
+func (e *envReader) duration(name string, dst *time.Duration) {
+	if v, ok := os.LookupEnv(name); ok && v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			e.fail(name, v, err)
+			return
+		}
+		*dst = d
+	}
+}
+
+func (e *envReader) pools(name string, dst *[]PoolConfig) {
+	v, ok := os.LookupEnv(name)
+	if !ok || v == "" {
+		return
+	}
+	pools, err := parsePools(v)
+	if err != nil {
+		e.fail(name, v, err)
+		return
+	}
+	*dst = pools
+}
+
+// parsePools parses "name[:strategy[:max_servers]]" entries separated by commas
+func parsePools(s string) ([]PoolConfig, error) {
+	var pools []PoolConfig
+	for _, item := range parseCommaSeparated(s) {
+		parts := strings.Split(item, ":")
+		if len(parts) > 3 || parts[0] == "" {
+			return nil, fmt.Errorf("pool entry %q must be name[:strategy[:max_servers]]", item)
+		}
+		pool := PoolConfig{Name: parts[0]}
+		if len(parts) > 1 {
+			pool.Strategy = parts[1]
+		}
+		if len(parts) > 2 {
+			n, err := strconv.Atoi(parts[2])
+			if err != nil {
+				return nil, fmt.Errorf("pool entry %q: invalid max_servers: %w", item, err)
+			}
+			pool.MaxServers = n
+		}
+		pools = append(pools, pool)
+	}
+	return pools, nil
+}
+
+// applyEnvOverrides applies environment variable overrides to an existing config.
+// Unparsable values are reported as errors instead of being silently ignored.
+func applyEnvOverrides(cfg *Config) error {
+	e := &envReader{}
+
+	// SERVER
+	e.string("NTP_EXPORTER_ADDRESS", &cfg.Server.Address)
+	e.int("NTP_EXPORTER_PORT", &cfg.Server.Port)
+	e.duration("SERVER_READ_TIMEOUT", &cfg.Server.ReadTimeout)
+	e.duration("SERVER_WRITE_TIMEOUT", &cfg.Server.WriteTimeout)
+	e.bool("TLS_ENABLED", &cfg.Server.TLSEnabled)
+	e.string("TLS_CERT_FILE", &cfg.Server.TLSCertFile)
+	e.string("TLS_KEY_FILE", &cfg.Server.TLSKeyFile)
+	e.bool("ENABLE_CORS", &cfg.Server.EnableCORS)
+	e.list("ALLOWED_ORIGINS", &cfg.Server.AllowedOrigins)
+
+	// NTP
+	e.list("NTP_SERVERS", &cfg.NTP.Servers)
+	e.pools("NTP_POOLS", &cfg.NTP.Pools)
+	e.bool("NTP_ENABLE_KERNEL", &cfg.NTP.EnableKernel)
+	e.duration("NTP_TIMEOUT", &cfg.NTP.Timeout)
+	e.int("NTP_VERSION", &cfg.NTP.Version)
+	e.int("NTP_SAMPLES", &cfg.NTP.SamplesPerServer)
+	e.int("NTP_MAX_CONCURRENCY", &cfg.NTP.MaxConcurrency)
+	e.duration("NTP_SCRAPE_INTERVAL", &cfg.NTP.ScrapeInterval)
+	e.duration("NTP_MAX_CLOCK_OFFSET", &cfg.NTP.MaxClockOffset)
+
+	// RATE LIMIT
+	e.bool("RATE_LIMIT_ENABLED", &cfg.NTP.RateLimit.Enabled)
+	e.int("RATE_LIMIT_GLOBAL", &cfg.NTP.RateLimit.GlobalRate)
+	e.int("RATE_LIMIT_PER_SERVER", &cfg.NTP.RateLimit.PerServerRate)
+	e.int("RATE_LIMIT_BURST_SIZE", &cfg.NTP.RateLimit.BurstSize)
+	e.duration("RATE_LIMIT_BACKOFF_DURATION", &cfg.NTP.RateLimit.BackoffDuration)
+
+	// CIRCUIT BREAKER
+	e.bool("CIRCUIT_BREAKER_ENABLED", &cfg.NTP.CircuitBreaker.Enabled)
+	e.uint32("CIRCUIT_BREAKER_MAX_REQUESTS", &cfg.NTP.CircuitBreaker.MaxRequests)
+	e.duration("CIRCUIT_BREAKER_INTERVAL", &cfg.NTP.CircuitBreaker.Interval)
+	e.duration("CIRCUIT_BREAKER_TIMEOUT", &cfg.NTP.CircuitBreaker.Timeout)
+	e.float("CIRCUIT_BREAKER_FAILURE_THRESHOLD", &cfg.NTP.CircuitBreaker.FailureThreshold)
+
+	// ADAPTIVE SAMPLING
+	e.bool("ADAPTIVE_SAMPLING_ENABLED", &cfg.NTP.AdaptiveSampling.Enabled)
+	e.int("ADAPTIVE_SAMPLING_DEFAULT_SAMPLES", &cfg.NTP.AdaptiveSampling.DefaultSamples)
+	e.int("ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES", &cfg.NTP.AdaptiveSampling.HighDriftSamples)
+	e.duration("ADAPTIVE_SAMPLING_DRIFT_THRESHOLD", &cfg.NTP.AdaptiveSampling.DriftThreshold)
+	e.duration("ADAPTIVE_SAMPLING_MAX_DURATION", &cfg.NTP.AdaptiveSampling.MaxDuration)
+
+	// WORKER POOL
+	e.bool("WORKER_POOL_ENABLED", &cfg.NTP.WorkerPool.Enabled)
+	e.int("WORKER_POOL_SIZE", &cfg.NTP.WorkerPool.Size)
+
+	// DNS CACHE
+	e.bool("DNS_CACHE_ENABLED", &cfg.NTP.DNSCache.Enabled)
+	e.duration("DNS_CACHE_MIN_TTL", &cfg.NTP.DNSCache.MinTTL)
+	e.duration("DNS_CACHE_MAX_TTL", &cfg.NTP.DNSCache.MaxTTL)
+	e.int("DNS_CACHE_CLEANUP_WORKERS", &cfg.NTP.DNSCache.CleanupWorkers)
+
+	// LOGGING
+	e.string("LOG_LEVEL", &cfg.Logging.Level)
+	e.string("LOG_FORMAT", &cfg.Logging.Format)
+	e.bool("LOG_ENABLE_FILE", &cfg.Logging.EnableFile)
+	e.string("LOG_FILE_PATH", &cfg.Logging.FilePath)
+
+	// METRICS
+	e.string("METRICS_NAMESPACE", &cfg.Metrics.Namespace)
+	e.string("METRICS_SUBSYSTEM", &cfg.Metrics.Subsystem)
+
+	return errors.Join(e.errs...)
 }
 
 // parseCommaSeparated splits a comma-separated string

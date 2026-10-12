@@ -29,6 +29,14 @@ func ApplyDefaults(cfg *Config) {
 			"time.google.com",
 		}
 	}
+	for i := range cfg.NTP.Pools {
+		if cfg.NTP.Pools[i].Strategy == "" {
+			cfg.NTP.Pools[i].Strategy = "best_n"
+		}
+		if cfg.NTP.Pools[i].MaxServers == 0 {
+			cfg.NTP.Pools[i].MaxServers = 4
+		}
+	}
 	if cfg.NTP.Timeout == 0 {
 		cfg.NTP.Timeout = 5 * time.Second
 	}
