@@ -3,6 +3,7 @@ package ntp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/pkg/logger"
@@ -11,13 +12,13 @@ import (
 
 // Pool represents an NTP pool with multiple servers
 type Pool struct {
-	name         string
-	strategy     string
-	maxServers   int
-	fallback     string
-	querier      NTPQuerier
-	dnsCache     *DNSCache
-	workerPool   *WorkerPool
+	name          string
+	strategy      string
+	maxServers    int
+	fallback      string
+	querier       NTPQuerier
+	dnsCache      *DNSCache
+	workerPool    *WorkerPool
 	useWorkerPool bool
 }
 
@@ -51,6 +52,11 @@ func NewPool(name, strategy string, maxServers int, fallback string, querier NTP
 		workerPool:    nil, // Created on-demand
 		useWorkerPool: false,
 	}
+}
+
+// Name returns the pool DNS name
+func (p *Pool) Name() string {
+	return p.name
 }
 
 // EnableWorkerPool enables parallel query execution using a worker pool
@@ -184,6 +190,33 @@ func (p *Pool) Query(ctx context.Context, samples int) (*PoolResponse, error) {
 	})
 
 	return response, nil
+}
+
+// Members resolves the pool and returns the addresses to query according to
+// the strategy, the total number of resolved addresses and the DNS duration
+func (p *Pool) Members(ctx context.Context) ([]string, int, time.Duration, error) {
+	start := time.Now()
+
+	ips, err := p.dnsCache.Resolve(ctx, p.name)
+	duration := time.Since(start)
+	if err != nil {
+		if p.fallback != "" {
+			logger.SafeWarn("ntp", "Pool resolution failed, using fallback server", map[string]interface{}{
+				"pool":     p.name,
+				"fallback": p.fallback,
+				"error":    err.Error(),
+			})
+			return []string{p.fallback}, 1, duration, nil
+		}
+		return nil, 0, duration, fmt.Errorf("failed to resolve pool %s: %w", p.name, err)
+	}
+
+	selected := p.selectServersByStrategy(ips)
+	if len(selected) > p.maxServers {
+		selected = selected[:p.maxServers]
+	}
+
+	return selected, len(ips), duration, nil
 }
 
 // selectServersByStrategy selects servers based on the configured strategy

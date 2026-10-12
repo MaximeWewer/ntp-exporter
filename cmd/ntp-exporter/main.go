@@ -11,6 +11,7 @@ import (
 
 	"github.com/maximewewer/ntp-exporter/internal/collector"
 	"github.com/maximewewer/ntp-exporter/internal/config"
+	"github.com/maximewewer/ntp-exporter/internal/probe"
 	"github.com/maximewewer/ntp-exporter/internal/server"
 	"github.com/maximewewer/ntp-exporter/pkg/logger"
 	"github.com/maximewewer/ntp-exporter/pkg/metrics"
@@ -74,21 +75,13 @@ func main() {
 	m.ExporterBuildInfo.WithLabelValues(version, "", runtime.Version()).Set(1)
 	m.ExporterServersConfigured.Set(float64(len(cfg.NTP.Servers) + len(cfg.NTP.Pools)))
 
-	// Create collector registry and register collectors
-	collectorRegistry := collector.NewRegistry()
-	collectorRegistry.Register(collector.NewBaseCollector(cfg, m))
-	collectorRegistry.Register(collector.NewQualityCollector(cfg, m))
-	collectorRegistry.Register(collector.NewSecurityCollector(cfg, m))
+	// A single prober queries every target once per cycle; publishers turn
+	// the shared measurements into metrics
+	prober := probe.New(cfg, probe.NewClient(cfg))
+	collectorRegistry := newPublishers(cfg, m)
 
-	// Register hybrid collector if kernel monitoring is enabled (Agent mode)
-	if cfg.NTP.EnableKernel {
-		collectorRegistry.Register(collector.NewHybridCollector(cfg, m))
-		logger.Info("main", "Hybrid mode enabled - kernel metrics will be collected")
-	}
-
-	logger.SafeInfo("main", "Registered collectors", map[string]interface{}{
+	logger.SafeInfo("main", "Registered publishers", map[string]interface{}{
 		"total":          collectorRegistry.Count(),
-		"enabled":        collectorRegistry.EnabledCount(),
 		"kernel_enabled": cfg.NTP.EnableKernel,
 	})
 
@@ -106,7 +99,7 @@ func main() {
 	// Start collection loop
 	collectorErrChan := make(chan error, 1)
 	go func() {
-		collectorErrChan <- runCollectionLoop(ctx, cfg, collectorRegistry)
+		collectorErrChan <- runCollectionLoop(ctx, cfg, prober, collectorRegistry)
 	}()
 
 	// Wait for interrupt signal
@@ -152,18 +145,40 @@ func loadConfig(configFile string) (*config.Config, error) {
 	return config.LoadFromEnvVarsOnly()
 }
 
-// runCollectionLoop runs the metrics collection loop
+// newPublishers creates the metric publishers for the configuration
+func newPublishers(cfg *config.Config, m *metrics.NTPMetrics) *collector.Registry {
+	registry := collector.NewRegistry()
+	registry.Register(collector.NewBaseCollector(cfg, m))
+	registry.Register(collector.NewQualityCollector(cfg, m))
+	registry.Register(collector.NewSecurityCollector(cfg, m))
+
+	// Kernel state is an option of the agent mode
+	if cfg.NTP.EnableKernel {
+		registry.Register(collector.NewHybridCollector(cfg, m))
+	}
+
+	return registry
+}
+
+// runCollectionLoop runs one probe cycle per scrape interval
 func runCollectionLoop(
 	ctx context.Context,
 	cfg *config.Config,
-	collectorRegistry *collector.Registry,
+	prober *probe.Prober,
+	publishers *collector.Registry,
 ) error {
-	// Initial collection
-	if err := collectorRegistry.CollectAll(ctx); err != nil {
-		logger.Warn("main", "Initial collection failed")
+	runCycle := func() {
+		result := prober.Run(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		publishers.PublishAll(result)
+		logger.Metric("collection", "all", result.Duration, true)
 	}
 
-	// Collection interval using configured scrape_interval
+	// Initial collection
+	runCycle()
+
 	ticker := time.NewTicker(cfg.NTP.ScrapeInterval)
 	defer ticker.Stop()
 
@@ -177,11 +192,7 @@ func runCollectionLoop(
 			logger.Info("main", "Collection loop stopped")
 			return nil
 		case <-ticker.C:
-			start := time.Now()
-			if err := collectorRegistry.CollectAll(ctx); err != nil {
-				logger.Warn("main", "Collection failed")
-			}
-			logger.Metric("collection", "all", time.Since(start), true)
+			runCycle()
 		}
 	}
 }

@@ -1,22 +1,20 @@
 package collector
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/maximewewer/ntp-exporter/internal/config"
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
+	"github.com/maximewewer/ntp-exporter/internal/probe"
 	"github.com/maximewewer/ntp-exporter/pkg/logger"
 	"github.com/maximewewer/ntp-exporter/pkg/metrics"
 )
 
-// SecurityCollector collects security-related NTP metrics
+// SecurityCollector publishes security-related NTP metrics
 type SecurityCollector struct {
 	*CommonCollector
 	validator *ntp.Validator
 }
 
-// NewSecurityCollector creates a new security metrics collector
+// NewSecurityCollector creates a new security metrics publisher
 func NewSecurityCollector(cfg *config.Config, m *metrics.NTPMetrics) *SecurityCollector {
 	return &SecurityCollector{
 		CommonCollector: NewCommonCollector(cfg, m, "security"),
@@ -24,62 +22,39 @@ func NewSecurityCollector(cfg *config.Config, m *metrics.NTPMetrics) *SecurityCo
 	}
 }
 
-// Collect collects security metrics from all configured servers
-func (c *SecurityCollector) Collect(ctx context.Context) error {
-	return c.IterateServers(ctx, c.collectFromServer, "security")
-}
-
-// collectFromServer collects security metrics from a single server
-func (c *SecurityCollector) collectFromServer(ctx context.Context, server string) error {
-	client := c.GetClient()
+// Publish updates security metrics from every response received during the cycle
+func (c *SecurityCollector) Publish(result *probe.CycleResult) {
 	m := c.GetMetrics()
 
-	// Query NTP server
-	resp, err := client.Query(ctx, server)
-	if err != nil {
-		logger.Error("collector", "Query failed", err)
-		return fmt.Errorf("failed to query NTP server %s for security metrics: %w", server, err)
+	for _, meas := range result.Measurements {
+		if !meas.Reachable() {
+			continue
+		}
+		server := meas.Target.Server
+
+		for _, resp := range meas.Responses {
+			if resp.IsKissOfDeath() {
+				m.KissOfDeathTotal.WithLabelValues(server, resp.KissCode).Inc()
+				logger.SafeWarn("collector", "Kiss-of-Death received", map[string]interface{}{
+					"server":   server,
+					"kod_code": resp.KissCode,
+				})
+			}
+
+			if resp.IsSuspicious() {
+				m.ServerSuspiciousTotal.WithLabelValues(server, c.validator.GetSuspicionReason(resp)).Inc()
+			}
+
+			if !resp.IsValid() {
+				m.MalformedResponsesTotal.WithLabelValues(server).Inc()
+			}
+		}
+
+		// Trust score of the reference sample, or of the first response if none is valid
+		ref := meas.Best()
+		if ref == nil {
+			ref = meas.Responses[0]
+		}
+		m.ServerTrustScore.WithLabelValues(server).Set(c.validator.Validate(ref).TrustScore)
 	}
-
-	// Validate response
-	validation := c.validator.Validate(resp)
-
-	// Update trust score
-	m.ServerTrustScore.WithLabelValues(server).Set(validation.TrustScore)
-
-	// Check for Kiss-of-Death
-	if resp.IsKissOfDeath() {
-		m.KissOfDeathTotal.WithLabelValues(server, resp.KissCode).Inc()
-		logger.SafeWarn("collector", "Kiss-of-Death received", map[string]interface{}{
-			"server":   server,
-			"kod_code": resp.KissCode,
-		})
-	}
-
-	// Check for suspicious behavior
-	if resp.IsSuspicious() {
-		reason := c.validator.GetSuspicionReason(resp)
-		m.ServerSuspiciousTotal.WithLabelValues(server, reason).Inc()
-		logger.SafeWarn("collector", "Suspicious NTP server detected", map[string]interface{}{
-			"server": server,
-			"reason": reason,
-		})
-	}
-
-	// Check for malformed responses
-	if !resp.IsValid() {
-		m.MalformedResponsesTotal.WithLabelValues(server).Inc()
-		logger.SafeWarn("collector", "Malformed NTP response", map[string]interface{}{
-			"server": server,
-			"reason": resp.InvalidReason(),
-		})
-	}
-
-	logger.SafeDebug("collector", "Security metrics updated", map[string]interface{}{
-		"server":      server,
-		"trust_score": validation.TrustScore,
-		"valid":       validation.Valid,
-	})
-
-	return nil
 }

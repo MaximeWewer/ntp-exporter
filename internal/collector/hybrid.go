@@ -1,27 +1,30 @@
 package collector
 
 import (
-	"context"
-	"fmt"
 	"math"
 	"os"
-	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
+	"github.com/maximewewer/ntp-exporter/internal/probe"
 	"github.com/maximewewer/ntp-exporter/pkg/logger"
 	"github.com/maximewewer/ntp-exporter/pkg/metrics"
 )
 
-// HybridCollector collects both NTP and kernel metrics for correlation analysis
-// This collector is designed for Agent mode (DaemonSet) where kernel access is available
+// KernelReader reads the kernel time state
+type KernelReader interface {
+	Read() (*ntp.KernelTimex, error)
+}
+
+// HybridCollector publishes kernel metrics and their correlation with NTP measurements.
+// It is designed for agent mode (DaemonSet), where the node clock is observed.
 type HybridCollector struct {
 	*CommonCollector
-	kernelReader *ntp.KernelReader
+	kernelReader KernelReader
 	nodeName     string
 }
 
-// NewHybridCollector creates a new hybrid metrics collector
+// NewHybridCollector creates a new hybrid metrics publisher
 func NewHybridCollector(cfg *config.Config, m *metrics.NTPMetrics) *HybridCollector {
 	// Get node name from environment (set by DaemonSet)
 	nodeName := os.Getenv("NODE_NAME")
@@ -41,45 +44,29 @@ func NewHybridCollector(cfg *config.Config, m *metrics.NTPMetrics) *HybridCollec
 	}
 }
 
-// Collect collects both NTP and kernel metrics and correlates them
-func (c *HybridCollector) Collect(ctx context.Context) error {
-	start := time.Now()
-	defer func() {
-		c.GetMetrics().CollectorDurationSeconds.WithLabelValues(c.Name()).Observe(time.Since(start).Seconds())
-	}()
-
-	cfg := c.GetConfig()
-
-	// Skip if kernel monitoring is not enabled
-	if !cfg.NTP.EnableKernel {
-		logger.SafeDebug("collector", "Kernel monitoring disabled, skipping hybrid collection", nil)
-		return nil
-	}
-
-	// Read kernel state
+// Publish reads the kernel state and correlates it with the cycle measurements
+func (c *HybridCollector) Publish(result *probe.CycleResult) {
 	kernelState, err := c.kernelReader.Read()
 	if err != nil {
 		logger.SafeWarn("collector", "Failed to read kernel timex state", map[string]interface{}{
 			"error": err.Error(),
 		})
-		// Don't fail the collection, just skip kernel metrics
-		return nil
+		return
 	}
 
-	// Update kernel metrics
 	c.updateKernelMetrics(kernelState)
 
-	// Collect NTP metrics and calculate divergence
-	return c.IterateServers(ctx, func(ctx context.Context, server string) error {
-		return c.collectAndCorrelate(ctx, server, kernelState)
-	}, "hybrid")
+	for _, meas := range result.Measurements {
+		if best := meas.Best(); best != nil {
+			c.correlate(meas.Target.Server, best, kernelState)
+		}
+	}
 }
 
 // updateKernelMetrics updates kernel-specific metrics
 func (c *HybridCollector) updateKernelMetrics(kernelState *ntp.KernelTimex) {
 	m := c.GetMetrics()
 
-	// Basic kernel metrics
 	m.KernelOffsetSeconds.WithLabelValues(c.nodeName).Set(kernelState.GetOffsetSeconds())
 	m.KernelFrequencyPPM.WithLabelValues(c.nodeName).Set(kernelState.GetFrequencyPPM())
 	m.KernelMaxErrorSeconds.WithLabelValues(c.nodeName).Set(kernelState.GetMaxErrorSeconds())
@@ -88,7 +75,6 @@ func (c *HybridCollector) updateKernelMetrics(kernelState *ntp.KernelTimex) {
 	m.KernelStatusCode.WithLabelValues(c.nodeName).Set(float64(kernelState.StatusCode))
 
 	// Sync status: only set the current status with value 1
-	// This prevents having both synchronized=1 and unsynchronized=0 at the same time
 	if kernelState.IsSynchronized() {
 		m.KernelSyncStatus.WithLabelValues(c.nodeName, "synchronized").Set(1)
 		m.KernelSyncStatus.DeleteLabelValues(c.nodeName, "unsynchronized")
@@ -96,70 +82,17 @@ func (c *HybridCollector) updateKernelMetrics(kernelState *ntp.KernelTimex) {
 		m.KernelSyncStatus.WithLabelValues(c.nodeName, "unsynchronized").Set(1)
 		m.KernelSyncStatus.DeleteLabelValues(c.nodeName, "synchronized")
 	}
-
-	logger.SafeDebug("collector", "Kernel metrics updated", map[string]interface{}{
-		"node":         c.nodeName,
-		"offset_us":    kernelState.Offset.Microseconds(),
-		"freq_ppm":     kernelState.GetFrequencyPPM(),
-		"synchronized": kernelState.IsSynchronized(),
-		"status":       kernelState.SyncStatus,
-	})
 }
 
-// collectAndCorrelate collects NTP metrics and correlates with kernel state
-func (c *HybridCollector) collectAndCorrelate(ctx context.Context, server string, kernelState *ntp.KernelTimex) error {
-	client := c.GetClient()
-	cfg := c.GetConfig()
+// correlate compares an NTP measurement with the kernel state
+func (c *HybridCollector) correlate(server string, resp *ntp.Response, kernelState *ntp.KernelTimex) {
 	m := c.GetMetrics()
-
-	// Query NTP server for offset
-	resp, err := client.Query(ctx, server)
-	if err != nil {
-		logger.SafeDebug("ntp", "NTP query failed for correlation", map[string]interface{}{
-			"server": server,
-			"error":  err.Error(),
-		})
-		return err
-	}
-
-	if !resp.IsValid() {
-		return fmt.Errorf("invalid NTP response from %s: %s", server, resp.InvalidReason())
-	}
 
 	ntpOffset := resp.Offset.Seconds()
 	kernelOffset := kernelState.GetOffsetSeconds()
 
-	// Calculate divergence (absolute difference)
-	divergence := math.Abs(ntpOffset - kernelOffset)
-
-	// Calculate coherence score (0-1, where 1 is perfect agreement)
-	coherence := calculateCoherence(ntpOffset, kernelOffset, cfg)
-
-	// Update metrics
-	m.NTPKernelDivergence.WithLabelValues(c.nodeName, server).Set(divergence)
-	m.NTPKernelCoherence.WithLabelValues(c.nodeName, server).Set(coherence)
-
-	logger.SafeDebug("collector", "NTP-Kernel correlation updated", map[string]interface{}{
-		"node":          c.nodeName,
-		"server":        server,
-		"ntp_offset":    ntpOffset,
-		"kernel_offset": kernelOffset,
-		"divergence":    divergence,
-		"coherence":     coherence,
-	})
-
-	// Log warnings for significant divergence
-	if divergence > 0.010 { // 10ms threshold
-		logger.SafeWarn("collector", "Significant NTP-Kernel divergence detected", map[string]interface{}{
-			"node":          c.nodeName,
-			"server":        server,
-			"divergence":    divergence,
-			"ntp_offset":    ntpOffset,
-			"kernel_offset": kernelOffset,
-		})
-	}
-
-	return nil
+	m.NTPKernelDivergence.WithLabelValues(c.nodeName, server).Set(math.Abs(ntpOffset - kernelOffset))
+	m.NTPKernelCoherence.WithLabelValues(c.nodeName, server).Set(calculateCoherence(ntpOffset, kernelOffset))
 }
 
 // calculateCoherence calculates a coherence score between NTP and kernel offsets
@@ -169,35 +102,26 @@ func (c *HybridCollector) collectAndCorrelate(ctx context.Context, server string
 // - 0.7-0.9 = good (5-10ms difference)
 // - 0.5-0.7 = acceptable (10-50ms difference)
 // - 0.0-0.5 = poor (> 50ms difference)
-func calculateCoherence(ntpOffset, kernelOffset float64, cfg *config.Config) float64 {
+func calculateCoherence(ntpOffset, kernelOffset float64) float64 {
 	divergence := math.Abs(ntpOffset - kernelOffset)
 
-	// Thresholds in seconds
 	const (
-		perfectThreshold    = 0.001 // 1ms
-		excellentThreshold  = 0.005 // 5ms
-		goodThreshold       = 0.010 // 10ms
-		acceptableThreshold = 0.050 // 50ms
+		perfectThreshold    = 0.001
+		excellentThreshold  = 0.005
+		goodThreshold       = 0.010
+		acceptableThreshold = 0.050
 	)
 
-	if divergence < perfectThreshold {
+	switch {
+	case divergence < perfectThreshold:
 		return 1.0
-	} else if divergence < excellentThreshold {
-		// Linear interpolation between 1.0 and 0.9
+	case divergence < excellentThreshold:
 		return 1.0 - ((divergence - perfectThreshold) / (excellentThreshold - perfectThreshold) * 0.1)
-	} else if divergence < goodThreshold {
-		// Linear interpolation between 0.9 and 0.7
+	case divergence < goodThreshold:
 		return 0.9 - ((divergence - excellentThreshold) / (goodThreshold - excellentThreshold) * 0.2)
-	} else if divergence < acceptableThreshold {
-		// Linear interpolation between 0.7 and 0.5
+	case divergence < acceptableThreshold:
 		return 0.7 - ((divergence - goodThreshold) / (acceptableThreshold - goodThreshold) * 0.2)
-	} else {
-		// Exponential decay for poor coherence
-		// At 100ms = 0.25, at 500ms = 0.05, at 1s = 0.0
-		score := 0.5 * math.Exp(-divergence*5)
-		if score < 0 {
-			return 0
-		}
-		return score
+	default:
+		return 0.5 * math.Exp(-divergence*5)
 	}
 }

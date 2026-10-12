@@ -1,95 +1,40 @@
 package collector
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/maximewewer/ntp-exporter/internal/config"
-	"github.com/maximewewer/ntp-exporter/internal/ntp"
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"github.com/maximewewer/ntp-exporter/internal/probe"
 	"github.com/maximewewer/ntp-exporter/pkg/metrics"
 )
 
-// QualityCollector collects NTP quality metrics (jitter, stability, etc.)
+// QualityCollector publishes NTP quality metrics (jitter, stability, loss)
 type QualityCollector struct {
 	*CommonCollector
 }
 
-// NewQualityCollector creates a new quality metrics collector
+// NewQualityCollector creates a new quality metrics publisher
 func NewQualityCollector(cfg *config.Config, m *metrics.NTPMetrics) *QualityCollector {
 	return &QualityCollector{
 		CommonCollector: NewCommonCollector(cfg, m, "quality"),
 	}
 }
 
-// Collect collects quality metrics from all configured servers
-func (c *QualityCollector) Collect(ctx context.Context) error {
-	return c.IterateServers(ctx, c.collectFromServer, "quality")
-}
-
-// collectFromServer collects quality metrics from a single server
-func (c *QualityCollector) collectFromServer(ctx context.Context, server string) error {
-	cfg := c.GetConfig()
-	client := c.GetClient()
+// Publish updates quality metrics from the cycle measurements.
+// Invalid responses (KoD, unsynchronized server...) count as lost samples.
+func (c *QualityCollector) Publish(result *probe.CycleResult) {
 	m := c.GetMetrics()
 
-	var responses []*ntp.Response
-	var err error
-	var sent int
+	for _, meas := range result.Measurements {
+		server := meas.Target.Server
+		stats := meas.Stats()
 
-	// Use adaptive sampling if enabled
-	if cfg.NTP.AdaptiveSampling.Enabled {
-		sampler := ntp.NewAdaptiveSampler(ntp.AdaptiveSamplingConfig{
-			DefaultSamples:   cfg.NTP.AdaptiveSampling.DefaultSamples,
-			HighDriftSamples: cfg.NTP.AdaptiveSampling.HighDriftSamples,
-			DriftThreshold:   cfg.NTP.AdaptiveSampling.DriftThreshold,
-			MaxDuration:      cfg.NTP.AdaptiveSampling.MaxDuration,
-		}, client)
-
-		responses, sent, err = sampler.SampleWithCount(ctx, server)
-		if err != nil {
-			c.recordTotalLoss(server)
-			return fmt.Errorf("failed to adaptively sample server %s: %w", server, err)
+		m.PacketLossRatio.WithLabelValues(server).Set(stats.PacketLossRatio)
+		m.SamplesCount.WithLabelValues(server).Set(float64(stats.SamplesCount))
+		if stats.SamplesCount == 0 {
+			continue
 		}
 
-		logger.SafeDebug("collector", "Adaptive sampling completed", map[string]interface{}{
-			"server":  server,
-			"samples": len(responses),
-		})
-	} else {
-		// Standard fixed sampling
-		responses, err = client.QueryMultiple(ctx, server, cfg.NTP.SamplesPerServer)
-		if err != nil {
-			c.recordTotalLoss(server)
-			return fmt.Errorf("failed to query multiple samples from server %s: %w", server, err)
-		}
-		sent = cfg.NTP.SamplesPerServer
+		m.JitterSeconds.WithLabelValues(server).Set(stats.Jitter.Seconds())
+		m.StabilitySeconds.WithLabelValues(server).Set(stats.StdDevOffset.Seconds())
+		m.AsymmetrySeconds.WithLabelValues(server).Set(stats.Asymmetry.Seconds())
 	}
-
-	// Invalid responses (KoD, unsynchronized server...) count as lost samples
-	stats := ntp.CalculateStatistics(ntp.ValidResponses(responses), sent)
-
-	// Update quality metrics
-	m.JitterSeconds.WithLabelValues(server).Set(stats.Jitter.Seconds())
-	m.StabilitySeconds.WithLabelValues(server).Set(stats.StdDevOffset.Seconds())
-	m.AsymmetrySeconds.WithLabelValues(server).Set(stats.Asymmetry.Seconds())
-	m.SamplesCount.WithLabelValues(server).Set(float64(stats.SamplesCount))
-	m.PacketLossRatio.WithLabelValues(server).Set(stats.PacketLossRatio)
-
-	logger.SafeDebug("collector", "Quality metrics updated", map[string]interface{}{
-		"server":    server,
-		"jitter":    stats.Jitter.Seconds(),
-		"stability": stats.StdDevOffset.Seconds(),
-		"samples":   stats.SamplesCount,
-	})
-
-	return nil
-}
-
-// recordTotalLoss publishes a 100% packet loss when no sample was received,
-// instead of keeping the previous value
-func (c *QualityCollector) recordTotalLoss(server string) {
-	m := c.GetMetrics()
-	m.PacketLossRatio.WithLabelValues(server).Set(1)
-	m.SamplesCount.WithLabelValues(server).Set(0)
 }

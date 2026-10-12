@@ -1,84 +1,46 @@
 package collector
 
 import (
-	"context"
-	"fmt"
-
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"github.com/maximewewer/ntp-exporter/internal/probe"
 )
 
-// Collector represents a metrics collector
-type Collector interface {
-	// Collect collects metrics
-	Collect(ctx context.Context) error
+// Publisher turns the measurements of a cycle into metrics
+type Publisher interface {
+	// Publish updates metrics from the result of a collection cycle
+	Publish(result *probe.CycleResult)
 
-	// Name returns the name of the collector
+	// Name returns the name of the publisher
 	Name() string
-
-	// Enabled indicates if the collector is active
-	Enabled() bool
 }
 
-// Registry manages multiple collectors
+// Registry manages multiple publishers
 type Registry struct {
-	collectors []Collector
+	publishers []Publisher
 }
 
-// NewRegistry creates a new collector registry
+// NewRegistry creates a new publisher registry
 func NewRegistry() *Registry {
-	return &Registry{
-		collectors: make([]Collector, 0),
+	return &Registry{}
+}
+
+// Register registers a publisher
+func (r *Registry) Register(p Publisher) {
+	r.publishers = append(r.publishers, p)
+}
+
+// PublishAll hands the cycle result to every publisher
+func (r *Registry) PublishAll(result *probe.CycleResult) {
+	for _, p := range r.publishers {
+		p.Publish(result)
 	}
 }
 
-// Register registers a collector
-func (r *Registry) Register(c Collector) {
-	r.collectors = append(r.collectors, c)
+// List returns all registered publishers
+func (r *Registry) List() []Publisher {
+	return r.publishers
 }
 
-// CollectAll collects metrics from all enabled collectors
-func (r *Registry) CollectAll(ctx context.Context) error {
-	var errs []error
-
-	for _, c := range r.collectors {
-		if !c.Enabled() {
-			continue
-		}
-
-		if err := c.Collect(ctx); err != nil {
-			logger.SafeWarn("collector", "Collection failed", map[string]interface{}{
-				"collector": c.Name(),
-				"error":     err.Error(),
-			})
-			errs = append(errs, fmt.Errorf("%s: %w", c.Name(), err))
-		}
-	}
-
-	if len(errs) > 0 {
-		// Return first error for simplicity
-		return errs[0]
-	}
-
-	return nil
-}
-
-// List returns all registered collectors
-func (r *Registry) List() []Collector {
-	return r.collectors
-}
-
-// Count returns the number of registered collectors
+// Count returns the number of registered publishers
 func (r *Registry) Count() int {
-	return len(r.collectors)
-}
-
-// EnabledCount returns the number of enabled collectors
-func (r *Registry) EnabledCount() int {
-	count := 0
-	for _, c := range r.collectors {
-		if c.Enabled() {
-			count++
-		}
-	}
-	return count
+	return len(r.publishers)
 }
