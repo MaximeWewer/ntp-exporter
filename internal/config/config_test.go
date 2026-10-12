@@ -455,3 +455,10 @@ func TestConsensusEnabled(t *testing.T) {
 	require.NotNil(t, envCfg.NTP.Consensus.Enabled)
 	assert.False(t, envCfg.NTP.ConsensusEnabled())
 }
+
+func TestKernelConfig_DeprecatedEnableKernel(t *testing.T) {
+	t.Setenv("NTP_ENABLE_KERNEL", "true")
+	cfg, err := LoadFromEnvVarsOnly()
+	require.NoError(t, err)
+	assert.True(t, cfg.NTP.Kernel.Enabled)
+}

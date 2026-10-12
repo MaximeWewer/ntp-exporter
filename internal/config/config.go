@@ -23,7 +23,8 @@
 //	NTP:
 //	  - NTP_SERVERS (comma-separated), NTP_TIMEOUT, NTP_VERSION
 //	  - NTP_POOLS (comma-separated name[:strategy[:max_servers]])
-//	  - NTP_SAMPLES, NTP_SAMPLE_SPACING, NTP_MAX_CONCURRENCY, NTP_ENABLE_KERNEL
+//	  - NTP_SAMPLES, NTP_SAMPLE_SPACING, NTP_MAX_CONCURRENCY
+//	  - NTP_KERNEL_ENABLED, NTP_KERNEL_VIOLATION_ONLY (NTP_ENABLE_KERNEL is deprecated)
 //	  - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET
 //
 //	CONSENSUS:
@@ -102,7 +103,8 @@ type NTPConfig struct {
 	SamplesPerServer int                    `yaml:"samples_per_server"`
 	SampleSpacing    time.Duration          `yaml:"sample_spacing"` // Delay between two samples sent to the same server
 	MaxConcurrency   int                    `yaml:"max_concurrency"`
-	EnableKernel     bool                   `yaml:"enable_kernel"`
+	EnableKernel     bool                   `yaml:"enable_kernel"` // Deprecated: use kernel.enabled
+	Kernel           KernelConfig           `yaml:"kernel"`
 	ScrapeInterval   time.Duration          `yaml:"scrape_interval"`  // Interval between NTP collections
 	MaxClockOffset   time.Duration          `yaml:"max_clock_offset"` // Maximum acceptable clock offset threshold
 	RateLimit        RateLimitConfig        `yaml:"rate_limit"`
@@ -137,6 +139,15 @@ type KoDConfig struct {
 	MaxBackoff time.Duration `yaml:"max_backoff"`
 	// SuspendDuration is how long a target stays unqueried after DENY or RSTR
 	SuspendDuration time.Duration `yaml:"suspend_duration"`
+}
+
+// KernelConfig controls the kernel clock state option of the agent mode
+type KernelConfig struct {
+	// Enabled reads the kernel clock state (read-only adjtimex, Linux only)
+	Enabled bool `yaml:"enabled"`
+	// ViolationOnly exposes only the error bound violation and the sync status,
+	// for nodes where node_exporter already exposes node_timex_* metrics
+	ViolationOnly bool `yaml:"violation_only"`
 }
 
 // ConsensusConfig controls the multi-server consensus and falseticker detection
@@ -418,6 +429,8 @@ func applyEnvOverrides(cfg *Config) error {
 	e.list("NTP_SERVERS", &cfg.NTP.Servers)
 	e.pools("NTP_POOLS", &cfg.NTP.Pools)
 	e.bool("NTP_ENABLE_KERNEL", &cfg.NTP.EnableKernel)
+	e.bool("NTP_KERNEL_ENABLED", &cfg.NTP.Kernel.Enabled)
+	e.bool("NTP_KERNEL_VIOLATION_ONLY", &cfg.NTP.Kernel.ViolationOnly)
 	e.duration("NTP_TIMEOUT", &cfg.NTP.Timeout)
 	e.int("NTP_VERSION", &cfg.NTP.Version)
 	e.int("NTP_SAMPLES", &cfg.NTP.SamplesPerServer)

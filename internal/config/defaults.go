@@ -29,6 +29,11 @@ func ApplyDefaults(cfg *Config) {
 			"time.google.com",
 		}
 	}
+	// Deprecated enable_kernel maps to kernel.enabled
+	if cfg.NTP.EnableKernel {
+		cfg.NTP.Kernel.Enabled = true
+	}
+
 	for i := range cfg.NTP.Pools {
 		if cfg.NTP.Pools[i].Strategy == "" {
 			cfg.NTP.Pools[i].Strategy = "best_n"

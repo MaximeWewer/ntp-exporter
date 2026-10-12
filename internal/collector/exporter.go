@@ -8,7 +8,6 @@
 package collector
 
 import (
-	"math"
 	"os"
 	"strconv"
 	"sync"
@@ -57,7 +56,7 @@ func NewExporter(cfg *config.Config, m *metrics.NTPMetrics) *Exporter {
 		lastSuccess: make(map[string]time.Time),
 	}
 
-	if cfg.NTP.EnableKernel {
+	if cfg.NTP.Kernel.Enabled {
 		e.kernelReader = ntp.NewKernelReader(true)
 		e.nodeName = nodeName()
 	}
@@ -288,11 +287,29 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 	gauge(ch, d.offsetStdDev, stats.StdDevOffset.Seconds(), server)
 	gauge(ch, d.rttStdDev, stats.StdDevRTT.Seconds(), server)
 
-	if e.kernelState != nil {
-		ntpOffset := best.Offset.Seconds()
-		kernelOffset := e.kernelState.GetOffsetSeconds()
-		gauge(ch, d.kernelDivergence, math.Abs(ntpOffset-kernelOffset), e.nodeName, server)
-		gauge(ch, d.kernelCoherence, calculateCoherence(ntpOffset, kernelOffset), e.nodeName, server)
+	if e.kernelState != nil && e.kernelState.IsSynchronized() {
+		e.collectBoundViolation(ch, server, best)
+	}
+}
+
+// collectBoundViolation compares the offset measured from the outside with
+// the error bounds the kernel announces. The root distance of the server
+// (which includes half the round-trip delay) is the measurement uncertainty:
+// a violation means the time daemon underestimates its own error.
+func (e *Exporter) collectBoundViolation(ch chan<- prometheus.Metric, server string, best *ntp.Response) {
+	excess := best.Offset.Abs() - best.RootDistance
+	for _, bound := range []struct {
+		name  string
+		value time.Duration
+	}{
+		{"maxerror", e.kernelState.MaxError},
+		{"esterror", e.kernelState.EstError},
+	} {
+		violated := 0.0
+		if excess > bound.value {
+			violated = 1
+		}
+		gauge(ch, e.descs.kernelBoundViolation, violated, e.nodeName, server, bound.name)
 	}
 }
 
@@ -347,47 +364,20 @@ func (e *Exporter) collectKernel(ch chan<- prometheus.Metric) {
 	k := e.kernelState
 	node := e.nodeName
 
+	synchronized := 0.0
+	if k.IsSynchronized() {
+		synchronized = 1
+	}
+	gauge(ch, d.kernelSyncStatus, synchronized, node)
+
+	if e.cfg.NTP.Kernel.ViolationOnly {
+		return
+	}
+
+	gauge(ch, d.kernelState, 1, node, k.StateName())
 	gauge(ch, d.kernelOffset, k.GetOffsetSeconds(), node)
 	gauge(ch, d.kernelFrequency, k.GetFrequencyPPM(), node)
 	gauge(ch, d.kernelMaxError, k.GetMaxErrorSeconds(), node)
 	gauge(ch, d.kernelEstError, k.GetEstErrorSeconds(), node)
-	gauge(ch, d.kernelPrecision, k.GetPrecisionSeconds(), node)
-	gauge(ch, d.kernelStatusCode, float64(k.StatusCode), node)
-
-	status := "unsynchronized"
-	if k.IsSynchronized() {
-		status = "synchronized"
-	}
-	gauge(ch, d.kernelSyncStatus, 1, node, status)
-}
-
-// calculateCoherence calculates a coherence score between NTP and kernel offsets
-// Returns a value between 0 and 1, where:
-// - 1.0 = perfect agreement (< 1ms difference)
-// - 0.9-1.0 = excellent (1-5ms difference)
-// - 0.7-0.9 = good (5-10ms difference)
-// - 0.5-0.7 = acceptable (10-50ms difference)
-// - 0.0-0.5 = poor (> 50ms difference)
-func calculateCoherence(ntpOffset, kernelOffset float64) float64 {
-	divergence := math.Abs(ntpOffset - kernelOffset)
-
-	const (
-		perfectThreshold    = 0.001
-		excellentThreshold  = 0.005
-		goodThreshold       = 0.010
-		acceptableThreshold = 0.050
-	)
-
-	switch {
-	case divergence < perfectThreshold:
-		return 1.0
-	case divergence < excellentThreshold:
-		return 1.0 - ((divergence - perfectThreshold) / (excellentThreshold - perfectThreshold) * 0.1)
-	case divergence < goodThreshold:
-		return 0.9 - ((divergence - excellentThreshold) / (goodThreshold - excellentThreshold) * 0.2)
-	case divergence < acceptableThreshold:
-		return 0.7 - ((divergence - goodThreshold) / (acceptableThreshold - goodThreshold) * 0.2)
-	default:
-		return 0.5 * math.Exp(-divergence*5)
-	}
+	gauge(ch, d.kernelTAI, float64(k.TAI), node)
 }

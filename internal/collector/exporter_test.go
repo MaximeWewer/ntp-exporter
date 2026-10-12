@@ -257,23 +257,94 @@ type fakeKernel struct {
 
 func (f fakeKernel) Read() (*ntp.KernelTimex, error) { return f.state, f.err }
 
-func TestExporter_Kernel(t *testing.T) {
-	h := newHarness(t, "a.example.org")
-	h.mock.SetupSuccessfulServer("a.example.org", 2*time.Millisecond, 2)
-	h.mock.SetupSuccessfulServer("192.0.2.30", 2*time.Millisecond, 2)
-	h.cfg.NTP.Pools = []config.PoolConfig{{Name: "192.0.2.30", Strategy: "all", MaxServers: 4}}
-	h.exporter.kernelReader = fakeKernel{state: &ntp.KernelTimex{MaxError: 16 * time.Millisecond}}
+func newKernelHarness(t *testing.T, state *ntp.KernelTimex, servers ...string) *harness {
+	t.Helper()
+	h := newHarness(t, servers...)
+	h.cfg.NTP.Kernel.Enabled = true
+	h.exporter.kernelReader = fakeKernel{state: state}
 	h.exporter.nodeName = "node1"
+	return h
+}
+
+func TestExporter_Kernel(t *testing.T) {
+	h := newKernelHarness(t, &ntp.KernelTimex{
+		MaxError: 16 * time.Millisecond, EstError: time.Millisecond, TAI: 37, State: ntp.TIME_OK,
+		Status: ntp.STA_NANO, Frequency: 65536 * 10,
+	}, "a.example.org")
+	h.mock.SetupSuccessfulServer("a.example.org", 2*time.Millisecond, 2)
 
 	h.cycle()
 
 	node := map[string]string{"node": "node1"}
+	assert.Equal(t, 1.0, h.mustValue("ntp_kernel_sync_status", node))
+	assert.Equal(t, 1.0, h.mustValue("ntp_kernel_state", map[string]string{"node": "node1", "state": "synchronized"}))
 	assert.InDelta(t, 0.016, h.mustValue("ntp_kernel_max_error_seconds", node), 1e-9)
-	assert.Equal(t, 1.0, h.mustValue("ntp_kernel_sync_status", map[string]string{"node": "node1", "status": "synchronized"}))
-	h.absent("ntp_kernel_sync_status", map[string]string{"status": "unsynchronized"})
-	assert.InDelta(t, 0.002, h.mustValue("ntp_kernel_divergence_seconds", map[string]string{"server": "a.example.org"}), 1e-9)
-	assert.InDelta(t, 0.002, h.mustValue("ntp_kernel_divergence_seconds", map[string]string{"server": "192.0.2.30"}), 1e-9,
-		"pool members are correlated too")
+	assert.InDelta(t, 0.001, h.mustValue("ntp_kernel_est_error_seconds", node), 1e-9)
+	assert.Equal(t, 37.0, h.mustValue("ntp_kernel_tai_offset_seconds", node))
+	assert.Equal(t, 10.0, h.mustValue("ntp_kernel_frequency_ppm", node))
+	h.absent("ntp_kernel_divergence_seconds", nil)
+	h.absent("ntp_kernel_coherence_score", nil)
+	h.absent("ntp_kernel_status_code", nil)
+}
+
+func TestExporter_KernelErrorBoundViolation(t *testing.T) {
+	// The mock servers have a 15ms root distance: the measurement uncertainty
+	tests := []struct {
+		name     string
+		offset   time.Duration
+		maxError time.Duration
+		estError time.Duration
+		violated map[string]float64
+	}{
+		{"bounds respected", 10 * time.Millisecond, 16 * time.Millisecond, 2 * time.Millisecond,
+			map[string]float64{"maxerror": 0, "esterror": 0}},
+		{"uncertainty absorbs the gap", 20 * time.Millisecond, 16 * time.Millisecond, 2 * time.Millisecond,
+			map[string]float64{"maxerror": 0, "esterror": 1}},
+		{"kernel underestimates its error", 80 * time.Millisecond, 16 * time.Millisecond, 2 * time.Millisecond,
+			map[string]float64{"maxerror": 1, "esterror": 1}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newKernelHarness(t, &ntp.KernelTimex{MaxError: tt.maxError, EstError: tt.estError}, "a.example.org", "192.0.2.50")
+			h.cfg.NTP.Servers = []string{"a.example.org"}
+			h.cfg.NTP.Pools = []config.PoolConfig{{Name: "192.0.2.50", Strategy: "all", MaxServers: 4}}
+			h.mock.SetupSuccessfulServer("a.example.org", tt.offset, 2)
+			h.mock.SetupSuccessfulServer("192.0.2.50", tt.offset, 2)
+
+			h.cycle()
+
+			for _, server := range []string{"a.example.org", "192.0.2.50"} {
+				for bound, want := range tt.violated {
+					assert.Equal(t, want, h.mustValue("ntp_kernel_error_bound_violated",
+						map[string]string{"node": "node1", "server": server, "bound": bound}), "%s %s", server, bound)
+				}
+			}
+		})
+	}
+}
+
+func TestExporter_KernelUnsyncHasNoBound(t *testing.T) {
+	h := newKernelHarness(t, &ntp.KernelTimex{Status: ntp.STA_UNSYNC, MaxError: 16 * time.Second}, "a.example.org")
+	h.mock.SetupSuccessfulServer("a.example.org", time.Millisecond, 2)
+
+	h.cycle()
+
+	assert.Equal(t, 0.0, h.mustValue("ntp_kernel_sync_status", map[string]string{"node": "node1"}))
+	h.absent("ntp_kernel_error_bound_violated", nil)
+}
+
+func TestExporter_KernelViolationOnly(t *testing.T) {
+	h := newKernelHarness(t, &ntp.KernelTimex{MaxError: time.Millisecond}, "a.example.org")
+	h.cfg.NTP.Kernel.ViolationOnly = true
+	h.mock.SetupSuccessfulServer("a.example.org", 50*time.Millisecond, 2)
+
+	h.cycle()
+
+	assert.Equal(t, 1.0, h.mustValue("ntp_kernel_sync_status", map[string]string{"node": "node1"}))
+	assert.Equal(t, 1.0, h.mustValue("ntp_kernel_error_bound_violated", map[string]string{"bound": "maxerror"}))
+	h.absent("ntp_kernel_max_error_seconds", nil)
+	h.absent("ntp_kernel_state", nil)
 }
 
 func TestExporter_KernelReadError(t *testing.T) {
@@ -294,14 +365,6 @@ func TestExporter_Lint(t *testing.T) {
 	for _, p := range problems {
 		assert.False(t, strings.Contains(p.Text, "duplicate"), p.Text)
 	}
-}
-
-func TestCalculateCoherence(t *testing.T) {
-	assert.Equal(t, 1.0, calculateCoherence(0.0005, 0))
-	assert.InDelta(t, 0.9, calculateCoherence(0.005, 0), 1e-9)
-	assert.InDelta(t, 0.7, calculateCoherence(0.010, 0), 1e-9)
-	assert.InDelta(t, 0.5, calculateCoherence(0.050, 0), 0.15)
-	assert.Less(t, calculateCoherence(1, 0), 0.01)
 }
 
 // identityResolver resolves every host to itself, so that the mock keyed by

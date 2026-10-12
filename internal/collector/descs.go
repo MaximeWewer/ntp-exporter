@@ -51,15 +51,14 @@ type descs struct {
 	poolBestOffset *prometheus.Desc
 
 	// Kernel metrics
-	kernelOffset     *prometheus.Desc
-	kernelFrequency  *prometheus.Desc
-	kernelMaxError   *prometheus.Desc
-	kernelEstError   *prometheus.Desc
-	kernelPrecision  *prometheus.Desc
-	kernelSyncStatus *prometheus.Desc
-	kernelStatusCode *prometheus.Desc
-	kernelDivergence *prometheus.Desc
-	kernelCoherence  *prometheus.Desc
+	kernelSyncStatus     *prometheus.Desc
+	kernelState          *prometheus.Desc
+	kernelOffset         *prometheus.Desc
+	kernelFrequency      *prometheus.Desc
+	kernelMaxError       *prometheus.Desc
+	kernelEstError       *prometheus.Desc
+	kernelTAI            *prometheus.Desc
+	kernelBoundViolation *prometheus.Desc
 }
 
 func newDescs(namespace, subsystem string) *descs {
@@ -109,15 +108,16 @@ func newDescs(namespace, subsystem string) *descs {
 		poolDNS:        d("pool", "dns_resolution_seconds", "DNS resolution duration for pool in seconds", pool...),
 		poolBestOffset: d("pool", "best_offset_seconds", "Best offset from pool servers in seconds", pool...),
 
-		kernelOffset:     d(subsystem, "kernel_offset_seconds", "Kernel time offset in seconds (from adjtimex syscall)", node...),
+		kernelSyncStatus: d(subsystem, "kernel_sync_status", "Whether the kernel clock is synchronized (1) or not (0, STA_UNSYNC set)", node...),
+		kernelState:      d(subsystem, "kernel_state", "Kernel clock state returned by adjtimex (value is always 1)", "node", "state"),
+		kernelOffset:     d(subsystem, "kernel_offset_seconds", "Residual offset the kernel PLL still has to correct in seconds", node...),
 		kernelFrequency:  d(subsystem, "kernel_frequency_ppm", "Kernel frequency adjustment in PPM", node...),
-		kernelMaxError:   d(subsystem, "kernel_max_error_seconds", "Kernel maximum time error in seconds", node...),
-		kernelEstError:   d(subsystem, "kernel_est_error_seconds", "Kernel estimated time error in seconds", node...),
-		kernelPrecision:  d(subsystem, "kernel_precision_seconds", "Kernel clock precision in seconds", node...),
-		kernelSyncStatus: d(subsystem, "kernel_sync_status", "Kernel synchronization status (1=synchronized, 0=unsynchronized)", "node", "status"),
-		kernelStatusCode: d(subsystem, "kernel_status_code", "Kernel NTP status code", node...),
-		kernelDivergence: d(subsystem, "kernel_divergence_seconds", "Absolute difference between NTP offset and kernel offset in seconds", "node", "server"),
-		kernelCoherence:  d(subsystem, "kernel_coherence_score", "Coherence score between NTP and kernel measurements (0-1, higher is better)", "node", "server"),
+		kernelMaxError:   d(subsystem, "kernel_max_error_seconds", "Maximum error announced by the kernel clock in seconds", node...),
+		kernelEstError:   d(subsystem, "kernel_est_error_seconds", "Estimated error announced by the kernel clock in seconds", node...),
+		kernelTAI:        d(subsystem, "kernel_tai_offset_seconds", "TAI-UTC offset known by the kernel in seconds", node...),
+		kernelBoundViolation: d(subsystem, "kernel_error_bound_violated",
+			"Whether the offset measured against the server exceeds the error bound announced by the kernel, beyond the measurement uncertainty (1) or not (0)",
+			"node", "server", "bound"),
 	}
 }
 
@@ -131,8 +131,7 @@ func (d *descs) all() []*prometheus.Desc {
 		d.trustScore,
 		d.consensusOffset, d.consensusServers, d.consensusChimers, d.offsetFromConsensus, d.falseticker,
 		d.poolActive, d.poolTotal, d.poolDNS, d.poolBestOffset,
-		d.kernelOffset, d.kernelFrequency, d.kernelMaxError, d.kernelEstError,
-		d.kernelPrecision, d.kernelSyncStatus, d.kernelStatusCode,
-		d.kernelDivergence, d.kernelCoherence,
+		d.kernelSyncStatus, d.kernelState, d.kernelOffset, d.kernelFrequency,
+		d.kernelMaxError, d.kernelEstError, d.kernelTAI, d.kernelBoundViolation,
 	}
 }
