@@ -3,13 +3,13 @@ name: Build and Release
 on:
   push:
     tags:
-      - '*.*.*'
-      - '*.*.*-*'
+      - 'v*.*.*'
+      - 'v*.*.*-*'
   workflow_dispatch:
     inputs:
       force_version:
-        # Versioning pattern: YEAR.MONTH.INDEX_OF_TAG (+1 at each tag)
-        description: 'Force a specific version (optional, format: YYYY.MM.X)'
+        # Version pattern: YEAR.MONTH_INDEX.RELEASE_INDEX (e.g. 2026.6.3)
+        description: 'Force a specific version (optional, format: YYYY.M.X)'
         required: false
         type: string
 
@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.version }}
+      tag: ${{ steps.get_version.outputs.tag }}
       is_prerelease: ${{ steps.get_version.outputs.is_prerelease }}
       image_name_lower: ${{ steps.lowercase.outputs.image_name_lower }}
       repository_owner_lower: ${{ steps.lowercase.outputs.repository_owner_lower }}
@@ -58,59 +59,56 @@ jobs:
           # Inputs go through the environment, never interpolated in the script
           EVENT_NAME: ${{ github.event_name }}
           FORCE_VERSION: ${{ github.event.inputs.force_version }}
+        # Version pattern: YEAR.MONTH_INDEX.RELEASE_INDEX (e.g. 2026.6.3), tag vVERSION
+        #   - tag push v*.*.*   -> version taken from the tag
+        #   - workflow_dispatch -> force_version, or the next index of the month
         run: |
-          # If triggered by a tag push, use the tag
-          if [ "$EVENT_NAME" == "push" ]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-            # Remove 'v' prefix if present (for backward compatibility with old tags)
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "push" ] && [ "$GITHUB_REF" != "${GITHUB_REF#refs/tags/}" ]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
             VERSION="${VERSION#v}"
-            echo "Using tag: $VERSION"
-          # If force_version is provided in workflow_dispatch, use it
+            echo "Using tag: v${VERSION}"
           elif [ -n "$FORCE_VERSION" ]; then
-            VERSION="$FORCE_VERSION"
-            # Remove 'v' prefix if present
-            VERSION="${VERSION#v}"
-            echo "Using forced version: $VERSION"
+            VERSION="${FORCE_VERSION#v}"
+            echo "Using forced version: ${VERSION}"
           else
-            # Auto-generate version based on YEAR.MONTH.INDEX pattern
-            # Fetch all tags from remote to ensure we have the latest
-            git fetch --tags
-
-            # Get current year and month
-            YEAR_MONTH=$(date +'%Y.%m')
-
-            # Get the highest existing tag for current year.month and increment
-            # Check both with and without 'v' prefix for backward compatibility
-            LATEST_TAG=$(git tag -l "${YEAR_MONTH}.*" "v${YEAR_MONTH}.*" | sed 's/^v//' | sort -V | tail -n 1)
-
-            if [ -z "$LATEST_TAG" ]; then
-              # No tags for this year.month, start with .1
-              VERSION="${YEAR_MONTH}.1"
-            else
-              # Extract patch version and increment
-              PATCH_VERSION="${LATEST_TAG##*.}"
-              NEW_PATCH=$((PATCH_VERSION + 1))
-              VERSION="${YEAR_MONTH}.${NEW_PATCH}"
-            fi
-            echo "Auto-generated version: $VERSION"
+            # Tags are already there with fetch-depth: 0; refresh them when possible
+            git fetch --tags --force || echo "::warning::could not refresh tags, using the local ones"
+            YEAR_MONTH=$(date +'%Y.%-m')                                  # 2026.6
+            # Tags with a zero-padded month (v2026.06.x) count too
+            LATEST_INDEX=$(git tag -l "v${YEAR_MONTH}.*" "v$(date +'%Y.%m').*" \
+              | sed -E 's/^v[0-9]+\.[0-9]+\.([0-9]+).*/\1/' | sort -n | tail -n 1)
+            VERSION="${YEAR_MONTH}.$(( ${LATEST_INDEX:-0} + 1 ))"
+            echo "Auto-generated version: ${VERSION}"
           fi
 
-          # The version is interpolated in later steps: only accept a plain version
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "Invalid version: $VERSION" >&2
+          # The version is interpolated in later steps: only accept YEAR.MONTH.INDEX
+          # with an optional pre-release suffix
+          if ! [[ "$VERSION" =~ ^([0-9]{4})\.([0-9]{1,2})\.([0-9]+)(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "Invalid version: ${VERSION} (expected YYYY.M.X)" >&2
             exit 1
           fi
+          # Normalise each segment (strip leading zeros, valid SemVer for Helm):
+          # 2026.06.01 -> 2026.6.1
+          MONTH=$((10#${BASH_REMATCH[2]}))
+          if [ "$MONTH" -lt 1 ] || [ "$MONTH" -gt 12 ]; then
+            echo "Invalid month in version: ${VERSION}" >&2
+            exit 1
+          fi
+          VERSION="${BASH_REMATCH[1]}.${MONTH}.$((10#${BASH_REMATCH[3]}))${BASH_REMATCH[4]}"
+          TAG="v${VERSION}"
 
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-          # Check if this is a pre-release (contains -, alpha, beta, rc)
-          if [[ "$VERSION" =~ - ]]; then
+          # A suffix (-rc.1, -beta...) marks a pre-release
+          if [[ "$VERSION" == *-* ]]; then
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
           else
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "Release version: ${VERSION}"
+          echo "::notice::ntp-exporter ${VERSION} (tag ${TAG})"
 
   # =============================================================================
   # Job 2: Build Multi-Architecture Binaries
@@ -493,8 +491,9 @@ jobs:
       - name: Generate release notes
         id: release_notes
         run: |
-          # Get previous tag
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${{ needs.prepare.outputs.version }}^" 2>/dev/null || echo "")
+          # Previous release tag: the highest vYYYY.M.X tag other than this one
+          # (on workflow_dispatch, the tag of this release does not exist yet)
+          PREVIOUS_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname | grep -vx "${{ needs.prepare.outputs.tag }}" | head -n 1 || true)
 
           # Generate changelog
           cat << EOF > release_notes.md
@@ -508,7 +507,7 @@ jobs:
             {
               echo "Changes since ${PREVIOUS_TAG}:"
               echo ""
-              git log "${PREVIOUS_TAG}..${{ needs.prepare.outputs.version }}" \
+              git log "${PREVIOUS_TAG}..HEAD" \
                 --pretty=format:"* %s (%h)" \
                 --no-merges
             } >> release_notes.md
@@ -562,7 +561,7 @@ jobs:
 
           ---
 
-          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${{ needs.prepare.outputs.version }}
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${{ needs.prepare.outputs.tag }}
           EOF
 
           cat release_notes.md
@@ -570,7 +569,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
-          tag_name: ${{ needs.prepare.outputs.version }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
           name: Release ${{ needs.prepare.outputs.version }}
           body_path: release_notes.md
           draft: false
@@ -604,7 +603,7 @@ jobs:
           - Windows (amd64, arm64)
 
           ### Links
-          - [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.version }})
+          - [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.tag }})
           - [Docker Image](https://${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }})
           - [Helm Chart Registry](https://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/ntp-exporter)
           EOF

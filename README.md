@@ -534,6 +534,11 @@ Package layout:
 | `internal/server` | HTTP server, health endpoints, web configuration |
 | `pkg/metrics`, `pkg/logger` | Exporter counters and registry, logging |
 
+Releases follow `YEAR.MONTH_INDEX.RELEASE_INDEX` (for instance `2026.6.3`,
+tag `v2026.6.3`, no leading zero): push a `v*.*.*` tag, or run the *Build and
+Release* workflow by hand, which takes the next index of the current month
+(or `force_version`). A suffix such as `-rc.1` marks a pre-release.
+
 Contributions are welcome: open an issue or a pull request with tests.
 
 Built with [beevik/ntp](https://github.com/beevik/ntp),
