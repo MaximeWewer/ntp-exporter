@@ -3,9 +3,6 @@
 A Prometheus exporter that measures time synchronization: the health and
 accuracy of NTP servers, and the clock accuracy of the machines it runs on.
 
-> Upgrading from v1? Read the [migration guide](MIGRATION.md): metrics,
-> configuration options and deployment modes changed.
-
 ## Table of contents
 
 - [What it measures](#what-it-measures)
@@ -502,8 +499,7 @@ For the full chronyd state (every source, server statistics), run
 
 **The exporter does not start.** The error names the faulty key, variable or
 flag. Unknown YAML keys are rejected: compare with
-[`config-example.yaml`](deployments/docker/config-example.yaml) and the
-[migration guide](MIGRATION.md).
+[`config-example.yaml`](deployments/docker/config-example.yaml).
 
 **`ntp_up` is 1 but no offset is exposed.** The server answers with invalid
 responses: check `ntp_invalid_responses_total` by `reason` (for instance

@@ -24,5 +24,4 @@ Helm chart for deploying the NTP Exporter to Kubernetes. The NTP Exporter is a P
 | `prometheusRule.enabled` | `false` | Create a PrometheusRule with the recommended alerts |
 
 Every value is documented in `values-with-all-options.yaml`. See the
-[project README](../../../../README.md) for the metrics and the
-[migration guide](../../../../MIGRATION.md) when upgrading from v1.
+[project README](../../../../README.md) for the metrics.
