@@ -26,6 +26,7 @@
 //	  - NTP_SAMPLES, NTP_SAMPLE_SPACING, NTP_MAX_CONCURRENCY
 //	  - NTP_IP_FAMILY (auto, ipv4 or ipv6)
 //	  - NTP_KERNEL_ENABLED, NTP_KERNEL_VIOLATION_ONLY (NTP_ENABLE_KERNEL is deprecated)
+//	  - NTP_CHRONY_ENABLED, NTP_CHRONY_ADDRESS
 //	  - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET
 //
 //	PROBE ENDPOINT:
@@ -111,6 +112,7 @@ type NTPConfig struct {
 	IPFamily         string          `yaml:"ip_family"`     // auto, ipv4 or ipv6
 	EnableKernel     bool            `yaml:"enable_kernel"` // Deprecated: use kernel.enabled
 	Kernel           KernelConfig    `yaml:"kernel"`
+	Chrony           ChronyConfig    `yaml:"chrony"`
 	ScrapeInterval   time.Duration   `yaml:"scrape_interval"`  // Interval between NTP collections
 	MaxClockOffset   time.Duration   `yaml:"max_clock_offset"` // Maximum acceptable clock offset threshold
 	KoD              KoDConfig       `yaml:"kod"`
@@ -141,6 +143,15 @@ type KernelConfig struct {
 	// ViolationOnly exposes only the error bound violation and the sync status,
 	// for nodes where node_exporter already exposes node_timex_* metrics
 	ViolationOnly bool `yaml:"violation_only"`
+}
+
+// ChronyConfig controls the reading of the local chronyd tracking report
+type ChronyConfig struct {
+	// Enabled reads the source selected by chronyd and the state of the clock
+	Enabled bool `yaml:"enabled"`
+	// Address is udp://host:port (read-only commands are allowed from
+	// localhost) or unix:///path/to/chronyd.sock
+	Address string `yaml:"address"`
 }
 
 // ConsensusConfig controls the multi-server consensus and falseticker detection
@@ -397,6 +408,8 @@ func applyEnvOverrides(cfg *Config) error {
 	e.bool("NTP_ENABLE_KERNEL", &cfg.NTP.EnableKernel)
 	e.bool("NTP_KERNEL_ENABLED", &cfg.NTP.Kernel.Enabled)
 	e.bool("NTP_KERNEL_VIOLATION_ONLY", &cfg.NTP.Kernel.ViolationOnly)
+	e.bool("NTP_CHRONY_ENABLED", &cfg.NTP.Chrony.Enabled)
+	e.string("NTP_CHRONY_ADDRESS", &cfg.NTP.Chrony.Address)
 	e.duration("NTP_TIMEOUT", &cfg.NTP.Timeout)
 	e.int("NTP_VERSION", &cfg.NTP.Version)
 	e.int("NTP_SAMPLES", &cfg.NTP.SamplesPerServer)

@@ -52,6 +52,12 @@ data:
         violation_only: {{ and .Values.kernel .Values.kernel.violationOnly | default false }}
       {{- end }}
 
+      {{- if and .Values.chrony .Values.chrony.enabled }}
+      chrony:
+        enabled: true
+        address: {{ include "ntp-exporter.chronyAddress" . | quote }}
+      {{- end }}
+
       {{- if .Values.config.kod }}
       kod:
         max_backoff: {{ .Values.config.kod.maxBackoff | default "1024s" }}

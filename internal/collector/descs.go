@@ -63,6 +63,22 @@ type descs struct {
 	kernelEstError       *prometheus.Desc
 	kernelTAI            *prometheus.Desc
 	kernelBoundViolation *prometheus.Desc
+
+	// chronyd tracking report
+	chronyUp                *prometheus.Desc
+	chronyInfo              *prometheus.Desc
+	chronyStratum           *prometheus.Desc
+	chronyLeapStatus        *prometheus.Desc
+	chronyRefTime           *prometheus.Desc
+	chronyCorrection        *prometheus.Desc
+	chronyLastOffset        *prometheus.Desc
+	chronyRMSOffset         *prometheus.Desc
+	chronyFrequency         *prometheus.Desc
+	chronyResidualFrequency *prometheus.Desc
+	chronySkew              *prometheus.Desc
+	chronyRootDelay         *prometheus.Desc
+	chronyRootDispersion    *prometheus.Desc
+	chronyUpdateInterval    *prometheus.Desc
 }
 
 func newDescs(namespace, subsystem string) *descs {
@@ -125,6 +141,21 @@ func newDescs(namespace, subsystem string) *descs {
 		kernelBoundViolation: d(subsystem, "kernel_error_bound_violated",
 			"Whether the offset measured against the server exceeds the error bound announced by the kernel, beyond the measurement uncertainty (1) or not (0)",
 			"node", "server", "bound"),
+
+		chronyUp:                d(subsystem, "chrony_up", "Whether the chronyd tracking report could be read (1) or not (0)", node...),
+		chronyInfo:              d(subsystem, "chrony_tracking_info", "Source selected by chronyd: reference ID (hex) and address or reference clock name (value is always 1)", "node", "refid", "source"),
+		chronyStratum:           d(subsystem, "chrony_stratum", "Stratum of the local clock disciplined by chronyd", node...),
+		chronyLeapStatus:        d(subsystem, "chrony_leap_status", "chronyd leap status (0=normal, 1=insert second, 2=delete second, 3=not synchronised)", node...),
+		chronyRefTime:           d(subsystem, "chrony_reference_timestamp_seconds", "Unix time of the last measurement used by chronyd to update the clock", node...),
+		chronyCorrection:        d(subsystem, "chrony_system_time_offset_seconds", "Offset chronyd is still slewing out of the system clock in seconds (positive: the system clock is slow)", node...),
+		chronyLastOffset:        d(subsystem, "chrony_last_offset_seconds", "Offset estimated by chronyd at the last clock update in seconds", node...),
+		chronyRMSOffset:         d(subsystem, "chrony_rms_offset_seconds", "Long-term average of the offsets estimated by chronyd in seconds", node...),
+		chronyFrequency:         d(subsystem, "chrony_frequency_ppm", "Frequency error of the system clock corrected by chronyd in PPM (negative: the clock runs slow without correction, like chronyc)", node...),
+		chronyResidualFrequency: d(subsystem, "chrony_residual_frequency_ppm", "Residual frequency of the selected source in PPM", node...),
+		chronySkew:              d(subsystem, "chrony_skew_ppm", "Estimated error bound of the frequency in PPM", node...),
+		chronyRootDelay:         d(subsystem, "chrony_root_delay_seconds", "Root delay of the local clock to the stratum 1 source in seconds", node...),
+		chronyRootDispersion:    d(subsystem, "chrony_root_dispersion_seconds", "Root dispersion of the local clock in seconds", node...),
+		chronyUpdateInterval:    d(subsystem, "chrony_update_interval_seconds", "Interval between the last two clock updates of chronyd in seconds", node...),
 	}
 }
 
@@ -140,5 +171,9 @@ func (d *descs) all() []*prometheus.Desc {
 		d.poolActive, d.poolTotal, d.poolDNS, d.poolOffset,
 		d.kernelSyncStatus, d.kernelState, d.kernelOffset, d.kernelFrequency,
 		d.kernelMaxError, d.kernelEstError, d.kernelTAI, d.kernelBoundViolation,
+		d.chronyUp, d.chronyInfo, d.chronyStratum, d.chronyLeapStatus, d.chronyRefTime,
+		d.chronyCorrection, d.chronyLastOffset, d.chronyRMSOffset, d.chronyFrequency,
+		d.chronyResidualFrequency, d.chronySkew, d.chronyRootDelay, d.chronyRootDispersion,
+		d.chronyUpdateInterval,
 	}
 }

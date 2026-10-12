@@ -431,3 +431,23 @@ func TestLoadFromEnvVarsOnly_ProbeEndpointOnly(t *testing.T) {
 		t.Error("PROBE_ENDPOINT_ONLY without the endpoint must fail")
 	}
 }
+
+func TestLoadFromEnvVarsOnly_Chrony(t *testing.T) {
+	t.Setenv("NTP_CHRONY_ENABLED", "true")
+	cfg, err := LoadFromEnvVarsOnly()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.NTP.Chrony.Enabled || cfg.NTP.Chrony.Address != "udp://127.0.0.1:323" {
+		t.Errorf("unexpected chrony config %+v", cfg.NTP.Chrony)
+	}
+
+	t.Setenv("NTP_CHRONY_ADDRESS", "unix:///run/chrony/chronyd.sock")
+	cfg, err = LoadFromEnvVarsOnly()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.NTP.Chrony.Address != "unix:///run/chrony/chronyd.sock" {
+		t.Errorf("NTP_CHRONY_ADDRESS not applied, got %q", cfg.NTP.Chrony.Address)
+	}
+}

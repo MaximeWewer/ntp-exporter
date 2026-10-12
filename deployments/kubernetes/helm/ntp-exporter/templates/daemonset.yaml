@@ -78,6 +78,12 @@ spec:
           mountPath: /etc/ntp-exporter/web
           readOnly: true
         {{- end }}
+        {{- if and .Values.chrony.enabled .Values.chrony.socketDir }}
+        - name: chrony-socket
+          mountPath: {{ .Values.chrony.socketDir }}
+        - name: tmp
+          mountPath: /tmp
+        {{- end }}
         {{- with .Values.volumeMounts }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -101,6 +107,15 @@ spec:
       - name: web-config
         secret:
           secretName: {{ .Values.webConfig.existingSecret }}
+      {{- end }}
+      {{- if and .Values.chrony.enabled .Values.chrony.socketDir }}
+      # chronyd socket of the node, and a writable directory for the reply socket
+      - name: chrony-socket
+        hostPath:
+          path: {{ .Values.chrony.socketDir }}
+          type: Directory
+      - name: tmp
+        emptyDir: {}
       {{- end }}
       {{- with .Values.volumes }}
       {{- toYaml . | nindent 6 }}

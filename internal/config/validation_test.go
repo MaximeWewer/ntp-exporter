@@ -685,3 +685,19 @@ func TestValidate_ProbeEndpoint(t *testing.T) {
 	cfg.ProbeEndpoint.Enabled = &disabled
 	assert.ErrorContains(t, Validate(cfg), "requires probe_endpoint.enabled")
 }
+
+func TestValidate_ChronyAddress(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.NTP.Chrony.Enabled = true
+	for _, ok := range []string{"udp://127.0.0.1:323", "udp://[::1]:323", "unix:///run/chrony/chronyd.sock"} {
+		cfg.NTP.Chrony.Address = ok
+		assert.NoError(t, Validate(cfg), ok)
+	}
+	for _, bad := range []string{"127.0.0.1:323", "udp://127.0.0.1", "unix://", "tcp://127.0.0.1:323", "%zz"} {
+		cfg.NTP.Chrony.Address = bad
+		assert.Error(t, Validate(cfg), bad)
+	}
+
+	cfg.NTP.Chrony.Enabled = false
+	assert.NoError(t, Validate(cfg), "the address is only checked when chrony is enabled")
+}

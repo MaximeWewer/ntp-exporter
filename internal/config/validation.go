@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -71,6 +72,21 @@ func validateServer(cfg *ServerConfig) error {
 	return nil
 }
 
+// validateChronyAddress accepts udp://host:port and unix:///path
+func validateChronyAddress(address string) error {
+	u, err := url.Parse(address)
+	if err != nil {
+		return errors.New("chrony.address is invalid: " + err.Error())
+	}
+	switch {
+	case u.Scheme == "udp" && u.Port() != "" && u.Hostname() != "":
+		return nil
+	case u.Scheme == "unix" && u.Path != "":
+		return nil
+	}
+	return errors.New("chrony.address must be udp://host:port or unix:///path/to/chronyd.sock, got " + address)
+}
+
 func validateProbeEndpoint(cfg *Config) error {
 	if !cfg.ProbeEndpoint.Only {
 		return nil
@@ -126,6 +142,12 @@ func validateNTP(cfg *NTPConfig, probeOnly bool) error {
 
 	if cfg.KoD.SuspendDuration <= 0 {
 		return errors.New("kod.suspend_duration must be positive, got " + cfg.KoD.SuspendDuration.String())
+	}
+
+	if cfg.Chrony.Enabled {
+		if err := validateChronyAddress(cfg.Chrony.Address); err != nil {
+			return err
+		}
 	}
 
 	switch cfg.IPFamily {

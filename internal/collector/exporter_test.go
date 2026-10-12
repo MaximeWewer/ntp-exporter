@@ -526,3 +526,37 @@ func TestExporter_Ready(t *testing.T) {
 	h.exporter.updatedAt = time.Now().Add(-4 * h.cfg.NTP.ScrapeInterval)
 	assert.ErrorContains(t, h.exporter.Ready(), "old")
 }
+
+type fakeChrony struct {
+	tracking *ntp.ChronyTracking
+	err      error
+}
+
+func (f fakeChrony) Tracking(context.Context) (*ntp.ChronyTracking, error) { return f.tracking, f.err }
+
+func TestExporter_ChronyTracking(t *testing.T) {
+	t.Setenv("NODE_NAME", "node-1")
+	const server = "a.example.org"
+	h := newHarness(t, server)
+	h.mock.SetupSuccessfulServer(server, time.Millisecond, 2)
+	h.exporter.SetChronyReader(fakeChrony{tracking: &ntp.ChronyTracking{
+		RefID: 0xC0000201, Source: "192.0.2.1", Stratum: 3, RefTime: time.Unix(1_800_000_000, 0),
+		CurrentCorrection: -0.001, LastOffset: 0.0003, FreqPPM: -33.6, SkewPPM: 0.4, LastUpdateInterval: 1024,
+	}})
+
+	h.cycle()
+
+	node := map[string]string{"node": "node-1"}
+	assert.Equal(t, 1.0, h.mustValue("ntp_chrony_up", node))
+	assert.Equal(t, 1.0, h.mustValue("ntp_chrony_tracking_info", map[string]string{"node": "node-1", "refid": "C0000201", "source": "192.0.2.1"}))
+	assert.Equal(t, 3.0, h.mustValue("ntp_chrony_stratum", node))
+	assert.Equal(t, -0.001, h.mustValue("ntp_chrony_system_time_offset_seconds", node))
+	assert.Equal(t, -33.6, h.mustValue("ntp_chrony_frequency_ppm", node))
+	assert.Equal(t, 1.8e9, h.mustValue("ntp_chrony_reference_timestamp_seconds", node))
+
+	h.exporter.SetChronyReader(fakeChrony{err: errors.New("connection refused")})
+	h.cycle()
+	assert.Equal(t, 0.0, h.mustValue("ntp_chrony_up", node))
+	_, ok := h.value("ntp_chrony_stratum", node)
+	assert.False(t, ok, "no stale chrony values")
+}

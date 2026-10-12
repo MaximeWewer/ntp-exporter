@@ -18,6 +18,7 @@ accuracy of NTP servers, and the clock accuracy of the machines it runs on.
 - [Alerting](#alerting)
 - [Grafana dashboards](#grafana-dashboards)
 - [Kernel option](#kernel-option)
+- [chrony option](#chrony-option)
 - [Security](#security)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
@@ -246,6 +247,8 @@ ntp:
 | `NTP_KOD_SUSPEND_DURATION` | `1h` | Suspension after `DENY` or `RSTR` |
 | `NTP_KERNEL_ENABLED` | `false` | Kernel option (agent mode, Linux) |
 | `NTP_KERNEL_VIOLATION_ONLY` | `false` | Only expose the bound violation and sync status |
+| `NTP_CHRONY_ENABLED` | `false` | chrony option (agent mode) |
+| `NTP_CHRONY_ADDRESS` | `udp://127.0.0.1:323` | chronyd command address, or `unix:///run/chrony/chronyd.sock` |
 | `DNS_CACHE_MIN_TTL` / `DNS_CACHE_MAX_TTL` | `5m` / `60m` | Cache of pool DNS answers |
 | `NTP_EXPORTER_ADDRESS` / `NTP_EXPORTER_PORT` | `0.0.0.0` / `9559` | Listen address |
 | `SERVER_READ_TIMEOUT` / `SERVER_WRITE_TIMEOUT` | `10s` | HTTP timeouts |
@@ -317,6 +320,19 @@ Names below use the default `ntp` namespace and no subsystem.
 | `ntp_kernel_state{state}` | Clock state returned by `adjtimex` (`synchronized`, `leap_insert_pending`...) |
 | `ntp_kernel_max_error_seconds`, `ntp_kernel_est_error_seconds` | Error bounds maintained by the time daemon |
 | `ntp_kernel_frequency_ppm`, `ntp_kernel_offset_seconds`, `ntp_kernel_tai_offset_seconds` | Frequency correction, residual PLL offset, TAI−UTC |
+
+### chrony option (`node` label)
+
+| Metric | Description |
+|---|---|
+| `ntp_chrony_up` | 1 when the tracking report could be read |
+| `ntp_chrony_tracking_info{refid,source}` | Source selected by chronyd (address, or reference clock name) |
+| `ntp_chrony_stratum`, `ntp_chrony_leap_status` | Stratum of the local clock, leap status (3 = not synchronised) |
+| `ntp_chrony_system_time_offset_seconds` | Offset still being slewed out of the system clock (positive: clock slow) |
+| `ntp_chrony_last_offset_seconds`, `ntp_chrony_rms_offset_seconds` | Offset at the last update, long-term average |
+| `ntp_chrony_frequency_ppm`, `ntp_chrony_residual_frequency_ppm`, `ntp_chrony_skew_ppm` | Frequency error (negative: slow), residual frequency, frequency error bound |
+| `ntp_chrony_root_delay_seconds`, `ntp_chrony_root_dispersion_seconds` | Distance to the stratum 1 source |
+| `ntp_chrony_reference_timestamp_seconds`, `ntp_chrony_update_interval_seconds` | Last clock update, interval between updates |
 
 ### Exporter
 
@@ -392,11 +408,30 @@ and `ntp_kernel_sync_status`.
 
 Notes per daemon:
 
-- **chrony** does not use the kernel PLL: `ntp_kernel_offset_seconds` stays
+- **chrony** does not use the kernel PLL (see also the [chrony option](#chrony-option)): `ntp_kernel_offset_seconds` stays
   close to 0, which is expected. Old versions (< 1.31) do not maintain
   `STA_UNSYNC` reliably.
 - **ntpd** and **systemd-timesyncd** maintain the kernel state.
 - **OpenNTPD** < 5.9p1 does not update the kernel flags.
+
+## chrony option
+
+With `chrony.enabled` (agent mode), the exporter reads the `tracking` report
+of the local chronyd once per cycle, like `chronyc tracking`: the source the
+daemon selected, its stratum, the offset it still has to correct, the last
+offset, the frequency and its skew. Comparing them with `ntp_offset_seconds`
+correlates the measurement from the outside with the decision of the daemon.
+
+chronyd answers read-only commands from localhost on UDP port 323 by default
+(`udp://127.0.0.1:323`, the default address): the exporter must share the
+network namespace of the host (`hostNetwork: true`, Docker `--network host`,
+systemd). Without host networking, use the unix socket
+(`unix:///run/chrony/chronyd.sock`, Helm `chrony.socketDir: /run/chrony`): the
+exporter must belong to the group owning the socket (usually `chrony` or
+`_chrony`, Helm `podSecurityContext.supplementalGroups`).
+
+For the full chronyd state (every source, server statistics), run
+[chrony_exporter](https://github.com/SuperQ/chrony_exporter) next to it.
 
 ## Security
 

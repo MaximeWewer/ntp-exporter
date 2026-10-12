@@ -156,6 +156,19 @@ ntp:
     violation_only: false
 
   # ----------------------------------------------------------------------------
+  # CHRONY - Tracking report of the local chronyd (agent mode): selected
+  # source, offset, frequency, skew. Read-only commands are allowed from
+  # localhost over UDP 323 by default; the unix socket needs the chrony group.
+  # ----------------------------------------------------------------------------
+  chrony:
+    # Default: false
+    enabled: false
+
+    # Values: udp://host:port or unix:///path/to/chronyd.sock
+    # Default: udp://127.0.0.1:323
+    address: udp://127.0.0.1:323
+
+  # ----------------------------------------------------------------------------
   # KISS-O'-DEATH - Handling of KoD codes (RFC 5905 section 7.4)
   # RATE: the server polling interval doubles; DENY/RSTR: the server is suspended
   # ----------------------------------------------------------------------------

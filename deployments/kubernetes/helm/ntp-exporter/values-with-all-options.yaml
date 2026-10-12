@@ -15,6 +15,13 @@ kernel:
   # Only expose ntp_kernel_error_bound_violated and ntp_kernel_sync_status
   violationOnly: false
 
+# chronyd tracking report (agent mode): UDP 127.0.0.1:323 needs hostNetwork,
+# or set socketDir (e.g. /run/chrony) and the socket group in supplementalGroups
+chrony:
+  enabled: false
+  address: udp://127.0.0.1:323
+  socketDir: ""
+
 # Multi-target /probe?target= endpoint (Prometheus drives the targets)
 probeEndpoint:
   enabled: true

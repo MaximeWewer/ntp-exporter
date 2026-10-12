@@ -139,6 +139,17 @@ Whether only /probe targets are measured (no static servers)
 {{- end -}}
 
 {{/*
+chronyd address
+*/}}
+{{- define "ntp-exporter.chronyAddress" -}}
+{{- if .Values.chrony.socketDir -}}
+unix://{{ trimSuffix "/" .Values.chrony.socketDir }}/chronyd.sock
+{{- else -}}
+{{ .Values.chrony.address | default "udp://127.0.0.1:323" }}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Validate mode value
 */}}
 {{- define "ntp-exporter.validateMode" -}}
@@ -147,6 +158,14 @@ Validate mode value
 {{- end -}}
 {{- if and (eq .Values.mode "probe") (include "ntp-exporter.kernelEnabled" .) -}}
 {{- fail "kernel.enabled only makes sense in agent mode: the kernel state describes the node the agent runs on" -}}
+{{- end -}}
+{{- if and .Values.chrony .Values.chrony.enabled -}}
+{{- if eq (include "ntp-exporter.mode" .) "probe" -}}
+{{- fail "chrony.enabled only makes sense in agent mode: chronyd runs on the node" -}}
+{{- end -}}
+{{- if and (not .Values.chrony.socketDir) (not .Values.hostNetwork) (hasPrefix "udp://127." (.Values.chrony.address | default "udp://127.0.0.1:323")) -}}
+{{- fail "chrony.enabled needs hostNetwork: true to reach udp://127.0.0.1:323 on the node, or chrony.socketDir" -}}
+{{- end -}}
 {{- end -}}
 {{- if and (include "ntp-exporter.probeEndpointOnly" .) (not (include "ntp-exporter.probeEndpointEnabled" .)) -}}
 {{- fail "probeEndpoint.only requires probeEndpoint.enabled" -}}

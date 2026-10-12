@@ -82,6 +82,8 @@ capability and `AmbientCapabilities=CAP_SYS_TIME` from your deployments.
 | `ntp_kernel_state{node,state}`, `ntp_kernel_tai_offset_seconds{node}` | Kernel clock state |
 | `ntp_kernel_error_bound_violated{node,server,bound}` | The measured offset exceeds the error bound announced by the kernel |
 | `ntp_exporter_cycle_duration_seconds`, `ntp_exporter_cycle_overrun_total` | Collection cycle health |
+| `ntp_chrony_*{node}` | chronyd tracking report (chrony option) |
+| `ntp_probe_success`, `ntp_probe_duration_seconds` | Result of a `/probe` request |
 
 ### PromQL equivalents
 
@@ -132,6 +134,7 @@ raise it for servers behind noisy links.
 | `ntp.kod.max_backoff`, `ntp.kod.suspend_duration` | `NTP_KOD_MAX_BACKOFF`, `NTP_KOD_SUSPEND_DURATION` | `1024s`, `1h` |
 | `ntp.consensus.enabled` | `NTP_CONSENSUS_ENABLED` | enabled with 3+ servers or pools |
 | `probe_endpoint.enabled`, `probe_endpoint.only` | `PROBE_ENDPOINT_ENABLED`, `PROBE_ENDPOINT_ONLY` | `true`, `false` |
+| `ntp.chrony.enabled`, `ntp.chrony.address` | `NTP_CHRONY_ENABLED`, `NTP_CHRONY_ADDRESS` | `false`, `udp://127.0.0.1:323` |
 | `ntp.ip_family` | `NTP_IP_FAMILY` (`auto`, `ipv4`, `ipv6`) | `auto` |
 | `ntp.pools` | `NTP_POOLS` (`name[:strategy[:max_servers]]`) | none |
 | `metrics.labels` (now applied) | `METRICS_LABELS` (`key=value,...`) | none |

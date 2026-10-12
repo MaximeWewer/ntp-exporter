@@ -16,6 +16,17 @@ kernel:
   # when node_exporter already exposes node_timex_* metrics
   violationOnly: false
 
+# chronyd tracking report (agent mode): source selected by the daemon, offset,
+# frequency, skew... Two ways to reach chronyd on the node:
+#   - its UDP command port on 127.0.0.1:323 (read-only commands are allowed
+#     from localhost by default): requires hostNetwork: true
+#   - its unix socket: set socketDir (e.g. /run/chrony); the pod must belong to
+#     the group owning the socket (podSecurityContext.supplementalGroups)
+chrony:
+  enabled: false
+  address: udp://127.0.0.1:323
+  socketDir: ""
+
 # Multi-target endpoint /probe?target=host[&samples=N], like blackbox_exporter:
 # Prometheus drives the targets through relabeling, so probe replicas hold no
 # target list and no state.

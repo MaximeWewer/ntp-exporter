@@ -8,6 +8,7 @@
 package collector
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -29,6 +30,17 @@ type KernelReader interface {
 	Read() (*ntp.KernelTimex, error)
 }
 
+// ChronyReader reads the tracking report of chronyd
+type ChronyReader interface {
+	Tracking(ctx context.Context) (*ntp.ChronyTracking, error)
+}
+
+// chronyState is the result of the last tracking request
+type chronyState struct {
+	tracking *ntp.ChronyTracking
+	err      error
+}
+
 // Exporter is a prometheus.Collector built on the last probe cycle
 type Exporter struct {
 	cfg     *config.Config
@@ -37,6 +49,7 @@ type Exporter struct {
 
 	// Kernel state, only read when kernel monitoring is enabled
 	kernelReader KernelReader
+	chronyReader ChronyReader
 	nodeName     string
 
 	mu          sync.RWMutex
@@ -44,6 +57,7 @@ type Exporter struct {
 	last        *probe.CycleResult
 	consensus   *probe.Consensus
 	kernelState *ntp.KernelTimex
+	chrony      *chronyState
 	lastSuccess map[string]time.Time
 }
 
@@ -59,10 +73,26 @@ func NewExporter(cfg *config.Config, m *metrics.NTPMetrics) *Exporter {
 
 	if cfg.NTP.Kernel.Enabled {
 		e.kernelReader = ntp.NewKernelReader(true)
+	}
+	if cfg.NTP.Chrony.Enabled {
+		// The address is validated with the configuration
+		if client, err := ntp.NewChronyClient(cfg.NTP.Chrony.Address, cfg.NTP.Timeout); err == nil {
+			e.chronyReader = client
+		}
+	}
+	if cfg.NTP.Kernel.Enabled || cfg.NTP.Chrony.Enabled {
 		e.nodeName = nodeName()
 	}
 
 	return e
+}
+
+// SetChronyReader replaces the chronyd client
+func (e *Exporter) SetChronyReader(r ChronyReader) {
+	e.chronyReader = r
+	if e.nodeName == "" {
+		e.nodeName = nodeName()
+	}
 }
 
 // nodeName returns the node name set by the DaemonSet, or the hostname
@@ -87,6 +117,20 @@ func (e *Exporter) Update(result *probe.CycleResult) {
 			})
 		}
 		kernelState = state
+	}
+
+	var chrony *chronyState
+	if e.chronyReader != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), e.cfg.NTP.Timeout)
+		tracking, err := e.chronyReader.Tracking(ctx)
+		cancel()
+		if err != nil {
+			logger.SafeWarn("collector", "Failed to read chronyd tracking report", map[string]interface{}{
+				"address": e.cfg.NTP.Chrony.Address,
+				"error":   err.Error(),
+			})
+		}
+		chrony = &chronyState{tracking: tracking, err: err}
 	}
 
 	e.updateCounters(result)
@@ -134,6 +178,7 @@ func (e *Exporter) Update(result *probe.CycleResult) {
 	e.last = result
 	e.consensus = consensus
 	e.kernelState = kernelState
+	e.chrony = chrony
 }
 
 // Ready returns nil when a cycle has completed recently (within 3 intervals)
@@ -224,6 +269,39 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	if e.kernelState != nil {
 		e.collectKernel(ch)
 	}
+
+	if e.chrony != nil {
+		e.collectChrony(ch)
+	}
+}
+
+// collectChrony emits the chronyd tracking report
+func (e *Exporter) collectChrony(ch chan<- prometheus.Metric) {
+	d := e.descs
+	node := e.nodeName
+	t := e.chrony.tracking
+
+	if e.chrony.err != nil || t == nil {
+		gauge(ch, d.chronyUp, 0, node)
+		return
+	}
+	gauge(ch, d.chronyUp, 1, node)
+
+	gauge(ch, d.chronyInfo, 1, node, t.RefIDHex(), t.Source)
+	gauge(ch, d.chronyStratum, float64(t.Stratum), node)
+	gauge(ch, d.chronyLeapStatus, float64(t.LeapStatus), node)
+	if !t.RefTime.IsZero() {
+		gauge(ch, d.chronyRefTime, float64(t.RefTime.UnixNano())/1e9, node)
+	}
+	gauge(ch, d.chronyCorrection, t.CurrentCorrection, node)
+	gauge(ch, d.chronyLastOffset, t.LastOffset, node)
+	gauge(ch, d.chronyRMSOffset, t.RMSOffset, node)
+	gauge(ch, d.chronyFrequency, t.FreqPPM, node)
+	gauge(ch, d.chronyResidualFrequency, t.ResidFreqPPM, node)
+	gauge(ch, d.chronySkew, t.SkewPPM, node)
+	gauge(ch, d.chronyRootDelay, t.RootDelay, node)
+	gauge(ch, d.chronyRootDispersion, t.RootDispersion, node)
+	gauge(ch, d.chronyUpdateInterval, t.LastUpdateInterval, node)
 }
 
 func gauge(ch chan<- prometheus.Metric, desc *prometheus.Desc, value float64, labels ...string) {

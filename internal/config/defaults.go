@@ -47,6 +47,9 @@ func ApplyDefaults(cfg *Config) {
 	if cfg.NTP.SamplesPerServer == 0 {
 		cfg.NTP.SamplesPerServer = 4
 	}
+	if cfg.NTP.Chrony.Address == "" {
+		cfg.NTP.Chrony.Address = "udp://127.0.0.1:323"
+	}
 	if cfg.NTP.IPFamily == "" {
 		cfg.NTP.IPFamily = IPFamilyAuto
 	}
