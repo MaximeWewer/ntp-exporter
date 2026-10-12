@@ -2,6 +2,7 @@ package ntp
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -198,7 +199,7 @@ func (r *Response) IsValid() bool {
 // code for stratum 0/1 sources (GPS, PPS, KoD codes...), an IPv4 address (or
 // the first bytes of the IPv6 address hash) for upper strata
 func (r *Response) ReferenceIDString() string {
-	b := []byte{byte(r.ReferenceID >> 24), byte(r.ReferenceID >> 16), byte(r.ReferenceID >> 8), byte(r.ReferenceID)}
+	b := binary.BigEndian.AppendUint32(nil, r.ReferenceID)
 	if r.Stratum <= 1 {
 		end := len(b)
 		for end > 0 && b[end-1] == 0 {

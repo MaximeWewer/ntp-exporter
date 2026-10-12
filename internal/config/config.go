@@ -235,7 +235,7 @@ func LoadFromEnvVarsOnly() (*Config, error) {
 
 // readYamlFile parses a YAML file strictly: unknown keys are rejected
 func readYamlFile(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // the path is the operator-provided -config flag
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file %s: %w", path, err)
 	}

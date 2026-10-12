@@ -36,6 +36,8 @@ func (k *KernelReader) Read() (*KernelTimex, error) {
 
 // fromTimex converts the raw kernel structure. Field widths differ between
 // 32 and 64-bit architectures, hence the explicit int64 conversions.
+//
+//nolint:unconvert // conversions are required on 32-bit architectures
 func fromTimex(tx *unix.Timex, state int) *KernelTimex {
 	status := int32(tx.Status)
 

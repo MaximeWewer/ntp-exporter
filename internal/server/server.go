@@ -85,7 +85,7 @@ func (s *Server) Start(ctx context.Context) error {
 		logger.Info("server", "Shutting down HTTP server")
 		return s.Shutdown(context.Background())
 	case err := <-errChan:
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("HTTP server failed on %s: %w", s.server.Addr, err)
 		}
 		return nil
@@ -125,9 +125,6 @@ func createSecureTLSConfig() *tls.Config {
 			tls.CurveP384,
 			tls.CurveP256,
 		},
-
-		// Prefer server cipher suites
-		PreferServerCipherSuites: true,
 
 		// Secure cipher suites (TLS 1.2+)
 		// Prioritize ECDHE for Perfect Forward Secrecy

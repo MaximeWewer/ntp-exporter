@@ -53,7 +53,7 @@ func InitLogger(cfg Config) error {
 			writer = os.Stderr
 		case "file":
 			if cfg.EnableFile && cfg.FilePath != "" {
-				file, err := os.OpenFile(cfg.FilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+				file, err := os.OpenFile(cfg.FilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 				if err != nil {
 					return err
 				}
