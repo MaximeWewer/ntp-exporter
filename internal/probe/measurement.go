@@ -14,6 +14,9 @@ type Target struct {
 	Server string
 	// Pool is the pool name for pool members, empty for configured servers
 	Pool string
+	// Address is the IP address (with optional port) queried during the cycle:
+	// every sample of a burst goes to the same address
+	Address string
 }
 
 // Measurement is the result of one burst of queries to a target

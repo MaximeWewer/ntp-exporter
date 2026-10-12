@@ -46,7 +46,9 @@ func newMockedLoop(t *testing.T) (*config.Config, *probe.Prober, *ntp.MockNTPCli
 	cfg.NTP.SamplesPerServer = 1
 	mock := ntp.NewMockNTPClient()
 	mock.SetupSuccessfulServer("time.example.org", time.Millisecond, 2)
-	return cfg, probe.New(cfg, mock), mock
+	prober := probe.New(cfg, mock)
+	prober.SetResolver(identityResolver{})
+	return cfg, prober, mock
 }
 
 func TestRunCollectionLoop_ContextCancellation(t *testing.T) {
@@ -68,4 +70,12 @@ func TestRunCollectionLoop_WithTimeout(t *testing.T) {
 	err := runCollectionLoop(ctx, cfg, prober, collector.NewExporter(cfg, metrics.NewNTPMetrics()))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, mock.GetCallCount("time.example.org"), "initial cycle queries the server once")
+}
+
+// identityResolver resolves every host to itself, so that the mock keyed by
+// host name receives the queries
+type identityResolver struct{}
+
+func (identityResolver) LookupHost(_ context.Context, host string) ([]string, error) {
+	return []string{host}, nil
 }

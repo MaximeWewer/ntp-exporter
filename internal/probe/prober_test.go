@@ -25,7 +25,7 @@ func TestProber_QueriesEachTargetOncePerCycle(t *testing.T) {
 	mock.SetupSuccessfulServer("a.example.org", time.Millisecond, 2)
 	mock.SetupSuccessfulServer("b.example.org", 2*time.Millisecond, 1)
 
-	result := New(newTestConfig("a.example.org", "b.example.org"), mock).Run(context.Background())
+	result := newProber(newTestConfig("a.example.org", "b.example.org"), mock).Run(context.Background())
 
 	require.Len(t, result.Measurements, 2)
 	// One burst of samples_per_server queries per target, shared by every metric family
@@ -45,7 +45,7 @@ func TestProber_UnreachableTarget(t *testing.T) {
 	mock := ntp.NewMockNTPClient()
 	mock.SetupUnreachableServer("down.example.org")
 
-	result := New(newTestConfig("down.example.org"), mock).Run(context.Background())
+	result := newProber(newTestConfig("down.example.org"), mock).Run(context.Background())
 
 	require.Len(t, result.Measurements, 1)
 	m := result.Measurements[0]
@@ -59,7 +59,7 @@ func TestProber_InvalidResponsesAreNotBest(t *testing.T) {
 	mock := ntp.NewMockNTPClient()
 	mock.SetupKoDServer("kod.example.org", "RATE")
 
-	m := New(newTestConfig("kod.example.org"), mock).Run(context.Background()).Measurements[0]
+	m := newProber(newTestConfig("kod.example.org"), mock).Run(context.Background()).Measurements[0]
 
 	assert.True(t, m.Reachable())
 	assert.Nil(t, m.Best())
@@ -73,7 +73,7 @@ func TestProber_PoolMembers(t *testing.T) {
 	cfg := newTestConfig()
 	cfg.NTP.Pools = []config.PoolConfig{{Name: "192.0.2.10", Strategy: "best_n", MaxServers: 4}}
 
-	result := New(cfg, mock).Run(context.Background())
+	result := newProber(cfg, mock).Run(context.Background())
 
 	require.Len(t, result.Pools, 1)
 	assert.Equal(t, []string{"192.0.2.10"}, result.Pools[0].Members)
@@ -88,7 +88,7 @@ func TestProber_StopsOnCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	result := New(newTestConfig("a.example.org"), mock).Run(ctx)
+	result := newProber(newTestConfig("a.example.org"), mock).Run(ctx)
 	assert.Empty(t, result.Measurements)
 }
 
@@ -127,7 +127,7 @@ func TestProber_BoundedConcurrency(t *testing.T) {
 	cfg.NTP.SamplesPerServer = 1
 	cfg.NTP.MaxConcurrency = 10
 
-	result := New(cfg, mock).Run(context.Background())
+	result := newProber(cfg, mock).Run(context.Background())
 
 	require.Len(t, result.Measurements, 30)
 	assert.LessOrEqual(t, mock.max, 10)
@@ -144,7 +144,7 @@ func TestProber_SlowTargetDoesNotBlockCycle(t *testing.T) {
 	mock.SetupSuccessfulServer("slow.example.org", time.Millisecond, 2)
 	mock.SetDelay("slow.example.org", time.Hour)
 
-	p := New(newTestConfig("slow.example.org", "fast.example.org"), mock)
+	p := newProber(newTestConfig("slow.example.org", "fast.example.org"), mock)
 	p.cycleTimeout = 200 * time.Millisecond
 
 	start := time.Now()
@@ -159,4 +159,82 @@ func TestProber_SlowTargetDoesNotBlockCycle(t *testing.T) {
 func TestCycleTimeout(t *testing.T) {
 	assert.Equal(t, 29*time.Second, CycleTimeout(30*time.Second))
 	assert.Equal(t, 4500*time.Millisecond, CycleTimeout(5*time.Second))
+}
+
+// identityResolver resolves every host to itself, so that the mock keyed by
+// host name receives the queries
+type identityResolver struct{}
+
+func (identityResolver) LookupHost(_ context.Context, host string) ([]string, error) {
+	return []string{host}, nil
+}
+
+func newProber(cfg *config.Config, client ntp.NTPQuerier) *Prober {
+	p := New(cfg, client)
+	p.SetResolver(identityResolver{})
+	return p
+}
+
+// rotatingResolver returns a different address at each lookup, like pool.ntp.org
+type rotatingResolver struct {
+	mu    sync.Mutex
+	addrs []string
+	calls int
+}
+
+func (r *rotatingResolver) LookupHost(_ context.Context, _ string) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	addr := r.addrs[r.calls%len(r.addrs)]
+	r.calls++
+	return []string{addr}, nil
+}
+
+func TestProber_BurstIsPinnedToOneAddress(t *testing.T) {
+	mock := ntp.NewMockNTPClient()
+	mock.SetupSuccessfulServer("192.0.2.1", time.Millisecond, 2)
+	mock.SetupSuccessfulServer("192.0.2.2", time.Millisecond, 2)
+	resolver := &rotatingResolver{addrs: []string{"192.0.2.1", "192.0.2.2"}}
+
+	p := New(newTestConfig("pool.ntp.org"), mock)
+	p.SetResolver(resolver)
+
+	first := p.Run(context.Background()).Measurements[0]
+	assert.Equal(t, "192.0.2.1", first.Target.Address)
+	assert.Equal(t, 3, mock.GetCallCount("192.0.2.1"), "every sample of the burst goes to the same address")
+	assert.Equal(t, 0, mock.GetCallCount("192.0.2.2"))
+	for _, r := range first.Responses {
+		assert.Equal(t, "pool.ntp.org", r.Server, "responses keep the configured name")
+	}
+
+	second := p.Run(context.Background()).Measurements[0]
+	assert.Equal(t, "192.0.2.2", second.Target.Address, "the name is resolved again at each cycle")
+	assert.Equal(t, 2, resolver.calls)
+}
+
+func TestProber_ServerWithPort(t *testing.T) {
+	mock := ntp.NewMockNTPClient()
+	mock.SetupSuccessfulServer("192.0.2.1:1123", time.Millisecond, 2)
+	p := New(newTestConfig("ntp.example.org:1123"), mock)
+	p.SetResolver(&rotatingResolver{addrs: []string{"192.0.2.1"}})
+
+	m := p.Run(context.Background()).Measurements[0]
+	assert.Equal(t, "192.0.2.1:1123", m.Target.Address)
+	assert.True(t, m.Reachable())
+}
+
+type failingResolver struct{}
+
+func (failingResolver) LookupHost(context.Context, string) ([]string, error) {
+	return nil, fmt.Errorf("no such host")
+}
+
+func TestProber_ResolutionFailure(t *testing.T) {
+	p := New(newTestConfig("unknown.example.org"), ntp.NewMockNTPClient())
+	p.SetResolver(failingResolver{})
+
+	m := p.Run(context.Background()).Measurements[0]
+	assert.False(t, m.Reachable())
+	assert.ErrorContains(t, m.Err, "no such host")
+	assert.Equal(t, 1.0, m.Stats().PacketLossRatio)
 }

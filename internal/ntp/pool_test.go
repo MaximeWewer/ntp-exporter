@@ -322,3 +322,19 @@ func TestPool_MaxServersLimit(t *testing.T) {
 	// Verify maxServers is set correctly
 	assert.Equal(t, 2, pool.maxServers)
 }
+
+func TestPoolMembers_DNSDurationIgnoresCacheHits(t *testing.T) {
+	p := NewPoolWithDNSCache("localhost", "all", 4, "", NewMockNTPClient(), DNSCacheConfig{MinTTL: time.Hour, MaxTTL: time.Hour})
+
+	_, _, first, err := p.Members(context.Background())
+	if err != nil {
+		t.Skipf("localhost resolution unavailable: %v", err)
+	}
+	_, _, second, err := p.Members(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Errorf("cache hit must keep the last real resolution duration: first=%v second=%v", first, second)
+	}
+}

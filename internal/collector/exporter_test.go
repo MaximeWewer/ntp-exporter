@@ -48,6 +48,7 @@ func (h *harness) cycle() *probe.CycleResult {
 	h.t.Helper()
 	if h.prober == nil {
 		h.prober = probe.New(h.cfg, h.client)
+		h.prober.SetResolver(identityResolver{})
 	}
 	result := h.prober.Run(context.Background())
 	h.exporter.Update(result)
@@ -298,4 +299,12 @@ func TestCalculateCoherence(t *testing.T) {
 	assert.InDelta(t, 0.7, calculateCoherence(0.010, 0), 1e-9)
 	assert.InDelta(t, 0.5, calculateCoherence(0.050, 0), 0.15)
 	assert.Less(t, calculateCoherence(1, 0), 0.01)
+}
+
+// identityResolver resolves every host to itself, so that the mock keyed by
+// host name receives the queries
+type identityResolver struct{}
+
+func (identityResolver) LookupHost(_ context.Context, host string) ([]string, error) {
+	return []string{host}, nil
 }

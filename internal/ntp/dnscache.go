@@ -19,10 +19,10 @@ type DNSCacheEntry struct {
 
 // DNSCache provides intelligent DNS caching with adaptive TTL
 type DNSCache struct {
-	mu      sync.RWMutex
-	cache   map[string]*DNSCacheEntry
-	minTTL  time.Duration
-	maxTTL  time.Duration
+	mu       sync.RWMutex
+	cache    map[string]*DNSCacheEntry
+	minTTL   time.Duration
+	maxTTL   time.Duration
 	resolver *net.Resolver
 }
 
@@ -53,9 +53,16 @@ func NewDNSCache(config DNSCacheConfig) *DNSCache {
 
 // Resolve resolves a hostname with intelligent caching
 func (c *DNSCache) Resolve(ctx context.Context, hostname string) ([]string, error) {
+	ips, _, err := c.ResolveCached(ctx, hostname)
+	return ips, err
+}
+
+// ResolveCached resolves a hostname and reports whether the answer came from
+// the cache (or from a stale entry after a resolution failure)
+func (c *DNSCache) ResolveCached(ctx context.Context, hostname string) ([]string, bool, error) {
 	// Check if IP address (no resolution needed)
 	if net.ParseIP(hostname) != nil {
-		return []string{hostname}, nil
+		return []string{hostname}, true, nil
 	}
 
 	// Check cache
@@ -69,7 +76,7 @@ func (c *DNSCache) Resolve(ctx context.Context, hostname string) ([]string, erro
 			"ips":      len(entry.IPs),
 			"ttl":      entry.TTL.String(),
 		})
-		return entry.IPs, nil
+		return entry.IPs, true, nil
 	}
 
 	// Cache miss or expired - perform resolution
@@ -90,9 +97,9 @@ func (c *DNSCache) Resolve(ctx context.Context, hostname string) ([]string, erro
 				"error":       err.Error(),
 				"error_count": entry.ErrorCount,
 			})
-			return entry.IPs, nil
+			return entry.IPs, true, nil
 		}
-		return nil, err
+		return nil, false, err
 	}
 
 	// Calculate adaptive TTL based on success/failure history
@@ -114,7 +121,7 @@ func (c *DNSCache) Resolve(ctx context.Context, hostname string) ([]string, erro
 		"ttl":      ttl.String(),
 	})
 
-	return ips, nil
+	return ips, false, nil
 }
 
 // resolveWithTimeout performs DNS resolution with timeout

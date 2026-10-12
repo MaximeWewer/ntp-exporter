@@ -3,6 +3,8 @@ package probe
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
@@ -11,11 +13,17 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// Resolver resolves host names
+type Resolver interface {
+	LookupHost(ctx context.Context, host string) ([]string, error)
+}
+
 // Prober queries every target exactly once per cycle
 type Prober struct {
-	cfg    *config.Config
-	client ntp.NTPQuerier
-	pools  []*ntp.Pool
+	cfg      *config.Config
+	client   ntp.NTPQuerier
+	pools    []*ntp.Pool
+	resolver Resolver
 	// cycleTimeout bounds a cycle so that it always ends before the next one
 	cycleTimeout time.Duration
 }
@@ -25,15 +33,22 @@ type Prober struct {
 func New(cfg *config.Config, client ntp.NTPQuerier) *Prober {
 	pools := make([]*ntp.Pool, 0, len(cfg.NTP.Pools))
 	for _, pc := range cfg.NTP.Pools {
-		pools = append(pools, ntp.NewPool(pc.Name, pc.Strategy, pc.MaxServers, pc.Fallback, client))
+		pools = append(pools, ntp.NewPoolWithDNSCache(pc.Name, pc.Strategy, pc.MaxServers, pc.Fallback, client,
+			ntp.DNSCacheConfig{MinTTL: cfg.NTP.DNSCache.MinTTL, MaxTTL: cfg.NTP.DNSCache.MaxTTL}))
 	}
 
 	return &Prober{
 		cfg:          cfg,
 		client:       client,
 		pools:        pools,
+		resolver:     net.DefaultResolver,
 		cycleTimeout: CycleTimeout(cfg.NTP.ScrapeInterval),
 	}
+}
+
+// SetResolver replaces the resolver used for configured servers
+func (p *Prober) SetResolver(r Resolver) {
+	p.resolver = r
 }
 
 // CycleTimeout returns the maximum duration of a cycle for an interval:
@@ -106,17 +121,58 @@ func (p *Prober) resolveTargets(ctx context.Context, result *CycleResult) []Targ
 			continue
 		}
 		for _, member := range members {
-			targets = append(targets, Target{Server: member, Pool: pool.Name()})
+			targets = append(targets, Target{Server: member, Pool: pool.Name(), Address: member})
 		}
 	}
 
 	return targets
 }
 
+// resolve returns the address to query for a configured server. The host is
+// resolved once per cycle so that every sample of the burst reaches the same
+// server, even behind a round-robin name such as pool.ntp.org.
+func (p *Prober) resolve(ctx context.Context, server string) (string, error) {
+	host, port, err := net.SplitHostPort(server)
+	if err != nil {
+		host, port = server, ""
+	}
+	if net.ParseIP(host) != nil {
+		return server, nil
+	}
+
+	addrs, err := p.resolver.LookupHost(ctx, host)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve %s: %w", host, err)
+	}
+	if len(addrs) == 0 {
+		return "", fmt.Errorf("no address found for %s", host)
+	}
+
+	if port != "" {
+		return net.JoinHostPort(addrs[0], port), nil
+	}
+	return addrs[0], nil
+}
+
 // measure sends one burst of queries to a target
 func (p *Prober) measure(ctx context.Context, target Target) *Measurement {
 	m := &Measurement{Target: target, Timestamp: time.Now()}
 	defer func() { m.Duration = time.Since(m.Timestamp) }()
+
+	if m.Target.Address == "" {
+		address, err := p.resolve(ctx, target.Server)
+		if err != nil {
+			m.Sent = p.cfg.NTP.SamplesPerServer
+			m.Err = err
+			logger.SafeDebug("probe", "Target resolution failed", map[string]interface{}{
+				"server": target.Server,
+				"error":  err.Error(),
+			})
+			return m
+		}
+		m.Target.Address = address
+	}
+	address := m.Target.Address
 
 	var err error
 	if p.cfg.NTP.AdaptiveSampling.Enabled {
@@ -126,18 +182,24 @@ func (p *Prober) measure(ctx context.Context, target Target) *Measurement {
 			DriftThreshold:   p.cfg.NTP.AdaptiveSampling.DriftThreshold,
 			MaxDuration:      p.cfg.NTP.AdaptiveSampling.MaxDuration,
 		}, p.client)
-		m.Responses, m.Sent, err = sampler.SampleWithCount(ctx, target.Server)
+		m.Responses, m.Sent, err = sampler.SampleWithCount(ctx, address)
 	} else {
 		m.Sent = p.cfg.NTP.SamplesPerServer
-		m.Responses, err = p.client.QueryMultiple(ctx, target.Server, m.Sent)
+		m.Responses, err = p.client.QueryMultiple(ctx, address, m.Sent)
+	}
+
+	// Responses are labelled with the configured server name
+	for _, resp := range m.Responses {
+		resp.Server = target.Server
 	}
 
 	if err != nil && len(m.Responses) == 0 {
 		m.Err = err
 		logger.SafeDebug("probe", "Target unreachable", map[string]interface{}{
-			"server": target.Server,
-			"pool":   target.Pool,
-			"error":  err.Error(),
+			"server":  target.Server,
+			"address": address,
+			"pool":    target.Pool,
+			"error":   err.Error(),
 		})
 	}
 

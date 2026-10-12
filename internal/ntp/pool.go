@@ -20,6 +20,8 @@ type Pool struct {
 	dnsCache      *DNSCache
 	workerPool    *WorkerPool
 	useWorkerPool bool
+	// lastDNSDuration is the duration of the last real (non cached) resolution
+	lastDNSDuration time.Duration
 }
 
 // PoolResponse represents aggregated responses from a pool
@@ -52,6 +54,13 @@ func NewPool(name, strategy string, maxServers int, fallback string, querier NTP
 		workerPool:    nil, // Created on-demand
 		useWorkerPool: false,
 	}
+}
+
+// NewPoolWithDNSCache creates a pool whose DNS answers are cached with the given TTLs
+func NewPoolWithDNSCache(name, strategy string, maxServers int, fallback string, querier NTPQuerier, dns DNSCacheConfig) *Pool {
+	p := NewPool(name, strategy, maxServers, fallback, querier)
+	p.dnsCache = NewDNSCache(dns)
+	return p
 }
 
 // Name returns the pool DNS name
@@ -193,12 +202,16 @@ func (p *Pool) Query(ctx context.Context, samples int) (*PoolResponse, error) {
 }
 
 // Members resolves the pool and returns the addresses to query according to
-// the strategy, the total number of resolved addresses and the DNS duration
+// the strategy, the total number of resolved addresses and the duration of
+// the last real DNS resolution (cache hits do not reset it)
 func (p *Pool) Members(ctx context.Context) ([]string, int, time.Duration, error) {
 	start := time.Now()
 
-	ips, err := p.dnsCache.Resolve(ctx, p.name)
-	duration := time.Since(start)
+	ips, cached, err := p.dnsCache.ResolveCached(ctx, p.name)
+	if !cached {
+		p.lastDNSDuration = time.Since(start)
+	}
+	duration := p.lastDNSDuration
 	if err != nil {
 		if p.fallback != "" {
 			logger.SafeWarn("ntp", "Pool resolution failed, using fallback server", map[string]interface{}{
