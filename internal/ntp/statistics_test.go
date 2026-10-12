@@ -148,31 +148,6 @@ func TestStdDev(t *testing.T) {
 	}
 }
 
-
-func TestSortFloat64(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []float64
-		expected []float64
-	}{
-		{"already_sorted", []float64{1.0, 2.0, 3.0}, []float64{1.0, 2.0, 3.0}},
-		{"reverse_sorted", []float64{3.0, 2.0, 1.0}, []float64{1.0, 2.0, 3.0}},
-		{"unsorted", []float64{3.0, 1.0, 4.0, 1.0, 5.0}, []float64{1.0, 1.0, 3.0, 4.0, 5.0}},
-		{"single", []float64{5.0}, []float64{5.0}},
-		{"empty", []float64{}, []float64{}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			input := make([]float64, len(tt.input))
-			copy(input, tt.input)
-
-			sortFloat64(input)
-			assert.Equal(t, tt.expected, input)
-		})
-	}
-}
-
 func TestCalculatePacketLoss(t *testing.T) {
 	tests := []struct {
 		name     string

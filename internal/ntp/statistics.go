@@ -34,18 +34,8 @@ func CalculateStatistics(responses []*Response, totalSamples int) *Statistics {
 		PacketLossRatio: calculatePacketLoss(len(responses), totalSamples),
 	}
 
-	// Extract offsets and RTTs using pooled slices
-	offsetsPtr := GetFloat64Slice(len(responses))
-	rttsPtr := GetFloat64Slice(len(responses))
-	defer PutFloat64Slice(offsetsPtr)
-	defer PutFloat64Slice(rttsPtr)
-
-	offsets := *offsetsPtr
-	rtts := *rttsPtr
-
-	// Resize slices to exact length needed
-	offsets = offsets[:len(responses)]
-	rtts = rtts[:len(responses)]
+	offsets := make([]float64, len(responses))
+	rtts := make([]float64, len(responses))
 
 	for i, resp := range responses {
 		offsets[i] = resp.Offset.Seconds()
@@ -89,14 +79,8 @@ func median(values []float64) float64 {
 		return 0
 	}
 
-	// Create a copy and sort using pooled slice
-	sortedPtr := GetFloat64Slice(len(values))
-	defer PutFloat64Slice(sortedPtr)
-
-	sorted := *sortedPtr
-	sorted = sorted[:len(values)]
-	copy(sorted, values)
-	sortFloat64(sorted)
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
 
 	n := len(sorted)
 	if n%2 == 0 {
@@ -164,10 +148,4 @@ func jitter(offsets, rtts []float64) float64 {
 		sum += diff * diff
 	}
 	return math.Sqrt(sum / float64(n-1))
-}
-
-// sortFloat64 sorts a slice of float64 values in-place using the standard library
-// This is significantly faster than bubble sort (O(n log n) vs O(n²))
-func sortFloat64(values []float64) {
-	sort.Float64s(values)
 }

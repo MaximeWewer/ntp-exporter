@@ -97,21 +97,6 @@ func TestClient_QueryWithTimeout(t *testing.T) {
 	assert.Error(t, err, "Should timeout on unreachable server")
 }
 
-func TestClient_QueryWithRateLimit(t *testing.T) {
-	client := NewClientWithRateLimit(2*time.Second, 4, 10, 5, 2)
-	assert.NotNil(t, client, "Client with rate limit should be created")
-
-	t.Run("handles_context_cancellation_with_rate_limit", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
-		resp, err := client.Query(ctx, "192.0.2.1")
-
-		assert.Error(t, err)
-		assert.Nil(t, resp)
-	})
-}
-
 func TestClient_VersionConfiguration(t *testing.T) {
 	tests := []struct {
 		name    string

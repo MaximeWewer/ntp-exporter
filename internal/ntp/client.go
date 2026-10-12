@@ -13,9 +13,8 @@ import (
 
 // Client is an enhanced NTP client with advanced features
 type Client struct {
-	timeout     time.Duration
-	version     int
-	rateLimiter *RateLimiter
+	timeout time.Duration
+	version int
 	// spacing is the delay between two queries of a burst to the same server
 	spacing time.Duration
 }
@@ -40,13 +39,12 @@ type Response struct {
 	KissCode       string
 }
 
-// NewClient creates a new NTP client without rate limiting
+// NewClient creates a new NTP client
 func NewClient(timeout time.Duration, version int) *Client {
 	return &Client{
-		timeout:     timeout,
-		version:     version,
-		rateLimiter: nil,
-		spacing:     DelayBetweenSamples,
+		timeout: timeout,
+		version: version,
+		spacing: DelayBetweenSamples,
 	}
 }
 
@@ -55,30 +53,8 @@ func (c *Client) SetSampleSpacing(spacing time.Duration) {
 	c.spacing = spacing
 }
 
-// NewClientWithRateLimit creates a new NTP client with rate limiting enabled
-func NewClientWithRateLimit(timeout time.Duration, version int, globalRate, perServerRate, burstSize int) *Client {
-	var limiter *RateLimiter
-	if globalRate > 0 {
-		limiter = NewRateLimiter(globalRate, perServerRate, burstSize)
-	}
-
-	return &Client{
-		timeout:     timeout,
-		version:     version,
-		rateLimiter: limiter,
-		spacing:     DelayBetweenSamples,
-	}
-}
-
 // Query performs a single NTP query to the specified server
 func (c *Client) Query(ctx context.Context, server string) (*Response, error) {
-	// Apply rate limiting if enabled
-	if c.rateLimiter != nil {
-		if err := c.rateLimiter.Wait(ctx, server); err != nil {
-			return nil, fmt.Errorf("rate limit exceeded: %w", err)
-		}
-	}
-
 	// Create NTP query options
 	opts := ntp.QueryOptions{
 		Timeout: c.timeout,
@@ -125,8 +101,7 @@ func (c *Client) Query(ctx context.Context, server string) (*Response, error) {
 			})
 		}
 
-		// Convert to our response format using pooled Response
-		resp := GetResponse()
+		resp := &Response{}
 		resp.Server = server
 		resp.Offset = result.response.ClockOffset
 		resp.RTT = result.response.RTT
@@ -155,21 +130,14 @@ func (c *Client) Query(ctx context.Context, server string) (*Response, error) {
 	}
 }
 
-// QueryMultiple performs multiple NTP queries and returns all responses
-// Uses object pooling to reduce allocations
+// QueryMultiple performs a burst of NTP queries and returns every response
 func (c *Client) QueryMultiple(ctx context.Context, server string, count int) ([]*Response, error) {
-	// Use pooled slice to reduce allocations
-	responseSlicePtr := GetResponseSlice()
-	defer PutResponseSlice(responseSlicePtr)
-	responses := *responseSlicePtr
+	responses := make([]*Response, 0, count)
 
 	for i := 0; i < count; i++ {
 		select {
 		case <-ctx.Done():
-			// Copy results before returning the pooled slice
-			result := make([]*Response, len(responses))
-			copy(result, responses)
-			return result, ctx.Err()
+			return responses, ctx.Err()
 		default:
 		}
 
@@ -192,9 +160,7 @@ func (c *Client) QueryMultiple(ctx context.Context, server string, count int) ([
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				result := make([]*Response, len(responses))
-				copy(result, responses)
-				return result, ctx.Err()
+				return responses, ctx.Err()
 			case <-timer.C:
 			}
 		}
@@ -211,10 +177,7 @@ func (c *Client) QueryMultiple(ctx context.Context, server string, count int) ([
 		"total":      count,
 	})
 
-	// Copy results before returning the pooled slice
-	result := make([]*Response, len(responses))
-	copy(result, responses)
-	return result, nil
+	return responses, nil
 }
 
 // IsKissOfDeath checks if the response contains a Kiss-of-Death code
