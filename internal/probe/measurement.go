@@ -52,13 +52,17 @@ func (m *Measurement) Valid() []*ntp.Response {
 	return ntp.ValidResponses(m.Responses)
 }
 
-// Best returns the reference sample of the burst, or nil without valid response
+// Best returns the reference sample of the burst, or nil without valid response.
+// Like the NTP clock filter (RFC 5905 §10), it is the valid sample with the
+// lowest round-trip delay: the one least affected by network queuing.
 func (m *Measurement) Best() *ntp.Response {
-	valid := m.Valid()
-	if len(valid) == 0 {
-		return nil
+	var best *ntp.Response
+	for _, r := range m.Valid() {
+		if best == nil || r.RTT < best.RTT {
+			best = r
+		}
 	}
-	return valid[0]
+	return best
 }
 
 // Stats computes statistics on valid responses; invalid ones count as lost

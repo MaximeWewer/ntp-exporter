@@ -238,3 +238,30 @@ func TestProber_ResolutionFailure(t *testing.T) {
 	assert.ErrorContains(t, m.Err, "no such host")
 	assert.Equal(t, 1.0, m.Stats().PacketLossRatio)
 }
+
+func sample(offset, rtt time.Duration) *ntp.Response {
+	return &ntp.Response{Stratum: 2, Offset: offset, RTT: rtt}
+}
+
+func TestMeasurement_BestIsLowestDelaySample(t *testing.T) {
+	m := &Measurement{Sent: 4, Responses: []*ntp.Response{
+		sample(5*time.Millisecond, 40*time.Millisecond),
+		sample(2*time.Millisecond, 12*time.Millisecond),
+		sample(8*time.Millisecond, 60*time.Millisecond),
+		sample(3*time.Millisecond, 15*time.Millisecond),
+	}}
+
+	best := m.Best()
+	require.NotNil(t, best)
+	assert.Equal(t, 2*time.Millisecond, best.Offset)
+	assert.Equal(t, 12*time.Millisecond, best.RTT)
+	assert.Equal(t, 4*time.Millisecond, m.Stats().MedianOffset)
+}
+
+func TestMeasurement_BestIgnoresInvalidSamples(t *testing.T) {
+	kod := sample(0, time.Millisecond)
+	kod.KissCode = "RATE"
+	m := &Measurement{Sent: 2, Responses: []*ntp.Response{kod, sample(7*time.Millisecond, 30*time.Millisecond)}}
+
+	assert.Equal(t, 7*time.Millisecond, m.Best().Offset)
+}

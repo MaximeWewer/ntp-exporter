@@ -334,3 +334,42 @@ func TestExporter_KoDRateSkippedCycleIsNotCountedTwice(t *testing.T) {
 	assert.Equal(t, 3.0, h.mustValue("ntp_kiss_of_death_total", map[string]string{"server": server, "code": "RATE"}))
 	assert.Equal(t, 1.0, h.mustValue("ntp_up", srv(server)), "skipped target keeps its previous state")
 }
+
+// burstMock returns a fixed sequence of samples for each burst
+type burstMock struct {
+	*ntp.MockNTPClient
+	samples []*ntp.Response
+}
+
+func (b *burstMock) QueryMultiple(_ context.Context, server string, _ int) ([]*ntp.Response, error) {
+	out := make([]*ntp.Response, len(b.samples))
+	for i, s := range b.samples {
+		c := *s
+		c.Server = server
+		out[i] = &c
+	}
+	return out, nil
+}
+
+func TestExporter_OffsetFromLowestDelaySample(t *testing.T) {
+	const server = "filter.example.org"
+	h := newHarness(t, server)
+	h.cfg.NTP.SamplesPerServer = 4
+	mk := func(offset, rtt time.Duration) *ntp.Response {
+		return &ntp.Response{Stratum: 2, Offset: offset, RTT: rtt, ReferenceTime: time.Now()}
+	}
+	h.client = &burstMock{MockNTPClient: h.mock, samples: []*ntp.Response{
+		mk(5*time.Millisecond, 40*time.Millisecond),
+		mk(2*time.Millisecond, 12*time.Millisecond),
+		mk(8*time.Millisecond, 60*time.Millisecond),
+		mk(3*time.Millisecond, 15*time.Millisecond),
+	}}
+	h.cfg.NTP.MaxClockOffset = 2500 * time.Microsecond
+
+	h.cycle()
+
+	assert.InDelta(t, 0.002, h.mustValue("ntp_offset_seconds", srv(server)), 1e-9)
+	assert.InDelta(t, 0.012, h.mustValue("ntp_rtt_seconds", srv(server)), 1e-9)
+	assert.InDelta(t, 0.004, h.mustValue("ntp_offset_median_seconds", srv(server)), 1e-9)
+	assert.Equal(t, 0.0, h.mustValue("ntp_clock_offset_exceeded", srv(server)), "threshold applies to the best sample")
+}

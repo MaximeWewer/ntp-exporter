@@ -247,6 +247,7 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 	}
 
 	gauge(ch, d.offset, best.Offset.Seconds(), server)
+	gauge(ch, d.offsetMedian, stats.MedianOffset.Seconds(), server)
 	gauge(ch, d.offsetExceeded, offsetExceeded, server)
 	gauge(ch, d.rtt, best.RTT.Seconds(), server)
 	gauge(ch, d.stratum, float64(best.Stratum), server)

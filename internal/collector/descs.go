@@ -13,6 +13,7 @@ type descs struct {
 
 	// Base NTP metrics
 	offset         *prometheus.Desc
+	offsetMedian   *prometheus.Desc
 	offsetExceeded *prometheus.Desc
 	rtt            *prometheus.Desc
 	stratum        *prometheus.Desc
@@ -64,7 +65,8 @@ func newDescs(namespace, subsystem string) *descs {
 		lastSuccess: d(subsystem, "last_success_timestamp_seconds", "Unix time of the last cycle with a valid response from the server", server...),
 		suspended:   d(subsystem, "target_suspended", "Whether the server is no longer queried after a DENY or RSTR Kiss-o'-Death (1) or not (0)", "server", "code"),
 
-		offset:         d(subsystem, "offset_seconds", "Time offset between local clock and NTP server in seconds", server...),
+		offset:         d(subsystem, "offset_seconds", "Time offset between local clock and NTP server in seconds, from the sample with the lowest delay (RFC 5905 clock filter)", server...),
+		offsetMedian:   d(subsystem, "offset_median_seconds", "Median time offset of the valid samples of the last burst in seconds", server...),
 		offsetExceeded: d(subsystem, "clock_offset_exceeded", "Whether the clock offset exceeds the configured threshold (1 = exceeded, 0 = within limits)", server...),
 		rtt:            d(subsystem, "rtt_seconds", "Round-trip time to NTP server in seconds", server...),
 		stratum:        d(subsystem, "stratum", "NTP server stratum level (1-15)", server...),
@@ -104,7 +106,7 @@ func newDescs(namespace, subsystem string) *descs {
 func (d *descs) all() []*prometheus.Desc {
 	return []*prometheus.Desc{
 		d.up, d.lastSuccess, d.suspended,
-		d.offset, d.offsetExceeded, d.rtt, d.stratum, d.referenceTime,
+		d.offset, d.offsetMedian, d.offsetExceeded, d.rtt, d.stratum, d.referenceTime,
 		d.rootDelay, d.rootDispersion, d.rootDistance, d.precision, d.leapIndicator,
 		d.jitter, d.stability, d.asymmetry, d.samples, d.packetLoss,
 		d.trustScore,
