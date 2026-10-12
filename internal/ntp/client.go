@@ -12,6 +12,12 @@ import (
 	"github.com/maximewewer/ntp-exporter/pkg/logger"
 )
 
+// NTPQuerier is an interface for querying NTP servers
+type NTPQuerier interface {
+	Query(ctx context.Context, server string) (*Response, error)
+	QueryMultiple(ctx context.Context, server string, count int) ([]*Response, error)
+}
+
 // Client is an enhanced NTP client with advanced features
 type Client struct {
 	timeout time.Duration

@@ -78,14 +78,6 @@ configYaml:
         max_backoff: 1024s
         suspend_duration: 1h
 
-      # Adaptive sampling
-      adaptive_sampling:
-        enabled: false
-        default_samples: 4
-        max_samples: 8
-        dispersion_threshold: 10ms
-        max_duration: 30s
-
       # DNS cache of pool answers
       dns_cache:
         min_ttl: 5m
@@ -310,7 +302,7 @@ terminationGracePeriodSeconds: 30
 # 1. Edit the 'configYaml.content' section above
 # 2. Deploy with: helm install ntp-exporter . -f values-with-yaml-config.yaml
 #
-# A full YAML file keeps every option (pools, Kiss-o'-Death handling, adaptive
-# sampling, DNS cache, kernel option...) in a single reviewed place.
+# A full YAML file keeps every option (pools, Kiss-o'-Death handling,
+# DNS cache, kernel option...) in a single reviewed place.
 #
 # Environment variables can still override YAML values if needed

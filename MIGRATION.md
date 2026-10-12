@@ -116,13 +116,12 @@ parsing, **remove them from your configuration files**, or startup fails.
 | `ntp.circuit_breaker.*` | `CIRCUIT_BREAKER_*` |
 | `ntp.worker_pool.*` | `WORKER_POOL_*` |
 | `ntp.dns_cache.enabled`, `ntp.dns_cache.cleanup_workers` | `DNS_CACHE_ENABLED`, `DNS_CACHE_CLEANUP_WORKERS` |
-| `ntp.adaptive_sampling.high_drift_samples` | `ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES` → `max_samples` / `ADAPTIVE_SAMPLING_MAX_SAMPLES` |
-| `ntp.adaptive_sampling.drift_threshold` | `ADAPTIVE_SAMPLING_DRIFT_THRESHOLD` → `dispersion_threshold` / `ADAPTIVE_SAMPLING_DISPERSION_THRESHOLD` |
+| `ntp.adaptive_sampling.*` | `ADAPTIVE_SAMPLING_*` |
 
-Adaptive sampling now takes more samples when the initial burst is **noisy**
-(offset standard deviation above `dispersion_threshold`, or packet loss),
-instead of when the offset is large: a large but stable offset is a real
-offset.
+Adaptive sampling is removed: it took more samples when the offset was large,
+which is not a sign of a noisy measurement (a large but stable offset is a real
+offset). Every server now gets a fixed burst of `samples_per_server` queries;
+raise it for servers behind noisy links.
 
 ### New options
 

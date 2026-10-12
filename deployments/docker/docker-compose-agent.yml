@@ -53,15 +53,6 @@ services:
       NTP_KERNEL_VIOLATION_ONLY: "${NTP_KERNEL_VIOLATION_ONLY:-false}"
 
       # -----------------------------------------------------------------------
-      # ADAPTIVE SAMPLING - More samples for noisy servers (disabled in agent mode)
-      # -----------------------------------------------------------------------
-      ADAPTIVE_SAMPLING_ENABLED: "${ADAPTIVE_SAMPLING_ENABLED:-false}"
-      ADAPTIVE_SAMPLING_DEFAULT_SAMPLES: "${ADAPTIVE_SAMPLING_DEFAULT_SAMPLES:-4}"
-      ADAPTIVE_SAMPLING_MAX_SAMPLES: "${ADAPTIVE_SAMPLING_MAX_SAMPLES:-8}"
-      ADAPTIVE_SAMPLING_DISPERSION_THRESHOLD: "${ADAPTIVE_SAMPLING_DISPERSION_THRESHOLD:-10ms}"
-      ADAPTIVE_SAMPLING_MAX_DURATION: "${ADAPTIVE_SAMPLING_MAX_DURATION:-30s}"
-
-      # -----------------------------------------------------------------------
       # DNS CACHE - DNS cache
       # -----------------------------------------------------------------------
       DNS_CACHE_MIN_TTL: "${DNS_CACHE_MIN_TTL:-10m}"

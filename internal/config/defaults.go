@@ -68,20 +68,6 @@ func ApplyDefaults(cfg *Config) {
 		cfg.NTP.KoD.SuspendDuration = 1 * time.Hour
 	}
 
-	// Adaptive sampling defaults (disabled by default)
-	if cfg.NTP.AdaptiveSampling.DefaultSamples == 0 {
-		cfg.NTP.AdaptiveSampling.DefaultSamples = 4
-	}
-	if cfg.NTP.AdaptiveSampling.MaxSamples == 0 {
-		cfg.NTP.AdaptiveSampling.MaxSamples = 8
-	}
-	if cfg.NTP.AdaptiveSampling.DispersionThreshold == 0 {
-		cfg.NTP.AdaptiveSampling.DispersionThreshold = 10 * time.Millisecond
-	}
-	if cfg.NTP.AdaptiveSampling.MaxDuration == 0 {
-		cfg.NTP.AdaptiveSampling.MaxDuration = 30 * time.Second
-	}
-
 	// DNS cache defaults for pool resolutions
 	if cfg.NTP.DNSCache.MinTTL == 0 {
 		cfg.NTP.DNSCache.MinTTL = 5 * time.Minute

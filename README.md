@@ -200,11 +200,6 @@ ntp:
 | `NTP_KOD_SUSPEND_DURATION` | `1h` | Suspension after `DENY` or `RSTR` |
 | `NTP_KERNEL_ENABLED` | `false` | Kernel option (agent mode, Linux) |
 | `NTP_KERNEL_VIOLATION_ONLY` | `false` | Only expose the bound violation and sync status |
-| `ADAPTIVE_SAMPLING_ENABLED` | `false` | Take more samples when the burst is noisy |
-| `ADAPTIVE_SAMPLING_DEFAULT_SAMPLES` | `4` | Initial burst size |
-| `ADAPTIVE_SAMPLING_MAX_SAMPLES` | `8` | Total samples for a noisy server |
-| `ADAPTIVE_SAMPLING_DISPERSION_THRESHOLD` | `10ms` | Offset standard deviation that triggers more samples |
-| `ADAPTIVE_SAMPLING_MAX_DURATION` | `30s` | Time budget of the sampling of one server |
 | `DNS_CACHE_MIN_TTL` / `DNS_CACHE_MAX_TTL` | `5m` / `60m` | Cache of pool DNS answers |
 | `NTP_EXPORTER_ADDRESS` / `NTP_EXPORTER_PORT` | `0.0.0.0` / `9559` | Listen address |
 | `SERVER_READ_TIMEOUT` / `SERVER_WRITE_TIMEOUT` | `10s` | HTTP timeouts |

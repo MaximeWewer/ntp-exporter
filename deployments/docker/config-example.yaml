@@ -153,33 +153,6 @@ ntp:
     # enabled: true
 
   # ----------------------------------------------------------------------------
-  # ADAPTIVE SAMPLING - More samples when the initial burst is noisy
-  # (offset standard deviation above dispersion_threshold, or packet loss).
-  # A large but stable offset is a real offset and does not trigger it.
-  # DISABLED BY DEFAULT
-  # ----------------------------------------------------------------------------
-  adaptive_sampling:
-    # Default: false
-    enabled: false
-
-    # Size of the initial burst
-    # Default: 4
-    default_samples: 4
-
-    # Total number of samples for a noisy server (must fit in scrape_interval
-    # with sample_spacing)
-    # Default: 8
-    max_samples: 8
-
-    # Offset standard deviation above which more samples are taken
-    # Default: 10ms
-    dispersion_threshold: 10ms
-
-    # Maximum duration of the sampling of one server
-    # Default: 30s
-    max_duration: 30s
-
-  # ----------------------------------------------------------------------------
   # DNS CACHE - Cache of pool DNS answers
   # ----------------------------------------------------------------------------
   dns_cache:

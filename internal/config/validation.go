@@ -86,16 +86,9 @@ func validateNTP(cfg *NTPConfig) error {
 
 	// A burst must fit in a cycle
 	samples := cfg.SamplesPerServer
-	if cfg.AdaptiveSampling.Enabled && cfg.AdaptiveSampling.MaxSamples > samples {
-		samples = cfg.AdaptiveSampling.MaxSamples
-	}
 	if time.Duration(samples)*cfg.SampleSpacing >= cfg.ScrapeInterval {
 		return errors.New("samples (" + strconv.Itoa(samples) + ") x sample_spacing (" + cfg.SampleSpacing.String() +
 			") must be shorter than scrape_interval (" + cfg.ScrapeInterval.String() + ")")
-	}
-
-	if cfg.AdaptiveSampling.Enabled && cfg.AdaptiveSampling.MaxSamples < cfg.AdaptiveSampling.DefaultSamples {
-		return errors.New("adaptive_sampling.max_samples must be at least default_samples")
 	}
 
 	if cfg.MaxClockOffset <= 0 {

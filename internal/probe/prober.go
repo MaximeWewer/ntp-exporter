@@ -241,19 +241,9 @@ func (p *Prober) measure(ctx context.Context, target Target) *Measurement {
 	}
 	address := m.Target.Address
 
-	var err error
-	if p.cfg.NTP.AdaptiveSampling.Enabled {
-		sampler := ntp.NewAdaptiveSampler(ntp.AdaptiveSamplingConfig{
-			DefaultSamples:      p.cfg.NTP.AdaptiveSampling.DefaultSamples,
-			MaxSamples:          p.cfg.NTP.AdaptiveSampling.MaxSamples,
-			DispersionThreshold: p.cfg.NTP.AdaptiveSampling.DispersionThreshold,
-			MaxDuration:         p.cfg.NTP.AdaptiveSampling.MaxDuration,
-		}, p.client)
-		m.Responses, m.Sent, err = sampler.SampleWithCount(ctx, address)
-	} else {
-		m.Sent = p.cfg.NTP.SamplesPerServer
-		m.Responses, err = p.client.QueryMultiple(ctx, address, m.Sent)
-	}
+	m.Sent = p.cfg.NTP.SamplesPerServer
+	responses, err := p.client.QueryMultiple(ctx, address, m.Sent)
+	m.Responses = responses
 
 	// Responses are labelled with the configured server name
 	for _, resp := range m.Responses {

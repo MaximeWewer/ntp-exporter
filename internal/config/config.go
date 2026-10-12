@@ -33,10 +33,6 @@
 //	KISS-O'-DEATH:
 //	  - NTP_KOD_MAX_BACKOFF, NTP_KOD_SUSPEND_DURATION
 //
-//	ADAPTIVE_SAMPLING:
-//	  - ADAPTIVE_SAMPLING_ENABLED, ADAPTIVE_SAMPLING_DEFAULT_SAMPLES
-//	  - ADAPTIVE_SAMPLING_MAX_SAMPLES, ADAPTIVE_SAMPLING_DISPERSION_THRESHOLD
-//	  - ADAPTIVE_SAMPLING_MAX_DURATION
 //
 //	DNS_CACHE:
 //	  - DNS_CACHE_MIN_TTL, DNS_CACHE_MAX_TTL
@@ -85,21 +81,20 @@ type ServerConfig struct {
 
 // NTPConfig contains NTP client configuration
 type NTPConfig struct {
-	Servers          []string               `yaml:"servers"`
-	Pools            []PoolConfig           `yaml:"pools"`
-	Timeout          time.Duration          `yaml:"timeout"`
-	Version          int                    `yaml:"version"`
-	SamplesPerServer int                    `yaml:"samples_per_server"`
-	SampleSpacing    time.Duration          `yaml:"sample_spacing"` // Delay between two samples sent to the same server
-	MaxConcurrency   int                    `yaml:"max_concurrency"`
-	EnableKernel     bool                   `yaml:"enable_kernel"` // Deprecated: use kernel.enabled
-	Kernel           KernelConfig           `yaml:"kernel"`
-	ScrapeInterval   time.Duration          `yaml:"scrape_interval"`  // Interval between NTP collections
-	MaxClockOffset   time.Duration          `yaml:"max_clock_offset"` // Maximum acceptable clock offset threshold
-	KoD              KoDConfig              `yaml:"kod"`
-	Consensus        ConsensusConfig        `yaml:"consensus"`
-	AdaptiveSampling AdaptiveSamplingConfig `yaml:"adaptive_sampling"`
-	DNSCache         DNSCacheConfig         `yaml:"dns_cache"`
+	Servers          []string        `yaml:"servers"`
+	Pools            []PoolConfig    `yaml:"pools"`
+	Timeout          time.Duration   `yaml:"timeout"`
+	Version          int             `yaml:"version"`
+	SamplesPerServer int             `yaml:"samples_per_server"`
+	SampleSpacing    time.Duration   `yaml:"sample_spacing"` // Delay between two samples sent to the same server
+	MaxConcurrency   int             `yaml:"max_concurrency"`
+	EnableKernel     bool            `yaml:"enable_kernel"` // Deprecated: use kernel.enabled
+	Kernel           KernelConfig    `yaml:"kernel"`
+	ScrapeInterval   time.Duration   `yaml:"scrape_interval"`  // Interval between NTP collections
+	MaxClockOffset   time.Duration   `yaml:"max_clock_offset"` // Maximum acceptable clock offset threshold
+	KoD              KoDConfig       `yaml:"kod"`
+	Consensus        ConsensusConfig `yaml:"consensus"`
+	DNSCache         DNSCacheConfig  `yaml:"dns_cache"`
 }
 
 // PoolConfig represents NTP pool configuration
@@ -140,18 +135,6 @@ func (c *NTPConfig) ConsensusEnabled() bool {
 		return *c.Consensus.Enabled
 	}
 	return len(c.Servers)+len(c.Pools) >= 3
-}
-
-// AdaptiveSamplingConfig contains adaptive sampling configuration
-type AdaptiveSamplingConfig struct {
-	Enabled        bool `yaml:"enabled"`
-	DefaultSamples int  `yaml:"default_samples"`
-	// MaxSamples is the total number of samples taken for a noisy server
-	MaxSamples int `yaml:"max_samples"`
-	// DispersionThreshold is the offset standard deviation of the initial
-	// burst above which more samples are taken
-	DispersionThreshold time.Duration `yaml:"dispersion_threshold"`
-	MaxDuration         time.Duration `yaml:"max_duration"`
 }
 
 // DNSCacheConfig contains the cache configuration for pool DNS answers
@@ -403,13 +386,6 @@ func applyEnvOverrides(cfg *Config) error {
 	// KISS-O'-DEATH
 	e.duration("NTP_KOD_MAX_BACKOFF", &cfg.NTP.KoD.MaxBackoff)
 	e.duration("NTP_KOD_SUSPEND_DURATION", &cfg.NTP.KoD.SuspendDuration)
-
-	// ADAPTIVE SAMPLING
-	e.bool("ADAPTIVE_SAMPLING_ENABLED", &cfg.NTP.AdaptiveSampling.Enabled)
-	e.int("ADAPTIVE_SAMPLING_DEFAULT_SAMPLES", &cfg.NTP.AdaptiveSampling.DefaultSamples)
-	e.int("ADAPTIVE_SAMPLING_MAX_SAMPLES", &cfg.NTP.AdaptiveSampling.MaxSamples)
-	e.duration("ADAPTIVE_SAMPLING_DISPERSION_THRESHOLD", &cfg.NTP.AdaptiveSampling.DispersionThreshold)
-	e.duration("ADAPTIVE_SAMPLING_MAX_DURATION", &cfg.NTP.AdaptiveSampling.MaxDuration)
 
 	// DNS CACHE
 	e.duration("DNS_CACHE_MIN_TTL", &cfg.NTP.DNSCache.MinTTL)

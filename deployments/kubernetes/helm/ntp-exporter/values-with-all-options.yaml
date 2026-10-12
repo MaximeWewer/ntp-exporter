@@ -96,16 +96,6 @@ config:
   #  enabled: true
 
   # ---------------------------------------------------------------------------
-  # ADAPTIVE SAMPLING - More samples when the initial burst is noisy
-  # ---------------------------------------------------------------------------
-  adaptiveSampling:
-    enabled: false
-    defaultSamples: 4
-    maxSamples: 8
-    dispersionThreshold: 10ms
-    maxDuration: 30s
-
-  # ---------------------------------------------------------------------------
   # DNS CACHE - Cache of pool DNS answers
   # ---------------------------------------------------------------------------
   dnsCache:

@@ -622,12 +622,6 @@ func TestValidate_BurstMustFitInInterval(t *testing.T) {
 		t.Errorf("4 samples x 2s fit in a 10s interval: %v", err)
 	}
 
-	cfg.NTP.AdaptiveSampling.Enabled = true
-	cfg.NTP.AdaptiveSampling.MaxSamples = 10
-	if err := Validate(cfg); err == nil {
-		t.Error("adaptive high drift samples must fit in the interval too")
-	}
-
 	cfg = DefaultConfig()
 	cfg.NTP.SampleSpacing = -time.Second
 	if err := Validate(cfg); err == nil {

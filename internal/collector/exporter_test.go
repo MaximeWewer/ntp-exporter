@@ -244,18 +244,14 @@ func (p *partialMock) QueryMultiple(ctx context.Context, server string, count in
 
 func TestExporter_PacketLoss(t *testing.T) {
 	const server = "lossy.example.org"
-	for _, adaptive := range []bool{false, true} {
-		h := newHarness(t, server)
-		h.mock.SetupSuccessfulServer(server, 5*time.Millisecond, 2)
-		h.cfg.NTP.AdaptiveSampling.Enabled = adaptive
-		h.cfg.NTP.AdaptiveSampling.DefaultSamples = 3
-		h.cfg.NTP.AdaptiveSampling.MaxSamples = 3
-		h.client = &partialMock{MockNTPClient: h.mock, answered: 2}
+	h := newHarness(t, server)
+	h.mock.SetupSuccessfulServer(server, 5*time.Millisecond, 2)
+	h.cfg.NTP.SamplesPerServer = 3
+	h.client = &partialMock{MockNTPClient: h.mock, answered: 2}
 
-		h.cycle()
+	h.cycle()
 
-		assert.InDelta(t, 1.0/3.0, h.mustValue("ntp_packet_loss_ratio", srv(server)), 1e-9, "adaptive=%v", adaptive)
-	}
+	assert.InDelta(t, 1.0/3.0, h.mustValue("ntp_packet_loss_ratio", srv(server)), 1e-9)
 }
 
 type fakeKernel struct {
