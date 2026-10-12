@@ -196,17 +196,6 @@ func TestHTTPLog(t *testing.T) {
 	}
 }
 
-func TestMetricLog(t *testing.T) {
-	var buf bytes.Buffer
-	Logger = zerolog.New(&buf).Level(zerolog.DebugLevel).With().Timestamp().Logger()
-
-	Metric("ntp_base", "pool.ntp.org", 50*time.Millisecond, true)
-
-	if buf.Len() == 0 {
-		t.Skip("Metric() uses Debug level, may not write in test")
-	}
-}
-
 func BenchmarkSanitizeFields(b *testing.B) {
 	fields := map[string]interface{}{
 		"username": "admin",

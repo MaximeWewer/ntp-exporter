@@ -18,9 +18,6 @@ func (k *KernelReader) Read() (*KernelTimex, error) {
 	var tx unix.Timex
 	state, err := unix.Adjtimex(&tx)
 	if err != nil {
-		logger.SafeWarn("ntp", "Failed to read kernel timex", map[string]interface{}{
-			"error": err.Error(),
-		})
 		return nil, fmt.Errorf("adjtimex syscall failed: %w", err)
 	}
 

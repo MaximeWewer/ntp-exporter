@@ -108,28 +108,33 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
+	serverStopped := false
 	select {
 	case sig := <-sigChan:
 		logger.SafeInfo("main", "Received shutdown signal", map[string]interface{}{"signal": sig.String()})
-		cancel()
 	case err := <-serverErrChan:
+		serverStopped = true
 		if err != nil {
 			logger.Error("main", "Server error", err)
 		}
-		cancel()
 	case err := <-collectorErrChan:
 		if err != nil {
 			logger.Error("main", "Collector error", err)
 		}
-		cancel()
 	}
 
-	// Graceful shutdown
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer shutdownCancel()
-
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Error("main", "Server shutdown error", err)
+	// Graceful shutdown: cancelling the context stops the collection loop and
+	// makes the server shut down gracefully
+	cancel()
+	if !serverStopped {
+		select {
+		case err := <-serverErrChan:
+			if err != nil {
+				logger.Error("main", "Server shutdown error", err)
+			}
+		case <-time.After(15 * time.Second):
+			logger.Warn("main", "Server shutdown timed out")
+		}
 	}
 
 	logger.Shutdown("graceful")
@@ -160,7 +165,7 @@ func runCollectionLoop(
 			return
 		}
 		exporter.Update(result)
-		logger.Metric("collection", "all", result.Duration, true)
+		logCycle(result)
 	}
 
 	// Initial collection
@@ -182,4 +187,34 @@ func runCollectionLoop(
 			runCycle()
 		}
 	}
+}
+
+// logCycle emits one summary line per collection cycle; details per target
+// are logged at debug level by the prober
+func logCycle(result *probe.CycleResult) {
+	reachable, valid, skipped, suspended := 0, 0, 0, 0
+	for _, m := range result.Measurements {
+		switch {
+		case m.SuspendCode != "":
+			suspended++
+		case m.Skipped:
+			skipped++
+		}
+		if m.Reachable() {
+			reachable++
+		}
+		if m.Best() != nil {
+			valid++
+		}
+	}
+
+	logger.SafeInfo("main", "Collection cycle completed", map[string]interface{}{
+		"targets":   len(result.Measurements),
+		"reachable": reachable,
+		"valid":     valid,
+		"backoff":   skipped,
+		"suspended": suspended,
+		"duration":  result.Duration.Round(time.Millisecond).String(),
+		"overrun":   result.Overrun,
+	})
 }

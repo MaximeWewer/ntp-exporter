@@ -167,7 +167,6 @@ func (c *Client) QueryMultiple(ctx context.Context, server string, count int) ([
 	}
 
 	if len(responses) == 0 {
-		logger.Warnf("ntp", "All %d NTP queries failed for server %s", count, server)
 		return nil, fmt.Errorf("all %d NTP queries failed for server %s", count, server)
 	}
 

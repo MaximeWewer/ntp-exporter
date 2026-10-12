@@ -5,7 +5,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -16,17 +15,9 @@ var (
 	// Global logger instance
 	Logger zerolog.Logger
 
-	// Pool for field maps to reduce allocations
-	fieldPool = sync.Pool{
-		New: func() interface{} {
-			return make(map[string]interface{})
-		},
-	}
-
 	// Pre-compiled regex patterns for sensitive data detection
 	passwordPattern   = regexp.MustCompile(`(?i)(password|passwd|pwd|secret|token|api[_-]?key|auth)`)
 	credentialPattern = regexp.MustCompile(`(?i)://([^:]+):([^@]+)@`)
-	ipPattern         = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`)
 )
 
 // Config holds logger configuration
@@ -103,25 +94,8 @@ func parseLevel(level string) zerolog.Level {
 	}
 }
 
-// getFieldMap gets a map from the pool
-func getFieldMap() map[string]interface{} {
-	return fieldPool.Get().(map[string]interface{})
-}
-
-// putFieldMap returns a map to the pool
-func putFieldMap(m map[string]interface{}) {
-	// Clear the map
-	for k := range m {
-		delete(m, k)
-	}
-	fieldPool.Put(m)
-}
-
 // sanitizeFields removes or redacts sensitive information from fields
 func sanitizeFields(fields map[string]interface{}) map[string]interface{} {
-	safe := getFieldMap()
-	defer putFieldMap(safe)
-
 	result := make(map[string]interface{})
 	for key, value := range fields {
 		// Check if key contains sensitive keywords
@@ -145,9 +119,6 @@ func sanitizeFields(fields map[string]interface{}) map[string]interface{} {
 func sanitizeString(s string) string {
 	// Redact credentials in URLs
 	s = credentialPattern.ReplaceAllString(s, "://$1:***@")
-
-	// Optionally mask IP addresses (configurable)
-	// s = ipPattern.ReplaceAllString(s, "x.x.x.x")
 
 	return s
 }
@@ -246,22 +217,6 @@ func HTTP(method, path string, statusCode int, duration time.Duration, remoteAdd
 		Dur("duration", duration).
 		Str("remote_addr", sanitizeString(remoteAddr)).
 		Msg("HTTP request")
-}
-
-// Metric logs metric collection information
-func Metric(collector, server string, duration time.Duration, success bool) {
-	event := Logger.Debug().
-		Str("package", "metrics").
-		Str("collector", collector).
-		Str("server", server).
-		Dur("duration", duration).
-		Bool("success", success)
-
-	if success {
-		event.Msg("Metric collected successfully")
-	} else {
-		event.Msg("Metric collection failed")
-	}
 }
 
 // Startup logs application startup information

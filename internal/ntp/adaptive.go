@@ -86,7 +86,7 @@ func (a *AdaptiveSampler) SampleWithCount(ctx context.Context, server string) ([
 	// Phase 2: Check if high drift detected - need more samples
 	absMedian := mathutil.AbsDuration(stats.MedianOffset)
 	if absMedian > a.config.DriftThreshold {
-		logger.SafeInfo("adaptive", "High drift detected, increasing samples", map[string]interface{}{
+		logger.SafeDebug("adaptive", "High drift detected, increasing samples", map[string]interface{}{
 			"server":        server,
 			"drift":         absMedian.Seconds(),
 			"threshold":     a.config.DriftThreshold.Seconds(),
@@ -113,7 +113,7 @@ func (a *AdaptiveSampler) SampleWithCount(ctx context.Context, server string) ([
 				// Recalculate statistics on sent packets, not received ones
 				stats = CalculateStatistics(responses, sent)
 
-				logger.SafeInfo("adaptive", "Additional sampling completed", map[string]interface{}{
+				logger.SafeDebug("adaptive", "Additional sampling completed", map[string]interface{}{
 					"server":        server,
 					"total_samples": len(responses),
 					"new_median":    stats.MedianOffset.Seconds(),

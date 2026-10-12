@@ -86,7 +86,6 @@ func (s *Server) Start(ctx context.Context) error {
 		return s.Shutdown(context.Background())
 	case err := <-errChan:
 		if err != nil && err != http.ErrServerClosed {
-			logger.Error("server", "Server error", err)
 			return fmt.Errorf("HTTP server failed on %s: %w", s.server.Addr, err)
 		}
 		return nil
@@ -103,7 +102,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	defer cancel()
 
 	if err := s.server.Shutdown(shutdownCtx); err != nil {
-		logger.Error("server", "Server shutdown failed", err)
 		if errors.Is(err, context.DeadlineExceeded) {
 			return fmt.Errorf("server shutdown timeout after 10s: %w", err)
 		}
