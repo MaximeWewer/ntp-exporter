@@ -58,9 +58,9 @@ data:
       adaptive_sampling:
         enabled: {{ .Values.config.adaptiveSampling.enabled | default false }}
         {{- if .Values.config.adaptiveSampling.enabled }}
-        default_samples: {{ .Values.config.adaptiveSampling.defaultSamples | default 3 }}
-        high_drift_samples: {{ .Values.config.adaptiveSampling.highDriftSamples | default 10 }}
-        drift_threshold: {{ .Values.config.adaptiveSampling.driftThreshold | default "50ms" }}
+        default_samples: {{ .Values.config.adaptiveSampling.defaultSamples | default 4 }}
+        max_samples: {{ .Values.config.adaptiveSampling.maxSamples | default 8 }}
+        dispersion_threshold: {{ .Values.config.adaptiveSampling.dispersionThreshold | default "10ms" }}
         max_duration: {{ .Values.config.adaptiveSampling.maxDuration | default "30s" }}
         {{- end }}
       {{- end }}

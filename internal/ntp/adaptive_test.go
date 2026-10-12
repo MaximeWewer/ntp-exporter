@@ -9,112 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewAdaptiveSampler(t *testing.T) {
-	client := NewClient(5*time.Second, 4)
-
-	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{}, client)
-	assert.NotNil(t, sampler)
-	assert.Equal(t, 3, sampler.config.DefaultSamples)
-	assert.Equal(t, 10, sampler.config.HighDriftSamples)
-	assert.Equal(t, 50*time.Millisecond, sampler.config.DriftThreshold)
-	assert.Equal(t, 30*time.Second, sampler.config.MaxDuration)
-	assert.Equal(t, 0.95, sampler.config.ConfidenceLevel)
-}
-
-func TestNewAdaptiveSampler_CustomConfig(t *testing.T) {
-	client := NewClient(5*time.Second, 4)
-
-	config := AdaptiveSamplingConfig{
-		DefaultSamples:   5,
-		HighDriftSamples: 20,
-		DriftThreshold:   100 * time.Millisecond,
-		MaxDuration:      60 * time.Second,
-		ConfidenceLevel:  0.99,
-	}
-
-	sampler := NewAdaptiveSampler(config, client)
-	assert.Equal(t, 5, sampler.config.DefaultSamples)
-	assert.Equal(t, 20, sampler.config.HighDriftSamples)
-	assert.Equal(t, 100*time.Millisecond, sampler.config.DriftThreshold)
-	assert.Equal(t, 60*time.Second, sampler.config.MaxDuration)
-	assert.Equal(t, 0.99, sampler.config.ConfidenceLevel)
-}
-
-func TestAdaptiveSampler_CalculateConfidence(t *testing.T) {
-	client := NewClient(5*time.Second, 4)
-	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{
-		HighDriftSamples: 10,
-	}, client)
-
-	tests := []struct {
-		name        string
-		stats       *Statistics
-		sampleCount int
-		expectedMin float64
-		expectedMax float64
-	}{
-		{
-			name: "high_confidence",
-			stats: &Statistics{
-				StdDevOffset:    5 * time.Millisecond,
-				StdDevRTT:       10 * time.Millisecond,
-				PacketLossRatio: 0.0,
-			},
-			sampleCount: 10,
-			expectedMin: 0.9,
-			expectedMax: 1.1, // Can exceed 1.0 due to bonus
-		},
-		{
-			name: "low_confidence_high_stddev",
-			stats: &Statistics{
-				StdDevOffset:    50 * time.Millisecond,
-				StdDevRTT:       10 * time.Millisecond,
-				PacketLossRatio: 0.0,
-			},
-			sampleCount: 3,
-			expectedMin: 0.5,
-			expectedMax: 0.9,
-		},
-		{
-			name: "low_confidence_high_jitter",
-			stats: &Statistics{
-				StdDevOffset:    5 * time.Millisecond,
-				StdDevRTT:       100 * time.Millisecond,
-				PacketLossRatio: 0.0,
-			},
-			sampleCount: 3,
-			expectedMin: 0.7,
-			expectedMax: 0.9,
-		},
-		{
-			name: "low_confidence_packet_loss",
-			stats: &Statistics{
-				StdDevOffset:    5 * time.Millisecond,
-				StdDevRTT:       10 * time.Millisecond,
-				PacketLossRatio: 0.3,
-			},
-			sampleCount: 3,
-			expectedMin: 0.6,
-			expectedMax: 0.8,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			confidence := sampler.calculateConfidence(tt.stats, tt.sampleCount)
-			assert.GreaterOrEqual(t, confidence, 0.0)
-			assert.LessOrEqual(t, confidence, 1.0)
-			assert.GreaterOrEqual(t, confidence, tt.expectedMin)
-			assert.LessOrEqual(t, confidence, tt.expectedMax)
-		})
-	}
-}
-
-// fakeQuerier answers every query with a response carrying a fixed offset
+// fakeQuerier answers every query with a valid response
 type fakeQuerier struct {
-	offset time.Duration
-	err    error
-	calls  int
+	offset  time.Duration
+	offsets []time.Duration // when set, offsets are returned in sequence
+	err     error
+	calls   int
 }
 
 func (f *fakeQuerier) Query(ctx context.Context, server string) (*Response, error) {
@@ -124,8 +24,12 @@ func (f *fakeQuerier) Query(ctx context.Context, server string) (*Response, erro
 	if f.err != nil {
 		return nil, f.err
 	}
+	offset := f.offset
+	if len(f.offsets) > 0 {
+		offset = f.offsets[f.calls%len(f.offsets)]
+	}
 	f.calls++
-	return &Response{Server: server, Stratum: 2, Offset: f.offset, RTT: 10 * time.Millisecond}, nil
+	return &Response{Server: server, Stratum: 2, Offset: offset, RTT: 10 * time.Millisecond}, nil
 }
 
 func (f *fakeQuerier) QueryMultiple(ctx context.Context, server string, count int) ([]*Response, error) {
@@ -143,9 +47,29 @@ func (f *fakeQuerier) QueryMultiple(ctx context.Context, server string, count in
 	return out, nil
 }
 
-func TestAdaptiveSampler_LowDriftUsesDefaultSamples(t *testing.T) {
-	q := &fakeQuerier{offset: 5 * time.Millisecond}
-	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{DefaultSamples: 3, HighDriftSamples: 10}, q)
+// partialQuerier answers only the first `answered` queries of each burst
+type partialQuerier struct {
+	fakeQuerier
+	answered int
+}
+
+func (p *partialQuerier) QueryMultiple(ctx context.Context, server string, count int) ([]*Response, error) {
+	return p.fakeQuerier.QueryMultiple(ctx, server, min(count, p.answered))
+}
+
+func TestNewAdaptiveSampler_Defaults(t *testing.T) {
+	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{}, &fakeQuerier{})
+
+	assert.Equal(t, 4, sampler.config.DefaultSamples)
+	assert.Equal(t, 8, sampler.config.MaxSamples)
+	assert.Equal(t, 10*time.Millisecond, sampler.config.DispersionThreshold)
+	assert.Equal(t, 30*time.Second, sampler.config.MaxDuration)
+}
+
+func TestAdaptiveSampler_StableBurstUsesDefaultSamples(t *testing.T) {
+	// A large but stable offset is a real offset: no extra sample
+	q := &fakeQuerier{offset: 500 * time.Millisecond}
+	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{DefaultSamples: 3, MaxSamples: 10}, q)
 
 	responses, sent, err := sampler.SampleWithCount(context.Background(), "test.ntp.org")
 
@@ -154,15 +78,25 @@ func TestAdaptiveSampler_LowDriftUsesDefaultSamples(t *testing.T) {
 	assert.Equal(t, 3, sent)
 }
 
-func TestAdaptiveSampler_HighDriftAddsSamples(t *testing.T) {
-	q := &fakeQuerier{offset: 100 * time.Millisecond}
-	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{DefaultSamples: 3, HighDriftSamples: 10, DriftThreshold: 50 * time.Millisecond}, q)
+func TestAdaptiveSampler_NoisyBurstAddsSamples(t *testing.T) {
+	q := &fakeQuerier{offsets: []time.Duration{0, 40 * time.Millisecond, -30 * time.Millisecond}}
+	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{DefaultSamples: 3, MaxSamples: 10, DispersionThreshold: 10 * time.Millisecond}, q)
 
 	responses, sent, err := sampler.SampleWithCount(context.Background(), "test.ntp.org")
 
 	require.NoError(t, err)
 	assert.Len(t, responses, 10)
 	assert.Equal(t, 10, sent)
+}
+
+func TestAdaptiveSampler_LossAddsSamples(t *testing.T) {
+	q := &partialQuerier{fakeQuerier: fakeQuerier{offset: time.Millisecond}, answered: 2}
+	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{DefaultSamples: 3, MaxSamples: 6}, q)
+
+	_, sent, err := sampler.SampleWithCount(context.Background(), "test.ntp.org")
+
+	require.NoError(t, err)
+	assert.Equal(t, 6, sent)
 }
 
 func TestAdaptiveSampler_ContextCancellation(t *testing.T) {

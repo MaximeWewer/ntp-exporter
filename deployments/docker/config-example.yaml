@@ -147,33 +147,29 @@ ntp:
     # enabled: true
 
   # ----------------------------------------------------------------------------
-  # ADAPTIVE SAMPLING - Adaptive sampling based on drift
-  # Automatically increases samples if server drifts too much
-  # DISABLED BY DEFAULT (CPU/network overhead)
+  # ADAPTIVE SAMPLING - More samples when the initial burst is noisy
+  # (offset standard deviation above dispersion_threshold, or packet loss).
+  # A large but stable offset is a real offset and does not trigger it.
+  # DISABLED BY DEFAULT
   # ----------------------------------------------------------------------------
   adaptive_sampling:
-    # Enable adaptive sampling
-    # Values: true, false
     # Default: false
     enabled: false
 
-    # Default number of samples (if no drift)
-    # Values: positive integer (1-50)
-    # Default: 3
-    default_samples: 3
+    # Size of the initial burst
+    # Default: 4
+    default_samples: 4
 
-    # Number of samples if drift detected (> drift_threshold)
-    # Values: positive integer (1-100)
-    # Default: 10
-    high_drift_samples: 10
+    # Total number of samples for a noisy server (must fit in scrape_interval
+    # with sample_spacing)
+    # Default: 8
+    max_samples: 8
 
-    # Drift threshold that triggers high sampling
-    # Values: valid Go duration (e.g., "50ms", "100ms")
-    # Default: 50ms
-    drift_threshold: 50ms
+    # Offset standard deviation above which more samples are taken
+    # Default: 10ms
+    dispersion_threshold: 10ms
 
-    # Maximum time budget for adaptive sampling
-    # Values: valid Go duration (e.g., "30s", "1m")
+    # Maximum duration of the sampling of one server
     # Default: 30s
     max_duration: 30s
 

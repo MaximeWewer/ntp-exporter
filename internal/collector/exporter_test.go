@@ -248,6 +248,8 @@ func TestExporter_PacketLoss(t *testing.T) {
 		h := newHarness(t, server)
 		h.mock.SetupSuccessfulServer(server, 5*time.Millisecond, 2)
 		h.cfg.NTP.AdaptiveSampling.Enabled = adaptive
+		h.cfg.NTP.AdaptiveSampling.DefaultSamples = 3
+		h.cfg.NTP.AdaptiveSampling.MaxSamples = 3
 		h.client = &partialMock{MockNTPClient: h.mock, answered: 2}
 
 		h.cycle()

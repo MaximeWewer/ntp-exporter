@@ -70,13 +70,13 @@ func ApplyDefaults(cfg *Config) {
 
 	// Adaptive sampling defaults (disabled by default)
 	if cfg.NTP.AdaptiveSampling.DefaultSamples == 0 {
-		cfg.NTP.AdaptiveSampling.DefaultSamples = 3
+		cfg.NTP.AdaptiveSampling.DefaultSamples = 4
 	}
-	if cfg.NTP.AdaptiveSampling.HighDriftSamples == 0 {
-		cfg.NTP.AdaptiveSampling.HighDriftSamples = 10
+	if cfg.NTP.AdaptiveSampling.MaxSamples == 0 {
+		cfg.NTP.AdaptiveSampling.MaxSamples = 8
 	}
-	if cfg.NTP.AdaptiveSampling.DriftThreshold == 0 {
-		cfg.NTP.AdaptiveSampling.DriftThreshold = 50 * time.Millisecond
+	if cfg.NTP.AdaptiveSampling.DispersionThreshold == 0 {
+		cfg.NTP.AdaptiveSampling.DispersionThreshold = 10 * time.Millisecond
 	}
 	if cfg.NTP.AdaptiveSampling.MaxDuration == 0 {
 		cfg.NTP.AdaptiveSampling.MaxDuration = 30 * time.Second

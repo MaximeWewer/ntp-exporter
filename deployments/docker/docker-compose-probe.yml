@@ -49,12 +49,12 @@ services:
       NTP_KERNEL_ENABLED: "${NTP_KERNEL_ENABLED:-false}"
 
       # -----------------------------------------------------------------------
-      # ADAPTIVE SAMPLING - Adaptive sampling (enabled in probe mode)
+      # ADAPTIVE SAMPLING - More samples for noisy servers (enabled in probe mode)
       # -----------------------------------------------------------------------
       ADAPTIVE_SAMPLING_ENABLED: "${ADAPTIVE_SAMPLING_ENABLED:-true}"
-      ADAPTIVE_SAMPLING_DEFAULT_SAMPLES: "${ADAPTIVE_SAMPLING_DEFAULT_SAMPLES:-10}"
-      ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES: "${ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES:-20}"
-      ADAPTIVE_SAMPLING_DRIFT_THRESHOLD: "${ADAPTIVE_SAMPLING_DRIFT_THRESHOLD:-50ms}"
+      ADAPTIVE_SAMPLING_DEFAULT_SAMPLES: "${ADAPTIVE_SAMPLING_DEFAULT_SAMPLES:-4}"
+      ADAPTIVE_SAMPLING_MAX_SAMPLES: "${ADAPTIVE_SAMPLING_MAX_SAMPLES:-8}"
+      ADAPTIVE_SAMPLING_DISPERSION_THRESHOLD: "${ADAPTIVE_SAMPLING_DISPERSION_THRESHOLD:-10ms}"
       ADAPTIVE_SAMPLING_MAX_DURATION: "${ADAPTIVE_SAMPLING_MAX_DURATION:-45s}"
 
       # -----------------------------------------------------------------------

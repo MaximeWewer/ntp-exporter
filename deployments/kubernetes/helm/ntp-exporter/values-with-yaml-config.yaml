@@ -81,9 +81,9 @@ configYaml:
       # Adaptive sampling
       adaptive_sampling:
         enabled: false
-        default_samples: 3
-        high_drift_samples: 10
-        drift_threshold: 50ms
+        default_samples: 4
+        max_samples: 8
+        dispersion_threshold: 10ms
         max_duration: 30s
 
       # DNS cache of pool answers

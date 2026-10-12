@@ -95,13 +95,13 @@ config:
   #  enabled: true
 
   # ---------------------------------------------------------------------------
-  # ADAPTIVE SAMPLING - Adaptive sampling based on drift
+  # ADAPTIVE SAMPLING - More samples when the initial burst is noisy
   # ---------------------------------------------------------------------------
   adaptiveSampling:
     enabled: false
-    defaultSamples: 3
-    highDriftSamples: 10
-    driftThreshold: 50ms
+    defaultSamples: 4
+    maxSamples: 8
+    dispersionThreshold: 10ms
     maxDuration: 30s
 
   # ---------------------------------------------------------------------------

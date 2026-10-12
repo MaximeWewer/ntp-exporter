@@ -34,7 +34,7 @@
 //
 //	ADAPTIVE_SAMPLING:
 //	  - ADAPTIVE_SAMPLING_ENABLED, ADAPTIVE_SAMPLING_DEFAULT_SAMPLES
-//	  - ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES, ADAPTIVE_SAMPLING_DRIFT_THRESHOLD
+//	  - ADAPTIVE_SAMPLING_MAX_SAMPLES, ADAPTIVE_SAMPLING_DISPERSION_THRESHOLD
 //	  - ADAPTIVE_SAMPLING_MAX_DURATION
 //
 //	DNS_CACHE:
@@ -140,11 +140,14 @@ func (c *NTPConfig) ConsensusEnabled() bool {
 
 // AdaptiveSamplingConfig contains adaptive sampling configuration
 type AdaptiveSamplingConfig struct {
-	Enabled          bool          `yaml:"enabled"`
-	DefaultSamples   int           `yaml:"default_samples"`
-	HighDriftSamples int           `yaml:"high_drift_samples"`
-	DriftThreshold   time.Duration `yaml:"drift_threshold"`
-	MaxDuration      time.Duration `yaml:"max_duration"`
+	Enabled        bool `yaml:"enabled"`
+	DefaultSamples int  `yaml:"default_samples"`
+	// MaxSamples is the total number of samples taken for a noisy server
+	MaxSamples int `yaml:"max_samples"`
+	// DispersionThreshold is the offset standard deviation of the initial
+	// burst above which more samples are taken
+	DispersionThreshold time.Duration `yaml:"dispersion_threshold"`
+	MaxDuration         time.Duration `yaml:"max_duration"`
 }
 
 // DNSCacheConfig contains the cache configuration for pool DNS answers
@@ -399,8 +402,8 @@ func applyEnvOverrides(cfg *Config) error {
 	// ADAPTIVE SAMPLING
 	e.bool("ADAPTIVE_SAMPLING_ENABLED", &cfg.NTP.AdaptiveSampling.Enabled)
 	e.int("ADAPTIVE_SAMPLING_DEFAULT_SAMPLES", &cfg.NTP.AdaptiveSampling.DefaultSamples)
-	e.int("ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES", &cfg.NTP.AdaptiveSampling.HighDriftSamples)
-	e.duration("ADAPTIVE_SAMPLING_DRIFT_THRESHOLD", &cfg.NTP.AdaptiveSampling.DriftThreshold)
+	e.int("ADAPTIVE_SAMPLING_MAX_SAMPLES", &cfg.NTP.AdaptiveSampling.MaxSamples)
+	e.duration("ADAPTIVE_SAMPLING_DISPERSION_THRESHOLD", &cfg.NTP.AdaptiveSampling.DispersionThreshold)
 	e.duration("ADAPTIVE_SAMPLING_MAX_DURATION", &cfg.NTP.AdaptiveSampling.MaxDuration)
 
 	// DNS CACHE
