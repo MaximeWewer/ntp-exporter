@@ -266,3 +266,51 @@ func TestMeasurement_BestIgnoresInvalidSamples(t *testing.T) {
 
 	assert.Equal(t, 7*time.Millisecond, m.Best().Offset)
 }
+
+// fakeNTS returns a prepared result for every burst
+type fakeNTS struct {
+	result ntp.NTSResult
+	hosts  []string
+}
+
+func (f *fakeNTS) Burst(_ context.Context, host string, count int) ntp.NTSResult {
+	f.hosts = append(f.hosts, host)
+	r := f.result
+	if r.Sent == 0 && r.Err == nil {
+		r.Sent = count
+	}
+	return r
+}
+
+func TestProber_NTSTarget(t *testing.T) {
+	expiry := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	f := &fakeNTS{result: ntp.NTSResult{
+		Responses: []*ntp.Response{sample(time.Millisecond, 5*time.Millisecond), sample(2*time.Millisecond, 9*time.Millisecond)},
+		State:     ntp.NTSState{KESuccess: true, CertExpiry: expiry, Address: "192.0.2.1:123"},
+	}}
+	mock := ntptest.NewMockNTPClient()
+	p := newProber(newTestConfig("nts://nts.example.org"), mock)
+	p.SetNTSClient(f)
+
+	m := p.Run(context.Background()).Measurements[0]
+	assert.Equal(t, []string{"nts.example.org"}, f.hosts)
+	assert.Equal(t, "192.0.2.1:123", m.Target.Address, "the NTP server comes from the key exchange")
+	require.NotNil(t, m.NTS)
+	assert.Equal(t, expiry, m.NTS.CertExpiry)
+	assert.Equal(t, 3, m.Sent)
+	assert.Equal(t, time.Millisecond, m.Best().Offset)
+	assert.Equal(t, "nts://nts.example.org", m.Responses[0].Server)
+	assert.Equal(t, 0, mock.GetCallCount("nts.example.org"), "no plain NTP query to an NTS server")
+}
+
+func TestProber_NTSKeyExchangeFailure(t *testing.T) {
+	f := &fakeNTS{result: ntp.NTSResult{Err: fmt.Errorf("key exchange failed"), State: ntp.NTSState{}}}
+	p := newProber(newTestConfig("nts://nts.example.org"), ntptest.NewMockNTPClient())
+	p.SetNTSClient(f)
+
+	m := p.Run(context.Background()).Measurements[0]
+	assert.False(t, m.Reachable())
+	assert.ErrorContains(t, m.Err, "key exchange")
+	assert.Equal(t, 0, m.Sent)
+	assert.False(t, m.NTS.KESuccess)
+}

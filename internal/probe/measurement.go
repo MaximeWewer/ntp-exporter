@@ -35,6 +35,8 @@ type Measurement struct {
 	Skipped bool
 	// SuspendCode is the KoD code (DENY or RSTR) of a suspended target
 	SuspendCode string
+	// NTS describes the key exchange of an NTS target (nts://host)
+	NTS *ntp.NTSState
 }
 
 // key identifies a target across cycles

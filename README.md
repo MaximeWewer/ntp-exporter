@@ -13,6 +13,7 @@ accuracy of NTP servers, and the clock accuracy of the machines it runs on.
 - [Quick start](#quick-start)
 - [How a measurement works](#how-a-measurement-works)
 - [Multi-target probing](#multi-target-probing)
+- [Network Time Security](#network-time-security)
 - [Configuration](#configuration)
 - [Metrics reference](#metrics-reference)
 - [Alerting](#alerting)
@@ -32,6 +33,8 @@ accuracy of NTP servers, and the clock accuracy of the machines it runs on.
 - **Measurement quality**: RFC 5905 jitter, delay variability, packet loss.
 - **Consensus** of the servers (Marzullo intersection): which servers disagree
   with the others (*falsetickers*), independently of the local clock.
+- **Network Time Security** (RFC 8915): `nts://` servers are queried with
+  authenticated packets; the key exchange and its TLS certificate are monitored.
 - **Kiss-o'-Death** handling: `RATE` slows the polling of a server down,
   `DENY`/`RSTR` suspend it.
 - **Kernel clock state** (agent mode, Linux, optional): synchronization status,
@@ -154,6 +157,31 @@ Every `scrape_interval` (60 s by default), the exporter runs one **cycle**:
 A cycle is cut 10% (at most 1 s) before the next one
 (`ntp_exporter_cycle_overrun_total`).
 
+## Network Time Security
+
+Servers written `nts://host[:port]` (port 4460 by default) are queried with
+NTS (RFC 8915): a key exchange over TLS 1.3 (NTS-KE) gives keys and cookies,
+then every NTP query is authenticated. The NTP server may differ from the key
+exchange host: `ntp_server_info{address}` shows the one negotiated.
+
+```yaml
+ntp:
+  servers:
+    - nts://time.cloudflare.com
+    - nts://nts.netnod.se
+    - nts://ptbtime1.ptb.de
+```
+
+The session is kept across cycles; the key exchange runs again every hour,
+after an authentication failure or a `NTSN` Kiss-o'-Death, so that the key
+exchange server and its certificate are monitored too
+(`ntp_nts_ke_success`, `ntp_nts_cert_expiry_timestamp_seconds`). When the key
+exchange fails, no NTP query is sent and `ntp_up` is 0. `/probe` accepts NTS
+targets as well (`/probe?target=nts://time.cloudflare.com`).
+
+Outgoing TCP 4460 must be open towards the key exchange servers (the Helm
+`values-probe.yaml` network policy opens it).
+
 ## Multi-target probing
 
 Like blackbox_exporter, `/probe?target=host[:port]` measures one target on
@@ -232,7 +260,7 @@ ntp:
 |---|---|---|
 | `PROBE_ENDPOINT_ENABLED` | `true` | Serve `/probe?target=` |
 | `PROBE_ENDPOINT_ONLY` | `false` | Only measure `/probe` targets (no static servers) |
-| `NTP_SERVERS` | `pool.ntp.org,time.google.com` (when no pool) | Comma-separated servers (`host` or `host:port`) |
+| `NTP_SERVERS` | `pool.ntp.org,time.google.com` (when no pool) | Comma-separated servers (`host`, `host:port` or `nts://host[:port]`) |
 | `NTP_POOLS` | | Comma-separated pools, `name[:strategy[:max_servers]]` |
 | `NTP_SCRAPE_INTERVAL` | `60s` | Interval between two cycles (5 s to 1 h) |
 | `NTP_SAMPLES` | `4` | Queries per server and per cycle (1 to 20) |
@@ -292,6 +320,8 @@ Names below use the default `ntp` namespace and no subsystem.
 | `ntp_target_suspended{code}` | 1 while the server is not queried after `DENY` or `RSTR` |
 | `ntp_kiss_of_death_total{code}` | Kiss-o'-Death packets received |
 | `ntp_invalid_responses_total{reason}` | Queries without valid measurement: `kod`, `unsync`, `stratum`, `root_distance`, `stale_reference`, `invalid_time`, `other`, `timeout` |
+| `ntp_nts_ke_success` | NTS servers: 1 when the last key exchange succeeded |
+| `ntp_nts_cert_expiry_timestamp_seconds` | NTS servers: expiry of the key exchange server certificate |
 
 ### Consensus (3 valid servers or more)
 
@@ -371,6 +401,8 @@ Recommended rules are provided:
 | `NTPHighPacketLoss` | More than half of the queries fail over 15 minutes |
 | `NTPKissOfDeathSuspended` | A server sent `DENY` or `RSTR` |
 | `NTPFalseticker` | A server disagrees with the consensus for 10 minutes |
+| `NTPNTSKeyExchangeFailed` | The NTS key exchange of a server fails for 15 minutes |
+| `NTPNTSCertificateExpiringSoon` | The NTS key exchange certificate expires within 14 days |
 | `NTPKernelUnsynchronized` | The kernel clock of a node is unsynchronized for 10 minutes |
 | `NTPKernelErrorBoundViolated` | The measured offset exceeds the kernel `maxerror` for 10 minutes |
 | `NTPExporterCycleOverrun` | Cycles hit their deadline |

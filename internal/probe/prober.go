@@ -19,10 +19,16 @@ type Resolver interface {
 	LookupHost(ctx context.Context, host string) ([]string, error)
 }
 
+// NTSQuerier sends bursts of authenticated queries to NTS servers
+type NTSQuerier interface {
+	Burst(ctx context.Context, host string, count int) ntp.NTSResult
+}
+
 // Prober queries every target exactly once per cycle
 type Prober struct {
 	cfg      *config.Config
 	client   ntp.NTPQuerier
+	nts      NTSQuerier
 	pools    []*ntp.Pool
 	resolver Resolver
 	// cycleTimeout bounds a cycle so that it always ends before the next one
@@ -46,6 +52,7 @@ func New(cfg *config.Config, client ntp.NTPQuerier) *Prober {
 	return &Prober{
 		cfg:          cfg,
 		client:       client,
+		nts:          ntp.NewNTSClient(cfg.NTP.Timeout, cfg.NTP.SampleSpacing),
 		pools:        pools,
 		resolver:     net.DefaultResolver,
 		cycleTimeout: CycleTimeout(cfg.NTP.ScrapeInterval),
@@ -53,6 +60,11 @@ func New(cfg *config.Config, client ntp.NTPQuerier) *Prober {
 		families:     newFamilies(cfg.NTP.IPFamily),
 		previous:     make(map[string]*Measurement),
 	}
+}
+
+// SetNTSClient replaces the NTS client
+func (p *Prober) SetNTSClient(c NTSQuerier) {
+	p.nts = c
 }
 
 // SetResolver replaces the resolver used for configured servers
@@ -230,6 +242,11 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 	m := &Measurement{Target: target, Timestamp: time.Now()}
 	defer func() { m.Duration = time.Since(m.Timestamp) }()
 
+	if ntp.IsNTS(target.Server) {
+		p.measureNTS(ctx, m, samples)
+		return m
+	}
+
 	candidates := []string{target.Address}
 	if target.Address == "" {
 		var err error
@@ -297,6 +314,26 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 	}
 
 	return m
+}
+
+// measureNTS sends one burst of authenticated queries to an NTS target. The
+// NTP server is the one negotiated by the key exchange.
+func (p *Prober) measureNTS(ctx context.Context, m *Measurement, samples int) {
+	res := p.nts.Burst(ctx, ntp.NTSHost(m.Target.Server), samples)
+	m.NTS = &res.State
+	m.Target.Address = res.State.Address
+	m.Sent = res.Sent
+	m.Responses = res.Responses
+	for _, resp := range m.Responses {
+		resp.Server = m.Target.Server
+	}
+	if res.Err != nil && len(m.Responses) == 0 {
+		m.Err = res.Err
+		logger.SafeDebug("probe", "NTS target unreachable", map[string]interface{}{
+			"server": m.Target.Server,
+			"error":  res.Err.Error(),
+		})
+	}
 }
 
 // sleep waits for d unless the context ends first

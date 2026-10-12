@@ -156,6 +156,8 @@ prometheusRule:
   offsetThresholdSeconds: 0.1
   # Duration before NTPServerDown fires
   serverDownFor: 5m
+  # Days before the NTS certificate expiry when NTPNTSCertificateExpiringSoon fires
+  ntsCertExpiryDays: 14
   # Extra rules appended to the group
   additionalRules: []
 

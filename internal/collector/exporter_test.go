@@ -560,3 +560,38 @@ func TestExporter_ChronyTracking(t *testing.T) {
 	_, ok := h.value("ntp_chrony_stratum", node)
 	assert.False(t, ok, "no stale chrony values")
 }
+
+// ntsStub answers every burst with valid authenticated samples
+type ntsStub struct{ keFailure bool }
+
+func (s ntsStub) Burst(_ context.Context, _ string, count int) ntp.NTSResult {
+	if s.keFailure {
+		return ntp.NTSResult{Err: errors.New("key exchange failed"),
+			State: ntp.NTSState{CertExpiry: time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)}}
+	}
+	res := ntp.NTSResult{Sent: count, State: ntp.NTSState{
+		KESuccess: true, CertExpiry: time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC), Address: "192.0.2.1:123"}}
+	for range count {
+		res.Responses = append(res.Responses, &ntp.Response{Stratum: 1, Offset: time.Millisecond, RTT: 5 * time.Millisecond})
+	}
+	return res
+}
+
+func TestExporter_NTSMetrics(t *testing.T) {
+	const server = "nts://nts.example.org"
+	h := newHarness(t, server)
+	h.prober = probe.New(h.cfg, h.client)
+	h.prober.SetNTSClient(ntsStub{})
+
+	h.cycle()
+	assert.Equal(t, 1.0, h.mustValue("ntp_nts_ke_success", srv(server)))
+	assert.Equal(t, 1.7987616e9, h.mustValue("ntp_nts_cert_expiry_timestamp_seconds", srv(server)))
+	assert.Equal(t, 1.0, h.mustValue("ntp_up", srv(server)))
+	assert.Equal(t, 0.001, h.mustValue("ntp_offset_seconds", srv(server)))
+
+	h.prober.SetNTSClient(ntsStub{keFailure: true})
+	h.cycle()
+	assert.Equal(t, 0.0, h.mustValue("ntp_nts_ke_success", srv(server)))
+	assert.Equal(t, 0.0, h.mustValue("ntp_up", srv(server)))
+	assert.Equal(t, 1.7987616e9, h.mustValue("ntp_nts_cert_expiry_timestamp_seconds", srv(server)), "the last known expiry stays")
+}

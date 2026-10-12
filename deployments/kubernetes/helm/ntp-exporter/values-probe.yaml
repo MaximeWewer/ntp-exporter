@@ -76,6 +76,9 @@ networkPolicy:
       port: 123
     - protocol: TCP
       port: 443
+    # NTS key exchange (nts:// servers)
+    - protocol: TCP
+      port: 4460
 
 # /probe endpoint: targets listed in a Prometheus Operator Probe resource are
 # measured on demand. Set only=true to drop config.ntpServers and let

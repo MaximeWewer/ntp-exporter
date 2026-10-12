@@ -37,6 +37,10 @@ type descs struct {
 	// Validity
 	responseValid *prometheus.Desc
 
+	// NTS key exchange
+	ntsKESuccess  *prometheus.Desc
+	ntsCertExpiry *prometheus.Desc
+
 	// /probe endpoint
 	probeSuccess  *prometheus.Desc
 	probeDuration *prometheus.Desc
@@ -117,6 +121,9 @@ func newDescs(namespace, subsystem string) *descs {
 
 		responseValid: d(subsystem, "response_valid", "Whether the server returned at least one valid time measurement during the last cycle (1) or only invalid responses (0)", server...),
 
+		ntsKESuccess:  d(subsystem, "nts_ke_success", "Whether the last NTS key exchange with the server succeeded (1) or not (0)", server...),
+		ntsCertExpiry: d(subsystem, "nts_cert_expiry_timestamp_seconds", "Unix time at which the certificate of the NTS key exchange server expires", server...),
+
 		probeSuccess:  d(subsystem, "probe_success", "Whether the /probe request got a valid time measurement from the target (1) or not (0)"),
 		probeDuration: d(subsystem, "probe_duration_seconds", "Duration of the /probe request burst in seconds"),
 
@@ -166,7 +173,7 @@ func (d *descs) all() []*prometheus.Desc {
 		d.offset, d.offsetMedian, d.offsetExceeded, d.rtt, d.stratum, d.referenceAge,
 		d.rootDelay, d.rootDispersion, d.rootDistance, d.precision, d.leapIndicator,
 		d.jitter, d.offsetStdDev, d.rttStdDev, d.samples, d.packetLoss,
-		d.responseValid,
+		d.responseValid, d.ntsKESuccess, d.ntsCertExpiry,
 		d.consensusOffset, d.consensusServers, d.consensusChimers, d.offsetFromConsensus, d.falseticker,
 		d.poolActive, d.poolTotal, d.poolDNS, d.poolOffset,
 		d.kernelSyncStatus, d.kernelState, d.kernelOffset, d.kernelFrequency,

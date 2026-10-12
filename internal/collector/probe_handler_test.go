@@ -162,3 +162,18 @@ func TestValidateTarget(t *testing.T) {
 	}
 	assert.Error(t, validateTarget(strings.Repeat("a", 254)))
 }
+
+func TestProbeHandler_NTSTarget(t *testing.T) {
+	h, _, _ := newProbeHandler(t)
+	h.prober.SetNTSClient(ntsStub{})
+
+	code, body := serveProbe(t, h, "target="+url.QueryEscape("nts://nts.example.org"), nil)
+
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Contains(t, body, `ntp_nts_ke_success{server="nts://nts.example.org",site="lab"} 1`)
+	assert.Contains(t, body, `ntp_nts_cert_expiry_timestamp_seconds{server="nts://nts.example.org",site="lab"} 1.7987616e+09`)
+	assert.Contains(t, body, `ntp_probe_success{site="lab"} 1`)
+
+	code, _ = serveProbe(t, h, "target="+url.QueryEscape("nts://"), nil)
+	assert.Equal(t, http.StatusBadRequest, code)
+}

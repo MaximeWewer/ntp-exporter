@@ -67,7 +67,8 @@ probe_endpoint:
 # ----------------------------------------------------------------------------
 ntp:
   # List of individual NTP servers to query
-  # Values: list of hostnames or IPs (e.g., ["pool.ntp.org", "time.google.com"])
+  # Values: list of host, host:port, or nts://host[:port] for Network Time
+  # Security (RFC 8915, key exchange over TLS port 4460)
   # Default: ["pool.ntp.org"]
   servers:
   - "pool.ntp.org"

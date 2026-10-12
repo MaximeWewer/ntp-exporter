@@ -72,6 +72,18 @@ func validateServer(cfg *ServerConfig) error {
 	return nil
 }
 
+// validateServerName accepts host, host:port and nts://host[:port]
+func validateServerName(server string) error {
+	host := strings.TrimPrefix(server, NTSScheme)
+	if host == "" || strings.ContainsAny(host, "/ ") {
+		return errors.New("invalid server " + strconv.Quote(server) + ": expected host, host:port or nts://host[:port]")
+	}
+	return nil
+}
+
+// NTSScheme prefixes the servers queried with Network Time Security
+const NTSScheme = "nts://"
+
 // validateChronyAddress accepts udp://host:port and unix:///path
 func validateChronyAddress(address string) error {
 	u, err := url.Parse(address)
@@ -160,10 +172,19 @@ func validateNTP(cfg *NTPConfig, probeOnly bool) error {
 		return errors.New("max_concurrency must be between 1 and 100, got " + strconv.Itoa(cfg.MaxConcurrency))
 	}
 
+	for _, server := range cfg.Servers {
+		if err := validateServerName(server); err != nil {
+			return err
+		}
+	}
+
 	// Validate pools
 	for i, pool := range cfg.Pools {
 		if pool.Name == "" {
 			return errors.New("pool[" + strconv.Itoa(i) + "]: name is required")
+		}
+		if strings.Contains(pool.Name, "://") {
+			return errors.New("pool[" + strconv.Itoa(i) + "]: name must be a DNS name (NTS is only supported for servers)")
 		}
 		if pool.Strategy != "" && pool.Strategy != "best_n" && pool.Strategy != "round_robin" && pool.Strategy != "all" {
 			return errors.New("pool[" + strconv.Itoa(i) + "]: invalid strategy (must be best_n, round_robin, or all)")

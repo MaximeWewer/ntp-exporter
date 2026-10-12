@@ -326,6 +326,17 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 func writeMeasurement(ch chan<- prometheus.Metric, d *descs, cfg *config.Config, meas *probe.Measurement) *ntp.Response {
 	server := meas.Target.Server
 
+	if meas.NTS != nil {
+		success := 0.0
+		if meas.NTS.KESuccess {
+			success = 1
+		}
+		gauge(ch, d.ntsKESuccess, success, server)
+		if !meas.NTS.CertExpiry.IsZero() {
+			gauge(ch, d.ntsCertExpiry, float64(meas.NTS.CertExpiry.Unix()), server)
+		}
+	}
+
 	if meas.SuspendCode != "" {
 		gauge(ch, d.up, 0, server)
 		gauge(ch, d.suspended, 1, server, meas.SuspendCode)

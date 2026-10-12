@@ -701,3 +701,18 @@ func TestValidate_ChronyAddress(t *testing.T) {
 	cfg.NTP.Chrony.Enabled = false
 	assert.NoError(t, Validate(cfg), "the address is only checked when chrony is enabled")
 }
+
+func TestValidate_ServerNames(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.NTP.Servers = []string{"time.example.org", "192.0.2.1:123", "nts://time.cloudflare.com", "nts://nts.netnod.se:4460"}
+	assert.NoError(t, Validate(cfg))
+
+	for _, bad := range []string{"nts://", "http://time.example.org", "time example"} {
+		cfg.NTP.Servers = []string{bad}
+		assert.Error(t, Validate(cfg), bad)
+	}
+
+	cfg = DefaultConfig()
+	cfg.NTP.Pools = []PoolConfig{{Name: "nts://pool.example.org", MaxServers: 4}}
+	assert.ErrorContains(t, Validate(cfg), "NTS is only supported for servers")
+}

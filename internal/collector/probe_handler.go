@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
+	"github.com/maximewewer/ntp-exporter/internal/ntp"
 	"github.com/maximewewer/ntp-exporter/internal/probe"
 	"github.com/maximewewer/ntp-exporter/pkg/logger"
 	"github.com/prometheus/client_golang/prometheus"
@@ -104,8 +105,9 @@ func validateTarget(target string) error {
 	if target == "" {
 		return errors.New("target parameter is missing")
 	}
+	target = strings.TrimPrefix(target, ntp.NTSScheme)
 	if strings.ContainsAny(target, "/ ") {
-		return errors.New("target must be a host or host:port, not a URL")
+		return errors.New("target must be host, host:port or nts://host[:port]")
 	}
 
 	host, port, err := net.SplitHostPort(target)

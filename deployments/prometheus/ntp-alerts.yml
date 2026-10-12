@@ -58,6 +58,21 @@ groups:
       summary: NTP server {{ $labels.server }} disagrees with the other servers
       description: Its correctness interval misses the intersection of the majority of servers (offset from consensus {{ with printf "ntp_offset_from_consensus_seconds{server='%s'}" $labels.server | query
         }}{{ . | first | value | humanizeDuration }}{{ end }}).
+  - alert: NTPNTSKeyExchangeFailed
+    expr: ntp_nts_ke_success == 0
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: NTS key exchange with {{ $labels.server }} fails
+      description: The NTS-KE server (TLS, port 4460) does not deliver keys; authenticated time is not available from {{ $labels.server }}.
+  - alert: NTPNTSCertificateExpiringSoon
+    expr: ntp_nts_cert_expiry_timestamp_seconds - time() < 14 * 86400
+    labels:
+      severity: warning
+    annotations:
+      summary: NTS certificate of {{ $labels.server }} expires soon
+      description: The certificate of the NTS key exchange server expires in {{ $value | humanizeDuration }}.
   - alert: NTPKernelUnsynchronized
     expr: ntp_kernel_sync_status == 0
     for: 10m

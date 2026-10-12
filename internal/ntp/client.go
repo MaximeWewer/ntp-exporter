@@ -97,34 +97,7 @@ func (c *Client) Query(ctx context.Context, server string) (*Response, error) {
 			return nil, fmt.Errorf("ntp query to %s failed: %w", server, result.err)
 		}
 
-		// Validate response once: invalid responses (KoD, unsynchronized server,
-		// excessive root distance...) are returned but flagged so callers never
-		// publish them as measurements
-		validateErr := result.response.Validate()
-		if validateErr != nil {
-			logger.SafeDebug("ntp", "NTP response validation failed", map[string]interface{}{
-				"server": server,
-				"error":  validateErr.Error(),
-			})
-		}
-
-		resp := &Response{}
-		resp.Server = server
-		resp.Offset = result.response.ClockOffset
-		resp.RTT = result.response.RTT
-		resp.Stratum = result.response.Stratum
-		resp.ReferenceTime = result.response.ReferenceTime
-		resp.RootDelay = result.response.RootDelay
-		resp.RootDispersion = result.response.RootDispersion
-		resp.RootDistance = result.response.RootDistance
-		resp.Precision = result.response.Precision
-		resp.LeapIndicator = uint8(result.response.Leap)
-		resp.Poll = result.response.Poll
-		resp.ValidateError = validateErr
-		resp.ReferenceID = result.response.ReferenceID
-		resp.Time = result.response.Time
-		resp.MinError = result.response.MinError
-		resp.KissCode = result.response.KissCode
+		resp := fromNTP(server, result.response)
 
 		logger.SafeDebug("ntp", "NTP query successful", map[string]interface{}{
 			"server":  server,
@@ -134,6 +107,38 @@ func (c *Client) Query(ctx context.Context, server string) (*Response, error) {
 		})
 
 		return resp, nil
+	}
+}
+
+// fromNTP converts a beevik/ntp response. The response is validated once:
+// invalid responses (KoD, unsynchronized server, excessive root distance...)
+// are returned but flagged so callers never publish them as measurements.
+func fromNTP(server string, r *ntp.Response) *Response {
+	validateErr := r.Validate()
+	if validateErr != nil {
+		logger.SafeDebug("ntp", "NTP response validation failed", map[string]interface{}{
+			"server": server,
+			"error":  validateErr.Error(),
+		})
+	}
+
+	return &Response{
+		Server:         server,
+		Offset:         r.ClockOffset,
+		RTT:            r.RTT,
+		Stratum:        r.Stratum,
+		ReferenceTime:  r.ReferenceTime,
+		RootDelay:      r.RootDelay,
+		RootDispersion: r.RootDispersion,
+		RootDistance:   r.RootDistance,
+		Precision:      r.Precision,
+		LeapIndicator:  uint8(r.Leap),
+		Poll:           r.Poll,
+		ValidateError:  validateErr,
+		ReferenceID:    r.ReferenceID,
+		Time:           r.Time,
+		MinError:       r.MinError,
+		KissCode:       r.KissCode,
 	}
 }
 
