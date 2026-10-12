@@ -149,6 +149,7 @@ func TestValidateNTP_ServersOrPools(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -186,6 +187,7 @@ func TestValidateNTP_Timeout(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -224,6 +226,7 @@ func TestValidateNTP_Version(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -261,6 +264,7 @@ func TestValidateNTP_SamplesPerServer(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -298,6 +302,7 @@ func TestValidateNTP_MaxConcurrency(t *testing.T) {
 				MaxConcurrency:   tt.concurrent,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -360,6 +365,7 @@ func TestValidateNTP_Pools(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -393,6 +399,7 @@ func TestValidateNTP_PoolStrategies(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -473,6 +480,7 @@ func TestValidateNTP_RateLimit(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				RateLimit:        tt.rateLimit,
 			}
 
@@ -627,6 +635,7 @@ func TestValidate_CompleteConfig(t *testing.T) {
 			MaxConcurrency:   10,
 			ScrapeInterval:   30 * time.Second,
 			MaxClockOffset:   100 * time.Millisecond,
+			KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 		},
 		Logging: LoggingConfig{
 			Level:  "info",

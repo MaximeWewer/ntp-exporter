@@ -30,6 +30,16 @@ type Measurement struct {
 	Err       error
 	Timestamp time.Time
 	Duration  time.Duration
+	// Skipped is set when the target was not queried during this cycle
+	// because of a RATE backoff: the measurement is the previous one
+	Skipped bool
+	// SuspendCode is the KoD code (DENY or RSTR) of a suspended target
+	SuspendCode string
+}
+
+// key identifies a target across cycles
+func (t Target) key() string {
+	return t.Pool + "|" + t.Server
 }
 
 // Reachable reports whether the target answered at least once

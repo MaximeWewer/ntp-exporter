@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
@@ -26,6 +27,10 @@ type Prober struct {
 	resolver Resolver
 	// cycleTimeout bounds a cycle so that it always ends before the next one
 	cycleTimeout time.Duration
+	backoff      *Backoff
+
+	mu       sync.Mutex
+	previous map[string]*Measurement
 }
 
 // New creates a prober. Pools are long-lived so that their DNS cache
@@ -43,6 +48,8 @@ func New(cfg *config.Config, client ntp.NTPQuerier) *Prober {
 		pools:        pools,
 		resolver:     net.DefaultResolver,
 		cycleTimeout: CycleTimeout(cfg.NTP.ScrapeInterval),
+		backoff:      NewBackoff(cfg.NTP.ScrapeInterval, cfg.NTP.KoD.MaxBackoff, cfg.NTP.KoD.SuspendDuration),
+		previous:     make(map[string]*Measurement),
 	}
 }
 
@@ -79,11 +86,12 @@ func (p *Prober) Run(ctx context.Context) *CycleResult {
 	g.SetLimit(p.cfg.NTP.MaxConcurrency)
 	for i, target := range targets {
 		g.Go(func() error {
-			result.Measurements[i] = p.measure(cycleCtx, target)
+			result.Measurements[i] = p.probe(cycleCtx, target)
 			return nil
 		})
 	}
 	_ = g.Wait()
+	p.forget(targets)
 
 	result.Duration = time.Since(result.Start)
 	result.Overrun = errors.Is(cycleCtx.Err(), context.DeadlineExceeded)
@@ -152,6 +160,53 @@ func (p *Prober) resolve(ctx context.Context, server string) (string, error) {
 		return net.JoinHostPort(addrs[0], port), nil
 	}
 	return addrs[0], nil
+}
+
+// probe measures a target unless the Kiss-o'-Death backoff forbids it
+func (p *Prober) probe(ctx context.Context, target Target) *Measurement {
+	key := target.key()
+
+	decision := p.backoff.Allow(key)
+	if decision.SuspendCode != "" {
+		return &Measurement{Target: target, Timestamp: time.Now(), SuspendCode: decision.SuspendCode}
+	}
+	if !decision.Allowed {
+		p.mu.Lock()
+		prev := p.previous[key]
+		p.mu.Unlock()
+		if prev == nil {
+			return &Measurement{Target: target, Timestamp: time.Now(), Skipped: true}
+		}
+		skipped := *prev
+		skipped.Skipped = true
+		return &skipped
+	}
+
+	m := p.measure(ctx, target)
+	p.backoff.Record(key, m)
+
+	p.mu.Lock()
+	p.previous[key] = m
+	p.mu.Unlock()
+
+	return m
+}
+
+// forget drops the state of targets that are no longer probed
+func (p *Prober) forget(targets []Target) {
+	keep := make(map[string]bool, len(targets))
+	for _, t := range targets {
+		keep[t.key()] = true
+	}
+	p.backoff.Forget(keep)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for key := range p.previous {
+		if !keep[key] {
+			delete(p.previous, key)
+		}
+	}
 }
 
 // measure sends one burst of queries to a target

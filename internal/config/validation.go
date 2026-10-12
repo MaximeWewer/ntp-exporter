@@ -83,6 +83,14 @@ func validateNTP(cfg *NTPConfig) error {
 		return errors.New("max_clock_offset must be positive, got " + cfg.MaxClockOffset.String())
 	}
 
+	if cfg.KoD.MaxBackoff < cfg.ScrapeInterval {
+		return errors.New("kod.max_backoff must be at least scrape_interval, got " + cfg.KoD.MaxBackoff.String())
+	}
+
+	if cfg.KoD.SuspendDuration <= 0 {
+		return errors.New("kod.suspend_duration must be positive, got " + cfg.KoD.SuspendDuration.String())
+	}
+
 	if cfg.MaxConcurrency < 1 || cfg.MaxConcurrency > 100 {
 		return errors.New("max_concurrency must be between 1 and 100, got " + strconv.Itoa(cfg.MaxConcurrency))
 	}

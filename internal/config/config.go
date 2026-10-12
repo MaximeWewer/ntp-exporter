@@ -26,6 +26,9 @@
 //	  - NTP_SAMPLES, NTP_MAX_CONCURRENCY, NTP_ENABLE_KERNEL
 //	  - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET
 //
+//	KISS-O'-DEATH:
+//	  - NTP_KOD_MAX_BACKOFF, NTP_KOD_SUSPEND_DURATION
+//
 //	RATE_LIMIT:
 //	  - RATE_LIMIT_ENABLED, RATE_LIMIT_GLOBAL, RATE_LIMIT_PER_SERVER
 //	  - RATE_LIMIT_BURST_SIZE, RATE_LIMIT_BACKOFF_DURATION
@@ -100,6 +103,7 @@ type NTPConfig struct {
 	MaxClockOffset   time.Duration          `yaml:"max_clock_offset"` // Maximum acceptable clock offset threshold
 	RateLimit        RateLimitConfig        `yaml:"rate_limit"`
 	CircuitBreaker   CircuitBreakerConfig   `yaml:"circuit_breaker"`
+	KoD              KoDConfig              `yaml:"kod"`
 	AdaptiveSampling AdaptiveSamplingConfig `yaml:"adaptive_sampling"`
 	WorkerPool       WorkerPoolConfig       `yaml:"worker_pool"`
 	DNSCache         DNSCacheConfig         `yaml:"dns_cache"`
@@ -120,6 +124,14 @@ type RateLimitConfig struct {
 	PerServerRate   int           `yaml:"per_server_rate"`
 	BurstSize       int           `yaml:"burst_size"`
 	BackoffDuration time.Duration `yaml:"backoff_duration"`
+}
+
+// KoDConfig contains the Kiss-o'-Death handling configuration (RFC 5905 §7.4)
+type KoDConfig struct {
+	// MaxBackoff is the longest polling interval reached after repeated RATE codes
+	MaxBackoff time.Duration `yaml:"max_backoff"`
+	// SuspendDuration is how long a target stays unqueried after DENY or RSTR
+	SuspendDuration time.Duration `yaml:"suspend_duration"`
 }
 
 // CircuitBreakerConfig contains circuit breaker configuration
@@ -391,6 +403,10 @@ func applyEnvOverrides(cfg *Config) error {
 	e.int("RATE_LIMIT_PER_SERVER", &cfg.NTP.RateLimit.PerServerRate)
 	e.int("RATE_LIMIT_BURST_SIZE", &cfg.NTP.RateLimit.BurstSize)
 	e.duration("RATE_LIMIT_BACKOFF_DURATION", &cfg.NTP.RateLimit.BackoffDuration)
+
+	// KISS-O'-DEATH
+	e.duration("NTP_KOD_MAX_BACKOFF", &cfg.NTP.KoD.MaxBackoff)
+	e.duration("NTP_KOD_SUSPEND_DURATION", &cfg.NTP.KoD.SuspendDuration)
 
 	// CIRCUIT BREAKER
 	e.bool("CIRCUIT_BREAKER_ENABLED", &cfg.NTP.CircuitBreaker.Enabled)

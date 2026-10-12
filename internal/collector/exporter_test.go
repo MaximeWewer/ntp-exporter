@@ -308,3 +308,29 @@ type identityResolver struct{}
 func (identityResolver) LookupHost(_ context.Context, host string) ([]string, error) {
 	return []string{host}, nil
 }
+
+func TestExporter_KoDDenySuspension(t *testing.T) {
+	const server = "deny.example.org"
+	h := newHarness(t, server)
+	h.mock.SetupKoDServer(server, "DENY")
+
+	h.cycle()
+	h.cycle()
+
+	assert.Equal(t, 1.0, h.mustValue("ntp_target_suspended", map[string]string{"server": server, "code": "DENY"}))
+	assert.Equal(t, 0.0, h.mustValue("ntp_up", srv(server)))
+	assert.Equal(t, 3.0, h.mustValue("ntp_kiss_of_death_total", map[string]string{"server": server, "code": "DENY"}),
+		"the suspended cycle sends nothing and counts nothing")
+}
+
+func TestExporter_KoDRateSkippedCycleIsNotCountedTwice(t *testing.T) {
+	const server = "rate.example.org"
+	h := newHarness(t, server)
+	h.mock.SetupKoDServer(server, "RATE")
+
+	h.cycle()
+	h.cycle()
+
+	assert.Equal(t, 3.0, h.mustValue("ntp_kiss_of_death_total", map[string]string{"server": server, "code": "RATE"}))
+	assert.Equal(t, 1.0, h.mustValue("ntp_up", srv(server)), "skipped target keeps its previous state")
+}

@@ -127,6 +127,10 @@ func (e *Exporter) updateCounters(result *probe.CycleResult) {
 		if meas.Reachable() {
 			successCount++
 		}
+		// A skipped target carries its previous measurement: already counted
+		if meas.Skipped {
+			continue
+		}
 		for _, resp := range meas.Responses {
 			server := meas.Target.Server
 			if resp.IsKissOfDeath() {
@@ -199,6 +203,15 @@ func gauge(ch chan<- prometheus.Metric, desc *prometheus.Desc, value float64, la
 func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.Measurement) {
 	d := e.descs
 	server := meas.Target.Server
+
+	if meas.SuspendCode != "" {
+		gauge(ch, d.up, 0, server)
+		gauge(ch, d.suspended, 1, server, meas.SuspendCode)
+		if ts, ok := e.lastSuccess[server]; ok {
+			gauge(ch, d.lastSuccess, float64(ts.UnixNano())/1e9, server)
+		}
+		return
+	}
 
 	up := 0.0
 	if meas.Reachable() {

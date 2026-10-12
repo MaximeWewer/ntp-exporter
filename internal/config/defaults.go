@@ -56,6 +56,14 @@ func ApplyDefaults(cfg *Config) {
 		cfg.NTP.MaxClockOffset = 100 * time.Millisecond
 	}
 
+	// Kiss-o'-Death defaults
+	if cfg.NTP.KoD.MaxBackoff == 0 {
+		cfg.NTP.KoD.MaxBackoff = 1024 * time.Second
+	}
+	if cfg.NTP.KoD.SuspendDuration == 0 {
+		cfg.NTP.KoD.SuspendDuration = 1 * time.Hour
+	}
+
 	// Rate limiting defaults
 	if cfg.NTP.RateLimit.GlobalRate == 0 {
 		cfg.NTP.RateLimit.GlobalRate = 1000

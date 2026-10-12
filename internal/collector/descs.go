@@ -9,6 +9,7 @@ type descs struct {
 	// Target health
 	up          *prometheus.Desc
 	lastSuccess *prometheus.Desc
+	suspended   *prometheus.Desc
 
 	// Base NTP metrics
 	offset         *prometheus.Desc
@@ -61,6 +62,7 @@ func newDescs(namespace, subsystem string) *descs {
 	return &descs{
 		up:          d(subsystem, "up", "Whether the NTP server answered during the last cycle (1) or not (0)", server...),
 		lastSuccess: d(subsystem, "last_success_timestamp_seconds", "Unix time of the last cycle with a valid response from the server", server...),
+		suspended:   d(subsystem, "target_suspended", "Whether the server is no longer queried after a DENY or RSTR Kiss-o'-Death (1) or not (0)", "server", "code"),
 
 		offset:         d(subsystem, "offset_seconds", "Time offset between local clock and NTP server in seconds", server...),
 		offsetExceeded: d(subsystem, "clock_offset_exceeded", "Whether the clock offset exceeds the configured threshold (1 = exceeded, 0 = within limits)", server...),
@@ -101,7 +103,7 @@ func newDescs(namespace, subsystem string) *descs {
 // all returns every descriptor
 func (d *descs) all() []*prometheus.Desc {
 	return []*prometheus.Desc{
-		d.up, d.lastSuccess,
+		d.up, d.lastSuccess, d.suspended,
 		d.offset, d.offsetExceeded, d.rtt, d.stratum, d.referenceTime,
 		d.rootDelay, d.rootDispersion, d.rootDistance, d.precision, d.leapIndicator,
 		d.jitter, d.stability, d.asymmetry, d.samples, d.packetLoss,

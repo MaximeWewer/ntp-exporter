@@ -6,31 +6,16 @@ import (
 )
 
 // NewClient creates the NTP client shared by the whole exporter.
-// It is wrapped with a circuit breaker when enabled.
+// Resilience is handled by the prober (Kiss-o'-Death backoff), not by the client.
 func NewClient(cfg *config.Config) ntp.NTPQuerier {
-	var baseClient ntp.NTPQuerier
-
 	if cfg.NTP.RateLimit.Enabled {
-		baseClient = ntp.NewClientWithRateLimit(
+		return ntp.NewClientWithRateLimit(
 			cfg.NTP.Timeout,
 			cfg.NTP.Version,
 			cfg.NTP.RateLimit.GlobalRate,
 			cfg.NTP.RateLimit.PerServerRate,
 			cfg.NTP.RateLimit.BurstSize,
 		)
-	} else {
-		baseClient = ntp.NewClient(cfg.NTP.Timeout, cfg.NTP.Version)
 	}
-
-	if cfg.NTP.CircuitBreaker.Enabled {
-		cbConfig := ntp.NewCircuitBreakerConfigWithThreshold(
-			cfg.NTP.CircuitBreaker.MaxRequests,
-			cfg.NTP.CircuitBreaker.Interval,
-			cfg.NTP.CircuitBreaker.Timeout,
-			cfg.NTP.CircuitBreaker.FailureThreshold,
-		)
-		return ntp.NewCircuitBreakerClient(baseClient, cbConfig)
-	}
-
-	return baseClient
+	return ntp.NewClient(cfg.NTP.Timeout, cfg.NTP.Version)
 }
