@@ -47,14 +47,11 @@ func TestCollectMetrics(t *testing.T) {
 		t.Skip("Skipping network test in short mode")
 	}
 
-	cfg := &config.Config{
-		NTP: config.NTPConfig{
-			Servers:          []string{"pool.ntp.org"},
-			Timeout:          5 * time.Second,
-			Version:          4,
-			SamplesPerServer: 1,
-		},
-	}
+	cfg := config.DefaultConfig()
+	cfg.NTP.Servers = []string{"pool.ntp.org"}
+	cfg.NTP.Timeout = 5 * time.Second
+	cfg.NTP.Version = 4
+	cfg.NTP.SamplesPerServer = 1
 
 	m := metrics.NewNTPMetrics()
 	collectorRegistry := collector.NewRegistry()
@@ -74,14 +71,11 @@ func TestCollectMetrics(t *testing.T) {
 }
 
 func TestRunCollectionLoop_ContextCancellation(t *testing.T) {
-	cfg := &config.Config{
-		NTP: config.NTPConfig{
-			Servers:          []string{"pool.ntp.org"},
-			Timeout:          2 * time.Second,
-			Version:          4,
-			SamplesPerServer: 1,
-		},
-	}
+	cfg := config.DefaultConfig()
+	cfg.NTP.Servers = []string{"pool.ntp.org"}
+	cfg.NTP.Timeout = 2 * time.Second
+	cfg.NTP.Version = 4
+	cfg.NTP.SamplesPerServer = 1
 
 	m := metrics.NewNTPMetrics()
 	collectorRegistry := collector.NewRegistry()
@@ -100,14 +94,11 @@ func TestRunCollectionLoop_ContextCancellation(t *testing.T) {
 }
 
 func TestCollectMetrics_EmptyServers(t *testing.T) {
-	cfg := &config.Config{
-		NTP: config.NTPConfig{
-			Servers:          []string{},
-			Timeout:          2 * time.Second,
-			Version:          4,
-			SamplesPerServer: 1,
-		},
-	}
+	cfg := config.DefaultConfig()
+	cfg.NTP.Servers = []string{}
+	cfg.NTP.Timeout = 2 * time.Second
+	cfg.NTP.Version = 4
+	cfg.NTP.SamplesPerServer = 1
 
 	m := metrics.NewNTPMetrics()
 	collectorRegistry := collector.NewRegistry()
@@ -125,14 +116,11 @@ func TestCollectMetrics_EmptyServers(t *testing.T) {
 }
 
 func TestRunCollectionLoop_WithTimeout(t *testing.T) {
-	cfg := &config.Config{
-		NTP: config.NTPConfig{
-			Servers:          []string{"pool.ntp.org"},
-			Timeout:          2 * time.Second,
-			Version:          4,
-			SamplesPerServer: 1,
-		},
-	}
+	cfg := config.DefaultConfig()
+	cfg.NTP.Servers = []string{"pool.ntp.org"}
+	cfg.NTP.Timeout = 2 * time.Second
+	cfg.NTP.Version = 4
+	cfg.NTP.SamplesPerServer = 1
 
 	m := metrics.NewNTPMetrics()
 	collectorRegistry := collector.NewRegistry()
@@ -150,14 +138,11 @@ func TestRunCollectionLoop_WithTimeout(t *testing.T) {
 }
 
 func TestCollectMetrics_NetworkFailure(t *testing.T) {
-	cfg := &config.Config{
-		NTP: config.NTPConfig{
-			Servers:          []string{"192.0.2.1"}, // TEST-NET-1, should fail
-			Timeout:          1 * time.Second,
-			Version:          4,
-			SamplesPerServer: 1,
-		},
-	}
+	cfg := config.DefaultConfig()
+	cfg.NTP.Servers = []string{"192.0.2.1"} // TEST-NET-1, should fail
+	cfg.NTP.Timeout = 1 * time.Second
+	cfg.NTP.Version = 4
+	cfg.NTP.SamplesPerServer = 1
 
 	m := metrics.NewNTPMetrics()
 	collectorRegistry := collector.NewRegistry()
@@ -176,14 +161,11 @@ func BenchmarkCollectMetrics(b *testing.B) {
 		b.Skip("Skipping network benchmark in short mode")
 	}
 
-	cfg := &config.Config{
-		NTP: config.NTPConfig{
-			Servers:          []string{"pool.ntp.org"},
-			Timeout:          5 * time.Second,
-			Version:          4,
-			SamplesPerServer: 1,
-		},
-	}
+	cfg := config.DefaultConfig()
+	cfg.NTP.Servers = []string{"pool.ntp.org"}
+	cfg.NTP.Timeout = 5 * time.Second
+	cfg.NTP.Version = 4
+	cfg.NTP.SamplesPerServer = 1
 
 	m := metrics.NewNTPMetrics()
 	collectorRegistry := collector.NewRegistry()

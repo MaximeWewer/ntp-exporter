@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+// Bounds for the collection interval
+const (
+	MinScrapeInterval = 5 * time.Second
+	MaxScrapeInterval = 1 * time.Hour
+)
+
 // Validate checks if the configuration is valid
 func Validate(cfg *Config) error {
 	if err := validateServer(&cfg.Server); err != nil {
@@ -67,6 +73,14 @@ func validateNTP(cfg *NTPConfig) error {
 
 	if cfg.SamplesPerServer < 1 || cfg.SamplesPerServer > 20 {
 		return errors.New("samples_per_server must be between 1 and 20, got " + strconv.Itoa(cfg.SamplesPerServer))
+	}
+
+	if cfg.ScrapeInterval < MinScrapeInterval || cfg.ScrapeInterval > MaxScrapeInterval {
+		return errors.New("scrape_interval must be between " + MinScrapeInterval.String() + " and " + MaxScrapeInterval.String() + ", got " + cfg.ScrapeInterval.String())
+	}
+
+	if cfg.MaxClockOffset <= 0 {
+		return errors.New("max_clock_offset must be positive, got " + cfg.MaxClockOffset.String())
 	}
 
 	if cfg.MaxConcurrency < 1 || cfg.MaxConcurrency > 100 {

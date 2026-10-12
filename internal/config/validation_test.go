@@ -147,6 +147,8 @@ func TestValidateNTP_ServersOrPools(t *testing.T) {
 				Version:          4,
 				SamplesPerServer: 3,
 				MaxConcurrency:   10,
+				ScrapeInterval:   30 * time.Second,
+				MaxClockOffset:   100 * time.Millisecond,
 			}
 
 			err := validateNTP(cfg)
@@ -182,6 +184,8 @@ func TestValidateNTP_Timeout(t *testing.T) {
 				Version:          4,
 				SamplesPerServer: 3,
 				MaxConcurrency:   10,
+				ScrapeInterval:   30 * time.Second,
+				MaxClockOffset:   100 * time.Millisecond,
 			}
 
 			err := validateNTP(cfg)
@@ -218,6 +222,8 @@ func TestValidateNTP_Version(t *testing.T) {
 				Version:          tt.version,
 				SamplesPerServer: 3,
 				MaxConcurrency:   10,
+				ScrapeInterval:   30 * time.Second,
+				MaxClockOffset:   100 * time.Millisecond,
 			}
 
 			err := validateNTP(cfg)
@@ -253,6 +259,8 @@ func TestValidateNTP_SamplesPerServer(t *testing.T) {
 				Version:          4,
 				SamplesPerServer: tt.samples,
 				MaxConcurrency:   10,
+				ScrapeInterval:   30 * time.Second,
+				MaxClockOffset:   100 * time.Millisecond,
 			}
 
 			err := validateNTP(cfg)
@@ -288,6 +296,8 @@ func TestValidateNTP_MaxConcurrency(t *testing.T) {
 				Version:          4,
 				SamplesPerServer: 3,
 				MaxConcurrency:   tt.concurrent,
+				ScrapeInterval:   30 * time.Second,
+				MaxClockOffset:   100 * time.Millisecond,
 			}
 
 			err := validateNTP(cfg)
@@ -348,6 +358,8 @@ func TestValidateNTP_Pools(t *testing.T) {
 				Version:          4,
 				SamplesPerServer: 3,
 				MaxConcurrency:   10,
+				ScrapeInterval:   30 * time.Second,
+				MaxClockOffset:   100 * time.Millisecond,
 			}
 
 			err := validateNTP(cfg)
@@ -379,6 +391,8 @@ func TestValidateNTP_PoolStrategies(t *testing.T) {
 				Version:          4,
 				SamplesPerServer: 3,
 				MaxConcurrency:   10,
+				ScrapeInterval:   30 * time.Second,
+				MaxClockOffset:   100 * time.Millisecond,
 			}
 
 			err := validateNTP(cfg)
@@ -457,6 +471,8 @@ func TestValidateNTP_RateLimit(t *testing.T) {
 				Version:          4,
 				SamplesPerServer: 3,
 				MaxConcurrency:   10,
+				ScrapeInterval:   30 * time.Second,
+				MaxClockOffset:   100 * time.Millisecond,
 				RateLimit:        tt.rateLimit,
 			}
 
@@ -609,6 +625,8 @@ func TestValidate_CompleteConfig(t *testing.T) {
 			Version:          4,
 			SamplesPerServer: 3,
 			MaxConcurrency:   10,
+			ScrapeInterval:   30 * time.Second,
+			MaxClockOffset:   100 * time.Millisecond,
 		},
 		Logging: LoggingConfig{
 			Level:  "info",
@@ -629,5 +647,28 @@ func BenchmarkValidate(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = Validate(cfg)
+	}
+}
+
+func TestValidate_ScrapeIntervalBounds(t *testing.T) {
+	for _, interval := range []time.Duration{0, -time.Second, time.Second, 2 * time.Hour} {
+		cfg := DefaultConfig()
+		cfg.NTP.ScrapeInterval = interval
+		if err := Validate(cfg); err == nil {
+			t.Errorf("scrape_interval %s should be rejected", interval)
+		}
+	}
+	cfg := DefaultConfig()
+	cfg.NTP.ScrapeInterval = 30 * time.Second
+	if err := Validate(cfg); err != nil {
+		t.Errorf("scrape_interval 30s should be accepted: %v", err)
+	}
+}
+
+func TestValidate_MaxClockOffsetPositive(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.NTP.MaxClockOffset = -time.Millisecond
+	if err := Validate(cfg); err == nil {
+		t.Error("negative max_clock_offset should be rejected")
 	}
 }
