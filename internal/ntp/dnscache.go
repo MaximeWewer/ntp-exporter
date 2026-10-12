@@ -23,7 +23,12 @@ type DNSCache struct {
 	cache    map[string]*DNSCacheEntry
 	minTTL   time.Duration
 	maxTTL   time.Duration
-	resolver *net.Resolver
+	resolver hostResolver
+}
+
+// hostResolver resolves host names (net.Resolver in production)
+type hostResolver interface {
+	LookupHost(ctx context.Context, host string) ([]string, error)
 }
 
 // DNSCacheConfig configures the DNS cache behavior
@@ -49,12 +54,6 @@ func NewDNSCache(config DNSCacheConfig) *DNSCache {
 			PreferGo: true,
 		},
 	}
-}
-
-// Resolve resolves a hostname with intelligent caching
-func (c *DNSCache) Resolve(ctx context.Context, hostname string) ([]string, error) {
-	ips, _, err := c.ResolveCached(ctx, hostname)
-	return ips, err
 }
 
 // ResolveCached resolves a hostname and reports whether the answer came from
@@ -161,97 +160,4 @@ func (c *DNSCache) calculateAdaptiveTTL(exists bool, entry *DNSCacheEntry) time.
 	}
 
 	return ttl
-}
-
-// Invalidate removes a hostname from the cache
-func (c *DNSCache) Invalidate(hostname string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	delete(c.cache, hostname)
-	logger.SafeDebug("dns", "DNS cache invalidated", map[string]interface{}{
-		"hostname": hostname,
-	})
-}
-
-// Clear removes all entries from the cache
-func (c *DNSCache) Clear() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.cache = make(map[string]*DNSCacheEntry)
-	logger.Info("dns", "DNS cache cleared")
-}
-
-// Stats returns cache statistics
-func (c *DNSCache) Stats() map[string]interface{} {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	totalEntries := len(c.cache)
-	validEntries := 0
-	expiredEntries := 0
-
-	now := time.Now()
-	for _, entry := range c.cache {
-		if now.Before(entry.ExpiresAt) {
-			validEntries++
-		} else {
-			expiredEntries++
-		}
-	}
-
-	return map[string]interface{}{
-		"total_entries":   totalEntries,
-		"valid_entries":   validEntries,
-		"expired_entries": expiredEntries,
-		"min_ttl":         c.minTTL.String(),
-		"max_ttl":         c.maxTTL.String(),
-	}
-}
-
-// CleanupExpired removes expired entries (should be called periodically)
-func (c *DNSCache) CleanupExpired() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	now := time.Now()
-	removed := 0
-
-	for hostname, entry := range c.cache {
-		if now.After(entry.ExpiresAt) {
-			delete(c.cache, hostname)
-			removed++
-		}
-	}
-
-	if removed > 0 {
-		logger.SafeDebug("dns", "Cleaned up expired DNS entries", map[string]interface{}{
-			"removed": removed,
-		})
-	}
-
-	return removed
-}
-
-// StartCleanupWorker starts a background worker to clean expired entries
-func (c *DNSCache) StartCleanupWorker(ctx context.Context, interval time.Duration) {
-	if interval == 0 {
-		interval = 10 * time.Minute
-	}
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	logger.Info("dns", "DNS cache cleanup worker started")
-
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Info("dns", "DNS cache cleanup worker stopped")
-			return
-		case <-ticker.C:
-			c.CleanupExpired()
-		}
-	}
 }

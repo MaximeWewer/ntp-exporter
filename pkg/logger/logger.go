@@ -152,20 +152,6 @@ func sanitizeString(s string) string {
 	return s
 }
 
-// Debug logs a debug message
-func Debug(pkg, message string) {
-	Logger.Debug().
-		Str("package", pkg).
-		Msg(message)
-}
-
-// Debugf logs a formatted debug message
-func Debugf(pkg, format string, args ...interface{}) {
-	Logger.Debug().
-		Str("package", pkg).
-		Msgf(format, args...)
-}
-
 // Info logs an info message
 func Info(pkg, message string) {
 	Logger.Info().
@@ -202,28 +188,12 @@ func Error(pkg, message string, err error) {
 		Msg(message)
 }
 
-// Errorf logs a formatted error message
-func Errorf(pkg string, err error, format string, args ...interface{}) {
-	Logger.Error().
-		Str("package", pkg).
-		Err(err).
-		Msgf(format, args...)
-}
-
 // Fatal logs a fatal message and exits
 func Fatal(pkg, message string, err error) {
 	Logger.Fatal().
 		Str("package", pkg).
 		Err(err).
 		Msg(message)
-}
-
-// Fatalf logs a formatted fatal message and exits
-func Fatalf(pkg string, err error, format string, args ...interface{}) {
-	Logger.Fatal().
-		Str("package", pkg).
-		Err(err).
-		Msgf(format, args...)
 }
 
 // SafeDebug logs a debug message with sanitized fields
@@ -266,16 +236,6 @@ func SafeError(pkg, message string, err error, fields map[string]interface{}) {
 	event.Msg(message)
 }
 
-// WithFields creates a logger with predefined fields
-func WithFields(pkg string, fields map[string]interface{}) zerolog.Logger {
-	sanitized := sanitizeFields(fields)
-	ctx := Logger.With().Str("package", pkg)
-	for k, v := range sanitized {
-		ctx = ctx.Interface(k, v)
-	}
-	return ctx.Logger()
-}
-
 // HTTP logs HTTP request information
 func HTTP(method, path string, statusCode int, duration time.Duration, remoteAddr string) {
 	Logger.Info().
@@ -302,36 +262,6 @@ func Metric(collector, server string, duration time.Duration, success bool) {
 	} else {
 		event.Msg("Metric collection failed")
 	}
-}
-
-// NTP logs NTP-specific operations
-func NTP(operation, server string, fields map[string]interface{}) {
-	sanitized := sanitizeFields(fields)
-	event := Logger.Debug().
-		Str("package", "ntp").
-		Str("operation", operation).
-		Str("server", server)
-
-	for k, v := range sanitized {
-		event = event.Interface(k, v)
-	}
-
-	event.Msg("NTP operation")
-}
-
-// Security logs security-related events
-func Security(event, reason string, fields map[string]interface{}) {
-	sanitized := sanitizeFields(fields)
-	logEvent := Logger.Warn().
-		Str("package", "security").
-		Str("event", event).
-		Str("reason", reason)
-
-	for k, v := range sanitized {
-		logEvent = logEvent.Interface(k, v)
-	}
-
-	logEvent.Msg("Security event detected")
 }
 
 // Startup logs application startup information

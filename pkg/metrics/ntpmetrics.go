@@ -155,11 +155,6 @@ func NewNTPMetricsWithConfig(namespace, subsystem string) *NTPMetrics {
 	}
 }
 
-// NewNTPMetrics creates and initializes the exporter metrics with default namespace and subsystem
-func NewNTPMetrics() *NTPMetrics {
-	return NewNTPMetricsWithConfig("ntp", "")
-}
-
 // getAllMetrics returns all metric collectors
 func (m *NTPMetrics) getAllMetrics() []prometheus.Collector {
 	return []prometheus.Collector{

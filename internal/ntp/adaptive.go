@@ -54,12 +54,6 @@ func NewAdaptiveSampler(config AdaptiveSamplingConfig, querier NTPQuerier) *Adap
 	}
 }
 
-// Sample performs adaptive sampling from an NTP server
-func (a *AdaptiveSampler) Sample(ctx context.Context, server string) ([]*Response, error) {
-	responses, _, err := a.SampleWithCount(ctx, server)
-	return responses, err
-}
-
 // SampleWithCount performs adaptive sampling and also returns the number of
 // queries sent, so that packet loss can be computed on sent packets
 func (a *AdaptiveSampler) SampleWithCount(ctx context.Context, server string) ([]*Response, int, error) {
@@ -178,41 +172,4 @@ func (a *AdaptiveSampler) calculateConfidence(stats *Statistics, sampleCount int
 
 	// Clamp to [0, 1]
 	return mathutil.Clamp(confidence, 0.0, 1.0)
-}
-
-// SampleMultipleServers performs adaptive sampling on multiple servers
-func (a *AdaptiveSampler) SampleMultipleServers(ctx context.Context, servers []string) (map[string][]*Response, error) {
-	results := make(map[string][]*Response)
-
-	for _, server := range servers {
-		select {
-		case <-ctx.Done():
-			return results, ctx.Err()
-		default:
-		}
-
-		responses, err := a.Sample(ctx, server)
-		if err != nil {
-			logger.SafeWarn("adaptive", "Failed to sample server", map[string]interface{}{
-				"server": server,
-				"error":  err.Error(),
-			})
-			continue
-		}
-
-		results[server] = responses
-	}
-
-	return results, nil
-}
-
-// GetOptimalSampleCount returns the optimal number of samples based on initial measurement
-func (a *AdaptiveSampler) GetOptimalSampleCount(initialOffset time.Duration) int {
-	absOffset := mathutil.AbsDuration(initialOffset)
-
-	if absOffset > a.config.DriftThreshold {
-		return a.config.HighDriftSamples
-	}
-
-	return a.config.DefaultSamples
 }

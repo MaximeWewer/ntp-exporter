@@ -34,7 +34,7 @@ func createTestConfig() *config.Config {
 
 func TestServer_MetricsEndpoint(t *testing.T) {
 	cfg := createTestConfig()
-	metricsRegistry := metrics.NewRegistry()
+	metricsRegistry := metrics.NewRegistryWithConfig("ntp", "")
 	err := metricsRegistry.Register()
 	require.NoError(t, err)
 	registry := metricsRegistry.GetRegistry()
@@ -59,7 +59,7 @@ func TestServer_MetricsEndpoint(t *testing.T) {
 
 func TestServer_HealthEndpoint(t *testing.T) {
 	cfg := createTestConfig()
-	metricsRegistry := metrics.NewRegistry()
+	metricsRegistry := metrics.NewRegistryWithConfig("ntp", "")
 	err := metricsRegistry.Register()
 	require.NoError(t, err)
 	registry := metricsRegistry.GetRegistry()
@@ -82,7 +82,7 @@ func TestServer_HealthEndpoint(t *testing.T) {
 
 func TestServer_IndexEndpoint(t *testing.T) {
 	cfg := createTestConfig()
-	metricsRegistry := metrics.NewRegistry()
+	metricsRegistry := metrics.NewRegistryWithConfig("ntp", "")
 	err := metricsRegistry.Register()
 	require.NoError(t, err)
 	registry := metricsRegistry.GetRegistry()
@@ -107,7 +107,7 @@ func TestServer_IndexEndpoint(t *testing.T) {
 
 func TestServer_MultipleScrapes(t *testing.T) {
 	cfg := createTestConfig()
-	metricsRegistry := metrics.NewRegistry()
+	metricsRegistry := metrics.NewRegistryWithConfig("ntp", "")
 	err := metricsRegistry.Register()
 	require.NoError(t, err)
 	handlers := NewHandlers(cfg, metricsRegistry.GetRegistry())
@@ -132,7 +132,7 @@ func TestServer_MultipleScrapes(t *testing.T) {
 
 func TestServer_ConcurrentRequests(t *testing.T) {
 	cfg := createTestConfig()
-	metricsRegistry := metrics.NewRegistry()
+	metricsRegistry := metrics.NewRegistryWithConfig("ntp", "")
 	err := metricsRegistry.Register()
 	require.NoError(t, err)
 	registry := metricsRegistry.GetRegistry()
@@ -172,11 +172,11 @@ func TestServer_ConcurrentRequests(t *testing.T) {
 
 func TestServer_GracefulShutdown(t *testing.T) {
 	cfg := createTestConfig()
-	metricsRegistry := metrics.NewRegistry()
+	metricsRegistry := metrics.NewRegistryWithConfig("ntp", "")
 	err := metricsRegistry.Register()
 	require.NoError(t, err)
 	registry := metricsRegistry.GetRegistry()
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	server := New(cfg, registry, m)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -202,7 +202,7 @@ func TestServer_GracefulShutdown(t *testing.T) {
 
 func TestServer_MetricsFormat(t *testing.T) {
 	cfg := createTestConfig()
-	metricsRegistry := metrics.NewRegistry()
+	metricsRegistry := metrics.NewRegistryWithConfig("ntp", "")
 	err := metricsRegistry.Register()
 	require.NoError(t, err)
 	handlers := NewHandlers(cfg, metricsRegistry.GetRegistry())
@@ -238,7 +238,7 @@ func TestServer_MetricsFormat(t *testing.T) {
 
 func BenchmarkServer_MetricsEndpoint(b *testing.B) {
 	cfg := createTestConfig()
-	metricsRegistry := metrics.NewRegistry()
+	metricsRegistry := metrics.NewRegistryWithConfig("ntp", "")
 	err := metricsRegistry.Register()
 	if err != nil {
 		b.Fatal(err)
@@ -264,7 +264,7 @@ func BenchmarkServer_MetricsEndpoint(b *testing.B) {
 
 func BenchmarkServer_ConcurrentRequests(b *testing.B) {
 	cfg := createTestConfig()
-	metricsRegistry := metrics.NewRegistry()
+	metricsRegistry := metrics.NewRegistryWithConfig("ntp", "")
 	err := metricsRegistry.Register()
 	if err != nil {
 		b.Fatal(err)

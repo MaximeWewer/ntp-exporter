@@ -166,38 +166,6 @@ func jitter(offsets, rtts []float64) float64 {
 	return math.Sqrt(sum / float64(n-1))
 }
 
-// min returns the minimum value from a slice of float64 values.
-// Returns 0 if the slice is empty.
-func min(values []float64) float64 {
-	if len(values) == 0 {
-		return 0
-	}
-
-	minVal := values[0]
-	for _, v := range values[1:] {
-		if v < minVal {
-			minVal = v
-		}
-	}
-	return minVal
-}
-
-// max returns the maximum value from a slice of float64 values.
-// Returns 0 if the slice is empty.
-func max(values []float64) float64 {
-	if len(values) == 0 {
-		return 0
-	}
-
-	maxVal := values[0]
-	for _, v := range values[1:] {
-		if v > maxVal {
-			maxVal = v
-		}
-	}
-	return maxVal
-}
-
 // sortFloat64 sorts a slice of float64 values in-place using the standard library
 // This is significantly faster than bubble sort (O(n log n) vs O(n²))
 func sortFloat64(values []float64) {

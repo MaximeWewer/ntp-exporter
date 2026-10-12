@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
+	"github.com/maximewewer/ntp-exporter/internal/ntp/ntptest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -92,7 +93,7 @@ func TestBackoff_Forget(t *testing.T) {
 }
 
 func TestProber_KoDRateSkipsNextCycle(t *testing.T) {
-	mock := ntp.NewMockNTPClient()
+	mock := ntptest.NewMockNTPClient()
 	mock.SetupKoDServer("rate.example.org", KoDRate)
 	p := newProber(newTestConfig("rate.example.org"), mock)
 
@@ -107,7 +108,7 @@ func TestProber_KoDRateSkipsNextCycle(t *testing.T) {
 }
 
 func TestProber_KoDDenySuspendsTarget(t *testing.T) {
-	mock := ntp.NewMockNTPClient()
+	mock := ntptest.NewMockNTPClient()
 	mock.SetupKoDServer("deny.example.org", KoDDeny)
 	p := newProber(newTestConfig("deny.example.org"), mock)
 

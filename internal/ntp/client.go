@@ -9,7 +9,6 @@ import (
 
 	"github.com/beevik/ntp"
 	"github.com/maximewewer/ntp-exporter/pkg/logger"
-	"github.com/maximewewer/ntp-exporter/pkg/mathutil"
 )
 
 // Client is an enhanced NTP client with advanced features
@@ -304,34 +303,4 @@ func ValidResponses(responses []*Response) []*Response {
 		}
 	}
 	return valid
-}
-
-// IsSuspicious checks if the response has suspicious characteristics
-func (r *Response) IsSuspicious() bool {
-	// Check for invalid stratum
-	if r.Stratum == 0 || r.Stratum > 15 {
-		return true
-	}
-
-	// Check for Kiss-of-Death
-	if r.IsKissOfDeath() {
-		return true
-	}
-
-	// Check for validation errors
-	if !r.IsValid() {
-		return true
-	}
-
-	// Check for unreasonable offset
-	if mathutil.AbsDuration(r.Offset) > SuspiciousOffsetThreshold {
-		return true
-	}
-
-	// Check for unreasonable RTT
-	if r.RTT > MaxAcceptableRTT {
-		return true
-	}
-
-	return false
 }

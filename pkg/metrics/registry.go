@@ -11,12 +11,6 @@ type Registry struct {
 	ntpMetrics *NTPMetrics
 }
 
-// NewRegistry creates a new metrics registry with NTP metrics
-// Uses default namespace "ntp" and empty subsystem
-func NewRegistry() *Registry {
-	return NewRegistryWithConfig("ntp", "")
-}
-
 // NewRegistryWithConfig creates a new metrics registry with custom namespace and subsystem
 func NewRegistryWithConfig(namespace, subsystem string) *Registry {
 	return &Registry{
@@ -47,11 +41,4 @@ func (r *Registry) GetRegistry() *prometheus.Registry {
 // GetMetrics returns the NTP metrics instance
 func (r *Registry) GetMetrics() *NTPMetrics {
 	return r.ntpMetrics
-}
-
-// MustRegister registers all metrics and panics on error
-func (r *Registry) MustRegister() {
-	if err := r.Register(); err != nil {
-		panic(err)
-	}
 }

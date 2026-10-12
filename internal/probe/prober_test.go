@@ -9,6 +9,7 @@ import (
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
+	"github.com/maximewewer/ntp-exporter/internal/ntp/ntptest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +22,7 @@ func newTestConfig(servers ...string) *config.Config {
 }
 
 func TestProber_QueriesEachTargetOncePerCycle(t *testing.T) {
-	mock := ntp.NewMockNTPClient()
+	mock := ntptest.NewMockNTPClient()
 	mock.SetupSuccessfulServer("a.example.org", time.Millisecond, 2)
 	mock.SetupSuccessfulServer("b.example.org", 2*time.Millisecond, 1)
 
@@ -42,7 +43,7 @@ func TestProber_QueriesEachTargetOncePerCycle(t *testing.T) {
 }
 
 func TestProber_UnreachableTarget(t *testing.T) {
-	mock := ntp.NewMockNTPClient()
+	mock := ntptest.NewMockNTPClient()
 	mock.SetupUnreachableServer("down.example.org")
 
 	result := newProber(newTestConfig("down.example.org"), mock).Run(context.Background())
@@ -56,7 +57,7 @@ func TestProber_UnreachableTarget(t *testing.T) {
 }
 
 func TestProber_InvalidResponsesAreNotBest(t *testing.T) {
-	mock := ntp.NewMockNTPClient()
+	mock := ntptest.NewMockNTPClient()
 	mock.SetupKoDServer("kod.example.org", "RATE")
 
 	m := newProber(newTestConfig("kod.example.org"), mock).Run(context.Background()).Measurements[0]
@@ -67,7 +68,7 @@ func TestProber_InvalidResponsesAreNotBest(t *testing.T) {
 }
 
 func TestProber_PoolMembers(t *testing.T) {
-	mock := ntp.NewMockNTPClient()
+	mock := ntptest.NewMockNTPClient()
 	mock.SetupSuccessfulServer("192.0.2.10", time.Millisecond, 2)
 
 	cfg := newTestConfig()
@@ -82,7 +83,7 @@ func TestProber_PoolMembers(t *testing.T) {
 }
 
 func TestProber_StopsOnCancelledContext(t *testing.T) {
-	mock := ntp.NewMockNTPClient()
+	mock := ntptest.NewMockNTPClient()
 	mock.SetupSuccessfulServer("a.example.org", time.Millisecond, 2)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -94,7 +95,7 @@ func TestProber_StopsOnCancelledContext(t *testing.T) {
 
 // concurrencyMock records the maximum number of bursts in flight
 type concurrencyMock struct {
-	*ntp.MockNTPClient
+	*ntptest.MockNTPClient
 	mu       sync.Mutex
 	inFlight int
 	max      int
@@ -117,7 +118,7 @@ func (c *concurrencyMock) QueryMultiple(ctx context.Context, server string, coun
 }
 
 func TestProber_BoundedConcurrency(t *testing.T) {
-	mock := &concurrencyMock{MockNTPClient: ntp.NewMockNTPClient()}
+	mock := &concurrencyMock{MockNTPClient: ntptest.NewMockNTPClient()}
 	servers := make([]string, 30)
 	for i := range servers {
 		servers[i] = fmt.Sprintf("s%d.example.org", i)
@@ -139,7 +140,7 @@ func TestProber_BoundedConcurrency(t *testing.T) {
 }
 
 func TestProber_SlowTargetDoesNotBlockCycle(t *testing.T) {
-	mock := ntp.NewMockNTPClient()
+	mock := ntptest.NewMockNTPClient()
 	mock.SetupSuccessfulServer("fast.example.org", time.Millisecond, 2)
 	mock.SetupSuccessfulServer("slow.example.org", time.Millisecond, 2)
 	mock.SetDelay("slow.example.org", time.Hour)
@@ -191,7 +192,7 @@ func (r *rotatingResolver) LookupHost(_ context.Context, _ string) ([]string, er
 }
 
 func TestProber_BurstIsPinnedToOneAddress(t *testing.T) {
-	mock := ntp.NewMockNTPClient()
+	mock := ntptest.NewMockNTPClient()
 	mock.SetupSuccessfulServer("192.0.2.1", time.Millisecond, 2)
 	mock.SetupSuccessfulServer("192.0.2.2", time.Millisecond, 2)
 	resolver := &rotatingResolver{addrs: []string{"192.0.2.1", "192.0.2.2"}}
@@ -213,7 +214,7 @@ func TestProber_BurstIsPinnedToOneAddress(t *testing.T) {
 }
 
 func TestProber_ServerWithPort(t *testing.T) {
-	mock := ntp.NewMockNTPClient()
+	mock := ntptest.NewMockNTPClient()
 	mock.SetupSuccessfulServer("192.0.2.1:1123", time.Millisecond, 2)
 	p := New(newTestConfig("ntp.example.org:1123"), mock)
 	p.SetResolver(&rotatingResolver{addrs: []string{"192.0.2.1"}})
@@ -230,7 +231,7 @@ func (failingResolver) LookupHost(context.Context, string) ([]string, error) {
 }
 
 func TestProber_ResolutionFailure(t *testing.T) {
-	p := New(newTestConfig("unknown.example.org"), ntp.NewMockNTPClient())
+	p := New(newTestConfig("unknown.example.org"), ntptest.NewMockNTPClient())
 	p.SetResolver(failingResolver{})
 
 	m := p.Run(context.Background()).Measurements[0]

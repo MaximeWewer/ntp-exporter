@@ -1,37 +1,36 @@
-package ntp
+// Package ntptest provides a mock NTP client for tests.
+package ntptest
 
 import (
 	"context"
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/maximewewer/ntp-exporter/internal/ntp"
 )
 
 // MockNTPClient is a mock NTP client for testing
 type MockNTPClient struct {
-	mu          sync.RWMutex
-	responses   map[string]*Response
-	errors      map[string]error
-	delays      map[string]time.Duration
-	callCounts  map[string]int
-	flapping    map[string]bool
-	flapCounter map[string]int
+	mu         sync.RWMutex
+	responses  map[string]*ntp.Response
+	errors     map[string]error
+	delays     map[string]time.Duration
+	callCounts map[string]int
 }
 
 // NewMockNTPClient creates a new mock NTP client
 func NewMockNTPClient() *MockNTPClient {
 	return &MockNTPClient{
-		responses:   make(map[string]*Response),
-		errors:      make(map[string]error),
-		delays:      make(map[string]time.Duration),
-		callCounts:  make(map[string]int),
-		flapping:    make(map[string]bool),
-		flapCounter: make(map[string]int),
+		responses:  make(map[string]*ntp.Response),
+		errors:     make(map[string]error),
+		delays:     make(map[string]time.Duration),
+		callCounts: make(map[string]int),
 	}
 }
 
 // Query performs a mock NTP query
-func (m *MockNTPClient) Query(ctx context.Context, server string) (*Response, error) {
+func (m *MockNTPClient) Query(ctx context.Context, server string) (*ntp.Response, error) {
 	m.mu.Lock()
 	m.callCounts[server]++
 
@@ -44,15 +43,6 @@ func (m *MockNTPClient) Query(ctx context.Context, server string) (*Response, er
 			return nil, ctx.Err()
 		}
 		m.mu.Lock()
-	}
-
-	// Check for flapping server
-	if m.flapping[server] {
-		m.flapCounter[server]++
-		if m.flapCounter[server]%2 == 0 {
-			m.mu.Unlock()
-			return nil, errors.New("connection refused")
-		}
 	}
 
 	// Check for configured error
@@ -72,8 +62,8 @@ func (m *MockNTPClient) Query(ctx context.Context, server string) (*Response, er
 }
 
 // QueryMultiple performs multiple mock NTP queries
-func (m *MockNTPClient) QueryMultiple(ctx context.Context, server string, count int) ([]*Response, error) {
-	responses := make([]*Response, 0, count)
+func (m *MockNTPClient) QueryMultiple(ctx context.Context, server string, count int) ([]*ntp.Response, error) {
+	responses := make([]*ntp.Response, 0, count)
 
 	for i := 0; i < count; i++ {
 		select {
@@ -103,7 +93,7 @@ func (m *MockNTPClient) SetupSuccessfulServer(server string, offset time.Duratio
 	defer m.mu.Unlock()
 
 	now := time.Now()
-	m.responses[server] = &Response{
+	m.responses[server] = &ntp.Response{
 		Server:         server,
 		Offset:         offset,
 		RTT:            50 * time.Millisecond,
@@ -137,7 +127,7 @@ func (m *MockNTPClient) SetupKoDServer(server string, code string) {
 	defer m.mu.Unlock()
 
 	now := time.Now()
-	m.responses[server] = &Response{
+	m.responses[server] = &ntp.Response{
 		Server:         server,
 		Offset:         0,
 		RTT:            50 * time.Millisecond,
@@ -163,7 +153,7 @@ func (m *MockNTPClient) SetupInvalidStratumServer(server string) {
 	defer m.mu.Unlock()
 
 	now := time.Now()
-	m.responses[server] = &Response{
+	m.responses[server] = &ntp.Response{
 		Server:         server,
 		Offset:         0,
 		RTT:            50 * time.Millisecond,
@@ -183,99 +173,8 @@ func (m *MockNTPClient) SetupInvalidStratumServer(server string) {
 	}
 }
 
-// SetupHighLatencyServer configures a server with high latency
-func (m *MockNTPClient) SetupHighLatencyServer(server string, latency time.Duration) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.delays[server] = latency
-
-	now := time.Now()
-	m.responses[server] = &Response{
-		Server:         server,
-		Offset:         0,
-		RTT:            latency,
-		Stratum:        2,
-		ReferenceTime:  now.Add(-1 * time.Hour),
-		RootDelay:      10 * time.Millisecond,
-		RootDispersion: 5 * time.Millisecond,
-		RootDistance:   15 * time.Millisecond,
-		Precision:      time.Microsecond,
-		LeapIndicator:  0,
-		Poll:           6 * time.Second,
-		ValidateError:  nil,
-		ReferenceID:    0x4E495354,
-		Time:           now,
-		MinError:       time.Millisecond,
-		KissCode:       "",
-	}
-}
-
-// SetupHighDriftServer configures a server with high clock drift
-func (m *MockNTPClient) SetupHighDriftServer(server string, drift time.Duration) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	now := time.Now()
-	m.responses[server] = &Response{
-		Server:         server,
-		Offset:         drift,
-		RTT:            50 * time.Millisecond,
-		Stratum:        2,
-		ReferenceTime:  now.Add(-1 * time.Hour),
-		RootDelay:      10 * time.Millisecond,
-		RootDispersion: 5 * time.Millisecond,
-		RootDistance:   15 * time.Millisecond,
-		Precision:      time.Microsecond,
-		LeapIndicator:  0,
-		Poll:           6 * time.Second,
-		ValidateError:  nil,
-		ReferenceID:    0x4E495354,
-		Time:           now,
-		MinError:       time.Millisecond,
-		KissCode:       "",
-	}
-}
-
-// SetupFlappingServer configures a server that alternates between success and failure
-func (m *MockNTPClient) SetupFlappingServer(server string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.flapping[server] = true
-	m.flapCounter[server] = 0
-
-	now := time.Now()
-	m.responses[server] = &Response{
-		Server:         server,
-		Offset:         0,
-		RTT:            50 * time.Millisecond,
-		Stratum:        2,
-		ReferenceTime:  now.Add(-1 * time.Hour),
-		RootDelay:      10 * time.Millisecond,
-		RootDispersion: 5 * time.Millisecond,
-		RootDistance:   15 * time.Millisecond,
-		Precision:      time.Microsecond,
-		LeapIndicator:  0,
-		Poll:           6 * time.Second,
-		ValidateError:  nil,
-		ReferenceID:    0x4E495354,
-		Time:           now,
-		MinError:       time.Millisecond,
-		KissCode:       "",
-	}
-}
-
-// SetError sets a custom error for a server
-func (m *MockNTPClient) SetError(server string, err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.errors[server] = err
-}
-
 // SetResponse sets a custom response for a server
-func (m *MockNTPClient) SetResponse(server string, resp *Response) {
+func (m *MockNTPClient) SetResponse(server string, resp *ntp.Response) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -296,17 +195,4 @@ func (m *MockNTPClient) GetCallCount(server string) int {
 	defer m.mu.RUnlock()
 
 	return m.callCounts[server]
-}
-
-// Reset clears all mock configurations
-func (m *MockNTPClient) Reset() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.responses = make(map[string]*Response)
-	m.errors = make(map[string]error)
-	m.delays = make(map[string]time.Duration)
-	m.callCounts = make(map[string]int)
-	m.flapping = make(map[string]bool)
-	m.flapCounter = make(map[string]int)
 }

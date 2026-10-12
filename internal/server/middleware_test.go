@@ -14,7 +14,7 @@ import (
 func TestNewMiddleware(t *testing.T) {
 	cfg := &config.Config{}
 
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	assert.NotNil(t, mw)
@@ -27,7 +27,7 @@ func TestMiddleware_Apply(t *testing.T) {
 			EnableCORS: false,
 		},
 	}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +47,7 @@ func TestMiddleware_Apply_WithCORS(t *testing.T) {
 			AllowedOrigins: []string{"*"},
 		},
 	}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +68,7 @@ func TestMiddleware_Apply_WithCORS(t *testing.T) {
 
 func TestMiddleware_LoggingMiddleware(t *testing.T) {
 	cfg := &config.Config{}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +90,7 @@ func TestMiddleware_LoggingMiddleware(t *testing.T) {
 
 func TestMiddleware_LoggingMiddleware_StatusCodes(t *testing.T) {
 	cfg := &config.Config{}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	tests := []struct {
@@ -125,7 +125,7 @@ func TestMiddleware_LoggingMiddleware_StatusCodes(t *testing.T) {
 
 func TestMiddleware_MetricsMiddleware(t *testing.T) {
 	cfg := &config.Config{}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +151,7 @@ func TestMiddleware_CORSMiddleware(t *testing.T) {
 			AllowedOrigins: []string{"https://example.com"},
 		},
 	}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -179,7 +179,7 @@ func TestMiddleware_CORSMiddleware_OPTIONS(t *testing.T) {
 			AllowedOrigins: []string{"https://example.com"},
 		},
 	}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handlerCalled := false
@@ -203,7 +203,7 @@ func TestMiddleware_CORSMiddleware_OPTIONS(t *testing.T) {
 
 func TestMiddleware_RecoveryMiddleware(t *testing.T) {
 	cfg := &config.Config{}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -227,7 +227,7 @@ func TestMiddleware_RecoveryMiddleware(t *testing.T) {
 
 func TestMiddleware_RecoveryMiddleware_NoError(t *testing.T) {
 	cfg := &config.Config{}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -280,7 +280,7 @@ func TestMiddleware_FullStack(t *testing.T) {
 			AllowedOrigins: []string{"*"},
 		},
 	}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -307,7 +307,7 @@ func TestMiddleware_ChainOrder(t *testing.T) {
 			EnableCORS: false,
 		},
 	}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	callOrder := []string{}
@@ -340,7 +340,7 @@ func TestMiddleware_ConcurrentRequests(t *testing.T) {
 			AllowedOrigins: []string{"*"},
 		},
 	}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -378,7 +378,7 @@ func BenchmarkMiddleware_Apply(b *testing.B) {
 			AllowedOrigins: []string{"*"},
 		},
 	}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -398,7 +398,7 @@ func BenchmarkMiddleware_Apply(b *testing.B) {
 
 func BenchmarkMiddleware_LoggingMiddleware(b *testing.B) {
 	cfg := &config.Config{}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -418,7 +418,7 @@ func BenchmarkMiddleware_LoggingMiddleware(b *testing.B) {
 
 func BenchmarkMiddleware_RecoveryMiddleware(b *testing.B) {
 	cfg := &config.Config{}
-	m := metrics.NewNTPMetrics()
+	m := metrics.NewNTPMetricsWithConfig("ntp", "")
 	mw := NewMiddleware(cfg, m)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

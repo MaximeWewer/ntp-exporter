@@ -185,63 +185,6 @@ func TestSanitizeFields(t *testing.T) {
 	}
 }
 
-func TestLoggingFunctions(t *testing.T) {
-	// Initialize logger for testing
-	var buf bytes.Buffer
-	Logger = zerolog.New(&buf).With().Timestamp().Logger()
-
-	t.Run("Debug", func(t *testing.T) {
-		buf.Reset()
-		zerolog.SetGlobalLevel(zerolog.DebugLevel) // Enable debug logging
-		Debug("test", "debug message")
-		if buf.Len() == 0 {
-			t.Log("Debug() did not write (debug level might be filtered)")
-		}
-		zerolog.SetGlobalLevel(zerolog.InfoLevel) // Reset to info
-	})
-
-	t.Run("Info", func(t *testing.T) {
-		buf.Reset()
-		Info("test", "info message")
-		if buf.Len() == 0 {
-			t.Error("Info() did not write to log")
-		}
-	})
-
-	t.Run("Warn", func(t *testing.T) {
-		buf.Reset()
-		Warn("test", "warning message")
-		if buf.Len() == 0 {
-			t.Error("Warn() did not write to log")
-		}
-	})
-
-	t.Run("Error", func(t *testing.T) {
-		buf.Reset()
-		Error("test", "error message", errors.New("test error"))
-		if buf.Len() == 0 {
-			t.Error("Error() did not write to log")
-		}
-	})
-
-	t.Run("SafeInfo", func(t *testing.T) {
-		buf.Reset()
-		fields := map[string]interface{}{
-			"user":     "admin",
-			"password": "secret",
-		}
-		SafeInfo("test", "safe info", fields)
-		if buf.Len() == 0 {
-			t.Error("SafeInfo() did not write to log")
-		}
-		// Verify password is redacted
-		output := buf.String()
-		if bytes.Contains(buf.Bytes(), []byte("secret")) {
-			t.Error("SafeInfo() did not redact sensitive data: " + output)
-		}
-	})
-}
-
 func TestHTTPLog(t *testing.T) {
 	var buf bytes.Buffer
 	Logger = zerolog.New(&buf).With().Timestamp().Logger()
@@ -264,36 +207,6 @@ func TestMetricLog(t *testing.T) {
 	}
 }
 
-func TestNTPLog(t *testing.T) {
-	var buf bytes.Buffer
-	Logger = zerolog.New(&buf).Level(zerolog.DebugLevel).With().Timestamp().Logger()
-
-	fields := map[string]interface{}{
-		"offset": 0.001,
-		"rtt":    0.050,
-	}
-	NTP("query", "pool.ntp.org", fields)
-
-	if buf.Len() == 0 {
-		t.Skip("NTP() uses Debug level, may not write in test")
-	}
-}
-
-func TestSecurityLog(t *testing.T) {
-	var buf bytes.Buffer
-	Logger = zerolog.New(&buf).With().Timestamp().Logger()
-
-	fields := map[string]interface{}{
-		"server": "suspicious.ntp.org",
-		"reason": "invalid_stratum",
-	}
-	Security("suspicious_server", "stratum out of range", fields)
-
-	if buf.Len() == 0 {
-		t.Error("Security() did not write to log")
-	}
-}
-
 func BenchmarkSanitizeFields(b *testing.B) {
 	fields := map[string]interface{}{
 		"username": "admin",
@@ -308,43 +221,6 @@ func BenchmarkSanitizeFields(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = sanitizeFields(fields)
 	}
-}
-
-func TestFormattedLogging(t *testing.T) {
-	var buf bytes.Buffer
-	Logger = zerolog.New(&buf).With().Timestamp().Logger()
-
-	t.Run("Debugf", func(t *testing.T) {
-		buf.Reset()
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-		Debugf("test", "formatted message: %s, number: %d", "debug", 42)
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-		// May or may not write depending on level
-	})
-
-	t.Run("Infof", func(t *testing.T) {
-		buf.Reset()
-		Infof("test", "formatted info: %s", "data")
-		if buf.Len() == 0 {
-			t.Error("Infof() did not write to log")
-		}
-	})
-
-	t.Run("Warnf", func(t *testing.T) {
-		buf.Reset()
-		Warnf("test", "warning: %d items", 5)
-		if buf.Len() == 0 {
-			t.Error("Warnf() did not write to log")
-		}
-	})
-
-	t.Run("Errorf", func(t *testing.T) {
-		buf.Reset()
-		Errorf("test", errors.New("test error"), "error: %v", "something")
-		if buf.Len() == 0 {
-			t.Error("Errorf() did not write to log")
-		}
-	})
 }
 
 func TestSafeLogging(t *testing.T) {
@@ -383,28 +259,6 @@ func TestSafeLogging(t *testing.T) {
 			t.Error("SafeError() did not redact sensitive data: " + output)
 		}
 	})
-}
-
-func TestWithFields(t *testing.T) {
-	var buf bytes.Buffer
-	Logger = zerolog.New(&buf).With().Timestamp().Logger()
-
-	fields := map[string]interface{}{
-		"request_id": "123",
-		"user":       "test",
-	}
-
-	contextLogger := WithFields("test", fields)
-	contextLogger.Info().Msg("test message")
-
-	if buf.Len() == 0 {
-		t.Error("WithFields() logger did not write")
-	}
-
-	output := buf.String()
-	if !bytes.Contains(buf.Bytes(), []byte("request_id")) || !bytes.Contains(buf.Bytes(), []byte("123")) {
-		t.Error("WithFields() did not include fields: " + output)
-	}
 }
 
 func TestStartupShutdown(t *testing.T) {

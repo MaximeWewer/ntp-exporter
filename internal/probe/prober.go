@@ -38,7 +38,7 @@ type Prober struct {
 func New(cfg *config.Config, client ntp.NTPQuerier) *Prober {
 	pools := make([]*ntp.Pool, 0, len(cfg.NTP.Pools))
 	for _, pc := range cfg.NTP.Pools {
-		pools = append(pools, ntp.NewPoolWithDNSCache(pc.Name, pc.Strategy, pc.MaxServers, pc.Fallback, client,
+		pools = append(pools, ntp.NewPool(pc.Name, pc.Strategy, pc.MaxServers, pc.Fallback,
 			ntp.DNSCacheConfig{MinTTL: cfg.NTP.DNSCache.MinTTL, MaxTTL: cfg.NTP.DNSCache.MaxTTL}))
 	}
 

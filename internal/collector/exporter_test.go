@@ -9,6 +9,7 @@ import (
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
+	"github.com/maximewewer/ntp-exporter/internal/ntp/ntptest"
 	"github.com/maximewewer/ntp-exporter/internal/probe"
 	"github.com/maximewewer/ntp-exporter/pkg/metrics"
 	"github.com/prometheus/client_golang/prometheus"
@@ -21,7 +22,7 @@ import (
 type harness struct {
 	t        *testing.T
 	cfg      *config.Config
-	mock     *ntp.MockNTPClient
+	mock     *ntptest.MockNTPClient
 	client   ntp.NTPQuerier
 	metrics  *metrics.NTPMetrics
 	exporter *Exporter
@@ -34,9 +35,9 @@ func newHarness(t *testing.T, servers ...string) *harness {
 	cfg := config.DefaultConfig()
 	cfg.NTP.Servers = servers
 	cfg.NTP.SamplesPerServer = 3
-	h := &harness{t: t, cfg: cfg, mock: ntp.NewMockNTPClient()}
+	h := &harness{t: t, cfg: cfg, mock: ntptest.NewMockNTPClient()}
 	h.client = h.mock
-	h.metrics = metrics.NewNTPMetrics()
+	h.metrics = metrics.NewNTPMetricsWithConfig("ntp", "")
 	h.exporter = NewExporter(cfg, h.metrics)
 	h.registry = prometheus.NewRegistry()
 	h.registry.MustRegister(h.metrics, h.exporter)
@@ -124,7 +125,7 @@ func TestExporter_ValidResponseIsPublished(t *testing.T) {
 }
 
 func TestExporter_InvalidResponsesAreNotPublished(t *testing.T) {
-	mutate := func(m *ntp.MockNTPClient, s string, f func(*ntp.Response)) {
+	mutate := func(m *ntptest.MockNTPClient, s string, f func(*ntp.Response)) {
 		m.SetupSuccessfulServer(s, 5*time.Millisecond, 2)
 		resp, _ := m.Query(context.Background(), s)
 		bad := *resp
@@ -133,14 +134,14 @@ func TestExporter_InvalidResponsesAreNotPublished(t *testing.T) {
 	}
 	tests := []struct {
 		name  string
-		setup func(m *ntp.MockNTPClient, server string)
+		setup func(m *ntptest.MockNTPClient, server string)
 	}{
-		{"kiss of death", func(m *ntp.MockNTPClient, s string) { m.SetupKoDServer(s, "RATE") }},
-		{"stratum 16", func(m *ntp.MockNTPClient, s string) { m.SetupInvalidStratumServer(s) }},
-		{"leap indicator 3", func(m *ntp.MockNTPClient, s string) {
+		{"kiss of death", func(m *ntptest.MockNTPClient, s string) { m.SetupKoDServer(s, "RATE") }},
+		{"stratum 16", func(m *ntptest.MockNTPClient, s string) { m.SetupInvalidStratumServer(s) }},
+		{"leap indicator 3", func(m *ntptest.MockNTPClient, s string) {
 			mutate(m, s, func(r *ntp.Response) { r.LeapIndicator = 3 })
 		}},
-		{"validation error", func(m *ntp.MockNTPClient, s string) {
+		{"validation error", func(m *ntptest.MockNTPClient, s string) {
 			mutate(m, s, func(r *ntp.Response) { r.ValidateError = errors.New("invalid dispersion") })
 		}},
 	}
@@ -222,7 +223,7 @@ func TestExporter_RemovedTargetsDisappear(t *testing.T) {
 
 // partialMock answers only the first `answered` queries of each QueryMultiple call
 type partialMock struct {
-	*ntp.MockNTPClient
+	*ntptest.MockNTPClient
 	answered int
 }
 
@@ -408,7 +409,7 @@ func TestExporter_KoDRateSkippedCycleIsNotCountedTwice(t *testing.T) {
 
 // burstMock returns a fixed sequence of samples for each burst
 type burstMock struct {
-	*ntp.MockNTPClient
+	*ntptest.MockNTPClient
 	samples []*ntp.Response
 }
 

@@ -40,34 +40,6 @@ func TestNewAdaptiveSampler_CustomConfig(t *testing.T) {
 	assert.Equal(t, 0.99, sampler.config.ConfidenceLevel)
 }
 
-func TestAdaptiveSampler_GetOptimalSampleCount(t *testing.T) {
-	client := NewClient(5*time.Second, 4)
-	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{
-		DefaultSamples:   3,
-		HighDriftSamples: 10,
-		DriftThreshold:   50 * time.Millisecond,
-	}, client)
-
-	tests := []struct {
-		name          string
-		offset        time.Duration
-		expectedCount int
-	}{
-		{"low_drift", 10 * time.Millisecond, 3},
-		{"medium_drift", 40 * time.Millisecond, 3},
-		{"high_drift", 60 * time.Millisecond, 10},
-		{"very_high_drift", 200 * time.Millisecond, 10},
-		{"negative_high_drift", -100 * time.Millisecond, 10},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			count := sampler.GetOptimalSampleCount(tt.offset)
-			assert.Equal(t, tt.expectedCount, count)
-		})
-	}
-}
-
 func TestAdaptiveSampler_CalculateConfidence(t *testing.T) {
 	client := NewClient(5*time.Second, 4)
 	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{
@@ -138,138 +110,67 @@ func TestAdaptiveSampler_CalculateConfidence(t *testing.T) {
 	}
 }
 
-func TestAdaptiveSampler_Sample_MockClient(t *testing.T) {
-	mockClient := NewMockNTPClient()
-	mockClient.SetupSuccessfulServer("test.ntp.org", 5*time.Millisecond, 2)
-
-	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{
-		DefaultSamples:   3,
-		HighDriftSamples: 10,
-		DriftThreshold:   50 * time.Millisecond,
-	}, mockClient)
-
-	ctx := context.Background()
-	responses, err := sampler.Sample(ctx, "test.ntp.org")
-
-	require.NoError(t, err)
-	assert.GreaterOrEqual(t, len(responses), 3)
-	// Should use default samples for low drift
-	assert.LessOrEqual(t, len(responses), 3)
+// fakeQuerier answers every query with a response carrying a fixed offset
+type fakeQuerier struct {
+	offset time.Duration
+	err    error
+	calls  int
 }
 
-func TestAdaptiveSampler_Sample_HighDrift_MockClient(t *testing.T) {
-	mockClient := NewMockNTPClient()
-	// Setup server with high drift (100ms)
-	mockClient.SetupSuccessfulServer("test.ntp.org", 100*time.Millisecond, 2)
-
-	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{
-		DefaultSamples:   3,
-		HighDriftSamples: 10,
-		DriftThreshold:   50 * time.Millisecond,
-		MaxDuration:      30 * time.Second,
-	}, mockClient)
-
-	ctx := context.Background()
-	responses, err := sampler.Sample(ctx, "test.ntp.org")
-
-	require.NoError(t, err)
-	// Should use high drift samples
-	assert.GreaterOrEqual(t, len(responses), 10)
+func (f *fakeQuerier) Query(ctx context.Context, server string) (*Response, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.calls++
+	return &Response{Server: server, Stratum: 2, Offset: f.offset, RTT: 10 * time.Millisecond}, nil
 }
 
-func TestAdaptiveSampler_Sample_ContextCancellation(t *testing.T) {
-	mockClient := NewMockNTPClient()
-	mockClient.SetupSuccessfulServer("test.ntp.org", 5*time.Millisecond, 2)
+func (f *fakeQuerier) QueryMultiple(ctx context.Context, server string, count int) ([]*Response, error) {
+	var out []*Response
+	for i := 0; i < count; i++ {
+		r, err := f.Query(ctx, server)
+		if err != nil {
+			if len(out) == 0 {
+				return nil, err
+			}
+			break
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
 
-	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{}, mockClient)
+func TestAdaptiveSampler_LowDriftUsesDefaultSamples(t *testing.T) {
+	q := &fakeQuerier{offset: 5 * time.Millisecond}
+	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{DefaultSamples: 3, HighDriftSamples: 10}, q)
+
+	responses, sent, err := sampler.SampleWithCount(context.Background(), "test.ntp.org")
+
+	require.NoError(t, err)
+	assert.Len(t, responses, 3)
+	assert.Equal(t, 3, sent)
+}
+
+func TestAdaptiveSampler_HighDriftAddsSamples(t *testing.T) {
+	q := &fakeQuerier{offset: 100 * time.Millisecond}
+	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{DefaultSamples: 3, HighDriftSamples: 10, DriftThreshold: 50 * time.Millisecond}, q)
+
+	responses, sent, err := sampler.SampleWithCount(context.Background(), "test.ntp.org")
+
+	require.NoError(t, err)
+	assert.Len(t, responses, 10)
+	assert.Equal(t, 10, sent)
+}
+
+func TestAdaptiveSampler_ContextCancellation(t *testing.T) {
+	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{}, &fakeQuerier{})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
+	cancel()
 
-	_, err := sampler.Sample(ctx, "test.ntp.org")
+	_, _, err := sampler.SampleWithCount(ctx, "test.ntp.org")
 	assert.Error(t, err)
-}
-
-func TestAdaptiveSampler_SampleMultipleServers(t *testing.T) {
-	mockClient := NewMockNTPClient()
-	mockClient.SetupSuccessfulServer("server1.ntp.org", 5*time.Millisecond, 2)
-	mockClient.SetupSuccessfulServer("server2.ntp.org", 10*time.Millisecond, 2)
-	mockClient.SetupSuccessfulServer("server3.ntp.org", 15*time.Millisecond, 2)
-
-	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{}, mockClient)
-
-	ctx := context.Background()
-	servers := []string{"server1.ntp.org", "server2.ntp.org", "server3.ntp.org"}
-
-	results, err := sampler.SampleMultipleServers(ctx, servers)
-
-	require.NoError(t, err)
-	assert.Len(t, results, 3)
-
-	for _, server := range servers {
-		responses, exists := results[server]
-		assert.True(t, exists)
-		assert.GreaterOrEqual(t, len(responses), 3)
-	}
-}
-
-func TestAdaptiveSampler_SampleMultipleServers_PartialFailure(t *testing.T) {
-	mockClient := NewMockNTPClient()
-	mockClient.SetupSuccessfulServer("good1.ntp.org", 5*time.Millisecond, 2)
-	mockClient.SetupSuccessfulServer("good2.ntp.org", 10*time.Millisecond, 2)
-	mockClient.SetError("bad.ntp.org", assert.AnError)
-
-	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{}, mockClient)
-
-	ctx := context.Background()
-	servers := []string{"good1.ntp.org", "bad.ntp.org", "good2.ntp.org"}
-
-	results, err := sampler.SampleMultipleServers(ctx, servers)
-
-	require.NoError(t, err)
-	// Should have results for 2 out of 3 servers
-	assert.Len(t, results, 2)
-	assert.Contains(t, results, "good1.ntp.org")
-	assert.Contains(t, results, "good2.ntp.org")
-	assert.NotContains(t, results, "bad.ntp.org")
-}
-
-func TestAdaptiveSampler_MaxDuration(t *testing.T) {
-	mockClient := NewMockNTPClient()
-	// Setup slow server
-	mockClient.SetupHighLatencyServer("slow.ntp.org", 2*time.Second)
-
-	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{
-		DefaultSamples:   3,
-		HighDriftSamples: 10,
-		DriftThreshold:   50 * time.Millisecond,
-		MaxDuration:      3 * time.Second, // Short max duration
-	}, mockClient)
-
-	ctx := context.Background()
-	start := time.Now()
-
-	responses, err := sampler.Sample(ctx, "slow.ntp.org")
-
-	duration := time.Since(start)
-
-	// Should respect max duration (allow generous margin for slow systems)
-	assert.LessOrEqual(t, duration, 10*time.Second) // Allow generous margin
-	// May have error or fewer responses due to timeout
-	if err == nil {
-		assert.LessOrEqual(t, len(responses), 5)
-	}
-}
-
-func BenchmarkAdaptiveSampler_Sample(b *testing.B) {
-	mockClient := NewMockNTPClient()
-	mockClient.SetupSuccessfulServer("test.ntp.org", 5*time.Millisecond, 2)
-
-	sampler := NewAdaptiveSampler(AdaptiveSamplingConfig{}, mockClient)
-	ctx := context.Background()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = sampler.Sample(ctx, "test.ntp.org")
-	}
 }

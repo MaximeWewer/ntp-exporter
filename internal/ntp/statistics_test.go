@@ -148,20 +148,6 @@ func TestStdDev(t *testing.T) {
 	}
 }
 
-func TestMinMax(t *testing.T) {
-	values := []float64{3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0}
-
-	minVal := min(values)
-	maxVal := max(values)
-
-	assert.Equal(t, 1.0, minVal)
-	assert.Equal(t, 9.0, maxVal)
-}
-
-func TestMinMax_Empty(t *testing.T) {
-	assert.Equal(t, 0.0, min([]float64{}))
-	assert.Equal(t, 0.0, max([]float64{}))
-}
 
 func TestSortFloat64(t *testing.T) {
 	tests := []struct {

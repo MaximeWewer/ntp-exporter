@@ -20,7 +20,7 @@ func gatherNames(t *testing.T, g prometheus.Gatherer) map[string]bool {
 }
 
 func TestRegistry_Register(t *testing.T) {
-	r := NewRegistry()
+	r := NewRegistryWithConfig("ntp", "")
 	require.NoError(t, r.Register())
 	assert.Error(t, r.Register(), "registering twice must fail")
 
@@ -40,12 +40,6 @@ func TestRegistry_Register(t *testing.T) {
 	} {
 		assert.True(t, names[name], "missing %s", name)
 	}
-}
-
-func TestRegistry_MustRegisterPanicsOnDuplicate(t *testing.T) {
-	r := NewRegistry()
-	r.MustRegister()
-	assert.Panics(t, r.MustRegister)
 }
 
 func TestNewRegistryWithConfig_Namespace(t *testing.T) {
