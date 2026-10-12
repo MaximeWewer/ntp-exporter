@@ -162,6 +162,16 @@ func (c *BaseCollector) updateMetrics(resp *ntp.Response) {
 	cfg := c.GetConfig()
 	m := c.GetMetrics()
 
+	// Invalid responses (KoD, unsynchronized server, failed validation) are not
+	// time measurements: keep the previous values instead of publishing garbage
+	if !resp.IsValid() {
+		logger.SafeDebug("collector", "Skipping invalid NTP response", map[string]interface{}{
+			"server": resp.Server,
+			"reason": resp.InvalidReason(),
+		})
+		return
+	}
+
 	labels := map[string]string{
 		"server":  resp.Server,
 		"stratum": strconv.Itoa(int(resp.Stratum)),

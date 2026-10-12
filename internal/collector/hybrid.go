@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"os"
 	"time"
@@ -119,6 +120,10 @@ func (c *HybridCollector) collectAndCorrelate(ctx context.Context, server string
 			"error":  err.Error(),
 		})
 		return err
+	}
+
+	if !resp.IsValid() {
+		return fmt.Errorf("invalid NTP response from %s: %s", server, resp.InvalidReason())
 	}
 
 	ntpOffset := resp.Offset.Seconds()

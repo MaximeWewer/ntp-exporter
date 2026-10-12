@@ -104,11 +104,14 @@ func (c *Client) Query(ctx context.Context, server string) (*Response, error) {
 			return nil, fmt.Errorf("ntp query to %s failed: %w", server, result.err)
 		}
 
-		// Validate response
-		if err := result.response.Validate(); err != nil {
-			logger.SafeWarn("ntp", "NTP response validation failed", map[string]interface{}{
+		// Validate response once: invalid responses (KoD, unsynchronized server,
+		// excessive root distance...) are returned but flagged so callers never
+		// publish them as measurements
+		validateErr := result.response.Validate()
+		if validateErr != nil {
+			logger.SafeDebug("ntp", "NTP response validation failed", map[string]interface{}{
 				"server": server,
-				"error":  err.Error(),
+				"error":  validateErr.Error(),
 			})
 		}
 
@@ -125,7 +128,7 @@ func (c *Client) Query(ctx context.Context, server string) (*Response, error) {
 		resp.Precision = result.response.Precision
 		resp.LeapIndicator = uint8(result.response.Leap)
 		resp.Poll = result.response.Poll
-		resp.ValidateError = result.response.Validate()
+		resp.ValidateError = validateErr
 		resp.ReferenceID = result.response.ReferenceID
 		resp.Time = result.response.Time
 		resp.MinError = result.response.MinError
@@ -200,9 +203,42 @@ func (r *Response) IsKissOfDeath() bool {
 	return r.KissCode != ""
 }
 
-// IsValid checks if the response passed validation
+// IsValid checks if the response can be used as a time measurement:
+// it passed RFC 5905 validation, is not a Kiss-o'-Death, comes from a
+// synchronized server (leap indicator != 3) and has a valid stratum (1-15)
 func (r *Response) IsValid() bool {
-	return r.ValidateError == nil
+	return r.ValidateError == nil &&
+		r.KissCode == "" &&
+		r.LeapIndicator != 3 &&
+		r.Stratum >= 1 && r.Stratum <= 15
+}
+
+// InvalidReason returns a short reason explaining why the response is not valid,
+// or an empty string for a valid response
+func (r *Response) InvalidReason() string {
+	switch {
+	case r.KissCode != "":
+		return "kod"
+	case r.LeapIndicator == 3:
+		return "unsync"
+	case r.Stratum < 1 || r.Stratum > 15:
+		return "stratum"
+	case r.ValidateError != nil:
+		return "validation"
+	default:
+		return ""
+	}
+}
+
+// ValidResponses returns only the responses that can be used as time measurements
+func ValidResponses(responses []*Response) []*Response {
+	valid := make([]*Response, 0, len(responses))
+	for _, r := range responses {
+		if r != nil && r.IsValid() {
+			valid = append(valid, r)
+		}
+	}
+	return valid
 }
 
 // IsSuspicious checks if the response has suspicious characteristics

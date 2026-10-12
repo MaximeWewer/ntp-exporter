@@ -35,7 +35,7 @@ func (c *QualityCollector) collectFromServer(ctx context.Context, server string)
 
 	var responses []*ntp.Response
 	var err error
-	var stats *ntp.Statistics
+	var sent int
 
 	// Use adaptive sampling if enabled
 	if cfg.NTP.AdaptiveSampling.Enabled {
@@ -48,12 +48,9 @@ func (c *QualityCollector) collectFromServer(ctx context.Context, server string)
 
 		responses, err = sampler.Sample(ctx, server)
 		if err != nil {
-			logger.Error("collector", "Adaptive sampling failed", err)
 			return fmt.Errorf("failed to adaptively sample server %s: %w", server, err)
 		}
-
-		// Calculate statistics with adaptive sample count
-		stats = ntp.CalculateStatistics(responses, len(responses))
+		sent = len(responses)
 
 		logger.SafeDebug("collector", "Adaptive sampling completed", map[string]interface{}{
 			"server":  server,
@@ -63,13 +60,13 @@ func (c *QualityCollector) collectFromServer(ctx context.Context, server string)
 		// Standard fixed sampling
 		responses, err = client.QueryMultiple(ctx, server, cfg.NTP.SamplesPerServer)
 		if err != nil {
-			logger.Error("collector", "Multiple queries failed", err)
 			return fmt.Errorf("failed to query multiple samples from server %s: %w", server, err)
 		}
-
-		// Calculate statistics
-		stats = ntp.CalculateStatistics(responses, cfg.NTP.SamplesPerServer)
+		sent = cfg.NTP.SamplesPerServer
 	}
+
+	// Invalid responses (KoD, unsynchronized server...) count as lost samples
+	stats := ntp.CalculateStatistics(ntp.ValidResponses(responses), sent)
 
 	// Update quality metrics
 	m.JitterSeconds.WithLabelValues(server).Set(stats.Jitter.Seconds())

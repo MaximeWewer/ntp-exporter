@@ -71,7 +71,7 @@ func (c *SecurityCollector) collectFromServer(ctx context.Context, server string
 		m.MalformedResponsesTotal.WithLabelValues(server).Inc()
 		logger.SafeWarn("collector", "Malformed NTP response", map[string]interface{}{
 			"server": server,
-			"error":  resp.ValidateError.Error(),
+			"reason": resp.InvalidReason(),
 		})
 	}
 

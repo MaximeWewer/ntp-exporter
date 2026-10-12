@@ -149,7 +149,7 @@ func (m *MockNTPClient) SetupKoDServer(server string, code string) {
 		Precision:      time.Microsecond,
 		LeapIndicator:  3, // LeapNotInSync
 		Poll:           0,
-		ValidateError:  nil,
+		ValidateError:  errors.New("kiss of death received: " + code),
 		ReferenceID:    0,
 		Time:           now,
 		MinError:       0,
