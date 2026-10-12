@@ -163,10 +163,8 @@ jobs:
             -ldflags="-w -s \
               -X 'main.version=${{ needs.prepare.outputs.version }}' \
               -X 'main.commit=${GITHUB_SHA}' \
-              -X 'main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)' \
-              -extldflags '-static'" \
+              -X 'main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
             -trimpath \
-            -tags netgo \
             -o "${BINARY_NAME}" \
             ./cmd/ntp-exporter
 

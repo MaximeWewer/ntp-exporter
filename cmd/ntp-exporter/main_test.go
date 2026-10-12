@@ -2,7 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,4 +84,27 @@ type identityResolver struct{}
 
 func (identityResolver) LookupHost(_ context.Context, host string) ([]string, error) {
 	return []string{host}, nil
+}
+
+func TestRunHealthcheck(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	host, port, err := net.SplitHostPort(strings.TrimPrefix(ts.URL, "http://"))
+	require.NoError(t, err)
+	cfg := config.DefaultConfig()
+	cfg.Server.Address = host
+	cfg.Server.Port, _ = strconv.Atoi(port)
+
+	assert.Equal(t, 0, runHealthcheck(cfg, nil))
+	assert.Equal(t, 1, runHealthcheck(cfg, errors.New("bad config")))
+
+	ts.Close()
+	assert.Equal(t, 1, runHealthcheck(cfg, nil), "server down")
 }

@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -17,26 +21,31 @@ import (
 	"github.com/maximewewer/ntp-exporter/pkg/metrics"
 )
 
+// Build information, set with -ldflags "-X main.version=... -X main.commit=... -X main.buildDate=..."
 var (
-	// Build information
-	version = "dev"
+	version   = "dev"
+	commit    = "unknown"
+	buildDate = "unknown"
 )
 
 func main() {
 	// Parse command-line flags
 	configFile := flag.String("config", "", "Path to configuration file")
 	showVersion := flag.Bool("version", false, "Show version information")
+	healthcheck := flag.Bool("healthcheck", false, "Query the local /healthz endpoint and exit (for container health checks)")
 	flag.Parse()
 
 	// Show version and exit if requested
 	if *showVersion {
-		// Use println for version output (user-facing, not logging)
-		println("ntp-exporter version", version)
+		_, _ = os.Stdout.WriteString("ntp-exporter version " + version + " (commit " + commit + ", built " + buildDate + ", " + runtime.Version() + ")\n")
 		os.Exit(0)
 	}
 
 	// Load configuration (before logger is initialized)
 	cfg, err := loadConfig(*configFile)
+	if *healthcheck {
+		os.Exit(runHealthcheck(cfg, err))
+	}
 	if err != nil {
 		// Cannot use logger yet, write to stderr
 		os.Stderr.WriteString("Failed to load configuration: " + err.Error() + "\n")
@@ -57,7 +66,8 @@ func main() {
 	}
 
 	// Log startup information
-	logger.Startup(version, "", map[string]interface{}{
+	logger.Startup(version, commit, map[string]interface{}{
+		"build_date": buildDate,
 		"go_version": runtime.Version(),
 		"config":     cfg,
 	})
@@ -76,7 +86,7 @@ func main() {
 	m := registry.GetMetrics()
 
 	// Set build info metric
-	m.ExporterBuildInfo.WithLabelValues(version, "", runtime.Version()).Set(1)
+	m.ExporterBuildInfo.WithLabelValues(version, commit, runtime.Version()).Set(1)
 	m.ExporterServersConfigured.Set(float64(len(cfg.NTP.Servers) + len(cfg.NTP.Pools)))
 
 	// A single prober queries every target once per cycle; the exporter
@@ -217,4 +227,39 @@ func logCycle(result *probe.CycleResult) {
 		"duration":  result.Duration.Round(time.Millisecond).String(),
 		"overrun":   result.Overrun,
 	})
+}
+
+// runHealthcheck queries the liveness endpoint of the local exporter and
+// returns the process exit code. Distroless images have no shell nor wget, so
+// container health checks run the exporter binary itself.
+func runHealthcheck(cfg *config.Config, cfgErr error) int {
+	if cfgErr != nil {
+		_, _ = os.Stderr.WriteString("healthcheck: invalid configuration: " + cfgErr.Error() + "\n")
+		return 1
+	}
+
+	host := cfg.Server.Address
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	scheme := "http"
+	client := &http.Client{Timeout: 3 * time.Second}
+	if cfg.Server.TLSEnabled {
+		scheme = "https"
+		// Local check of our own endpoint: the certificate is issued for the public name
+		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // loopback health check
+	}
+
+	url := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(cfg.Server.Port)) + "/healthz"
+	resp, err := client.Get(url)
+	if err != nil {
+		_, _ = os.Stderr.WriteString("healthcheck: " + err.Error() + "\n")
+		return 1
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		_, _ = os.Stderr.WriteString("healthcheck: " + url + " returned " + resp.Status + "\n")
+		return 1
+	}
+	return 0
 }
