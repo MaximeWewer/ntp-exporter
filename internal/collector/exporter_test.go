@@ -381,3 +381,20 @@ func TestExporter_OffsetFromLowestDelaySample(t *testing.T) {
 	h.absent("ntp_asymmetry_seconds", nil)
 	h.absent("ntp_stability_seconds", nil)
 }
+
+func TestExporter_ServerInfo(t *testing.T) {
+	h := newHarness(t, "time.example.org")
+	h.mock.SetupSuccessfulServer("time.example.org", time.Millisecond, 1) // refid "NIST"
+	h.mock.SetupSuccessfulServer("192.0.2.40", time.Millisecond, 2)
+	h.cfg.NTP.Pools = []config.PoolConfig{{Name: "192.0.2.40", Strategy: "all", MaxServers: 4}}
+
+	h.cycle()
+
+	assert.Equal(t, 1.0, h.mustValue("ntp_server_info", map[string]string{
+		"server": "time.example.org", "address": "time.example.org", "pool": "",
+		"refid": "NIST", "stratum": "1", "leap": "0", "version": "4",
+	}))
+	assert.Equal(t, 1.0, h.mustValue("ntp_server_info", map[string]string{
+		"server": "192.0.2.40", "pool": "192.0.2.40", "refid": "78.73.83.84", "stratum": "2",
+	}))
+}

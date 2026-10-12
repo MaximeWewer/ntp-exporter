@@ -404,3 +404,23 @@ func BenchmarkValidator_GetSuspicionReason(b *testing.B) {
 		_ = v.GetSuspicionReason(resp)
 	}
 }
+
+func TestResponse_ReferenceIDString(t *testing.T) {
+	tests := []struct {
+		stratum uint8
+		refid   uint32
+		want    string
+	}{
+		{1, 0x47505300, "GPS"},
+		{1, 0x50505300, "PPS"},
+		{0, 0x52415445, "RATE"},
+		{2, 0xC0000201, "192.0.2.1"},
+		{3, 0x0A000001, "10.0.0.1"},
+	}
+	for _, tt := range tests {
+		r := &Response{Stratum: tt.stratum, ReferenceID: tt.refid}
+		if got := r.ReferenceIDString(); got != tt.want {
+			t.Errorf("stratum %d refid %08x: got %q, want %q", tt.stratum, tt.refid, got, tt.want)
+		}
+	}
+}

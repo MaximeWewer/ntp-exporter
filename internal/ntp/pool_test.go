@@ -48,10 +48,10 @@ func TestPool_SelectServersByStrategy(t *testing.T) {
 	servers := []string{"server1", "server2", "server3", "server4", "server5"}
 
 	tests := []struct {
-		name            string
-		strategy        string
-		expectMinCount  int
-		expectMaxCount  int
+		name           string
+		strategy       string
+		expectMinCount int
+		expectMaxCount int
 	}{
 		{"strategy_all", "all", 5, 5},
 		{"strategy_round_robin", "round_robin", 1, 1},

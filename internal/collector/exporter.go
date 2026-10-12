@@ -10,6 +10,7 @@ package collector
 import (
 	"math"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -240,6 +241,9 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 	if best == nil {
 		return
 	}
+
+	gauge(ch, d.info, 1, server, meas.Target.Address, meas.Target.Pool, best.ReferenceIDString(),
+		strconv.Itoa(int(best.Stratum)), strconv.Itoa(int(best.LeapIndicator)), strconv.Itoa(e.cfg.NTP.Version))
 
 	offsetExceeded := 0.0
 	if best.Offset.Abs() > e.cfg.NTP.MaxClockOffset {

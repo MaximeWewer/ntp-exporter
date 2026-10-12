@@ -3,6 +3,7 @@ package ntp
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/beevik/ntp"
@@ -229,6 +230,28 @@ func (r *Response) IsValid() bool {
 		r.KissCode == "" &&
 		r.LeapIndicator != 3 &&
 		r.Stratum >= 1 && r.Stratum <= 15
+}
+
+// ReferenceIDString renders the reference identifier: a 4-character ASCII
+// code for stratum 0/1 sources (GPS, PPS, KoD codes...), an IPv4 address (or
+// the first bytes of the IPv6 address hash) for upper strata
+func (r *Response) ReferenceIDString() string {
+	b := []byte{byte(r.ReferenceID >> 24), byte(r.ReferenceID >> 16), byte(r.ReferenceID >> 8), byte(r.ReferenceID)}
+	if r.Stratum <= 1 {
+		end := len(b)
+		for end > 0 && b[end-1] == 0 {
+			end--
+		}
+		out := make([]byte, 0, end)
+		for _, c := range b[:end] {
+			if c < 0x20 || c > 0x7e {
+				c = '?'
+			}
+			out = append(out, c)
+		}
+		return string(out)
+	}
+	return net.IPv4(b[0], b[1], b[2], b[3]).String()
 }
 
 // InvalidReason returns a short reason explaining why the response is not valid,
