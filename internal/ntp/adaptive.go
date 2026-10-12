@@ -56,19 +56,27 @@ func NewAdaptiveSampler(config AdaptiveSamplingConfig, querier NTPQuerier) *Adap
 
 // Sample performs adaptive sampling from an NTP server
 func (a *AdaptiveSampler) Sample(ctx context.Context, server string) ([]*Response, error) {
+	responses, _, err := a.SampleWithCount(ctx, server)
+	return responses, err
+}
+
+// SampleWithCount performs adaptive sampling and also returns the number of
+// queries sent, so that packet loss can be computed on sent packets
+func (a *AdaptiveSampler) SampleWithCount(ctx context.Context, server string) ([]*Response, int, error) {
 	start := time.Now()
 
 	// Phase 1: Initial sampling with default samples
+	sent := a.config.DefaultSamples
 	responses, err := a.querier.QueryMultiple(ctx, server, a.config.DefaultSamples)
 	if err != nil {
-		return nil, err
+		return nil, sent, err
 	}
 
 	if len(responses) == 0 {
 		logger.SafeWarn("adaptive", "No responses received from initial sampling", map[string]interface{}{
 			"server": server,
 		})
-		return responses, nil
+		return responses, sent, nil
 	}
 
 	// Calculate initial statistics
@@ -85,10 +93,10 @@ func (a *AdaptiveSampler) Sample(ctx context.Context, server string) ([]*Respons
 	absMedian := mathutil.AbsDuration(stats.MedianOffset)
 	if absMedian > a.config.DriftThreshold {
 		logger.SafeInfo("adaptive", "High drift detected, increasing samples", map[string]interface{}{
-			"server":         server,
-			"drift":          absMedian.Seconds(),
-			"threshold":      a.config.DriftThreshold.Seconds(),
-			"extra_samples":  a.config.HighDriftSamples - a.config.DefaultSamples,
+			"server":        server,
+			"drift":         absMedian.Seconds(),
+			"threshold":     a.config.DriftThreshold.Seconds(),
+			"extra_samples": a.config.HighDriftSamples - a.config.DefaultSamples,
 		})
 
 		// Check if we have time remaining
@@ -103,18 +111,19 @@ func (a *AdaptiveSampler) Sample(ctx context.Context, server string) ([]*Respons
 			defer cancel()
 
 			extraResponses, err := a.querier.QueryMultiple(samplingCtx, server, additionalSamples)
+			sent += additionalSamples
 			if err == nil && len(extraResponses) > 0 {
 				// Combine with initial responses
 				responses = append(responses, extraResponses...)
 
-				// Recalculate statistics
-				stats = CalculateStatistics(responses, len(responses))
+				// Recalculate statistics on sent packets, not received ones
+				stats = CalculateStatistics(responses, sent)
 
 				logger.SafeInfo("adaptive", "Additional sampling completed", map[string]interface{}{
-					"server":         server,
-					"total_samples":  len(responses),
-					"new_median":     stats.MedianOffset.Seconds(),
-					"new_stddev":     stats.StdDevOffset.Seconds(),
+					"server":        server,
+					"total_samples": len(responses),
+					"new_median":    stats.MedianOffset.Seconds(),
+					"new_stddev":    stats.StdDevOffset.Seconds(),
 				})
 			}
 		} else {
@@ -134,7 +143,7 @@ func (a *AdaptiveSampler) Sample(ctx context.Context, server string) ([]*Respons
 		"samples":    len(responses),
 	})
 
-	return responses, nil
+	return responses, sent, nil
 }
 
 // calculateConfidence calculates confidence score based on statistics

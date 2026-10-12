@@ -84,3 +84,64 @@ func TestResponseIsValid(t *testing.T) {
 	assert.False(t, (&ntp.Response{Stratum: 2, LeapIndicator: 3}).IsValid())
 	assert.False(t, (&ntp.Response{Stratum: 2, ValidateError: errors.New("x")}).IsValid())
 }
+
+// partialMock answers only the first `answered` queries of each QueryMultiple call
+type partialMock struct {
+	*ntp.MockNTPClient
+	answered int
+}
+
+func (p *partialMock) QueryMultiple(ctx context.Context, server string, count int) ([]*ntp.Response, error) {
+	resp, err := p.Query(ctx, server)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*ntp.Response, 0, count)
+	for i := 0; i < count && i < p.answered; i++ {
+		out = append(out, resp)
+	}
+	if len(out) == 0 {
+		return nil, errors.New("all queries failed")
+	}
+	return out, nil
+}
+
+func newMockedQualityCollector(t *testing.T, client ntp.NTPQuerier, adaptive bool, servers ...string) (*QualityCollector, *metrics.NTPMetrics) {
+	t.Helper()
+	cfg := config.DefaultConfig()
+	cfg.NTP.Servers = servers
+	cfg.NTP.SamplesPerServer = 3
+	cfg.NTP.AdaptiveSampling.Enabled = adaptive
+	m := metrics.NewNTPMetrics()
+	c := NewQualityCollector(cfg, m)
+	c.client = client
+	return c, m
+}
+
+func TestQualityCollector_PacketLoss(t *testing.T) {
+	const server = "lossy.example.org"
+	for _, adaptive := range []bool{false, true} {
+		mock := ntp.NewMockNTPClient()
+		mock.SetupSuccessfulServer(server, 5*time.Millisecond, 2)
+		c, m := newMockedQualityCollector(t, &partialMock{MockNTPClient: mock, answered: 2}, adaptive, server)
+
+		require.NoError(t, c.Collect(context.Background()))
+		assert.InDelta(t, 1.0/3.0, testutil.ToFloat64(m.PacketLossRatio.WithLabelValues(server)), 1e-9, "adaptive=%v", adaptive)
+	}
+}
+
+func TestQualityCollector_TotalLossIsPublished(t *testing.T) {
+	const server = "down.example.org"
+	for _, adaptive := range []bool{false, true} {
+		mock := ntp.NewMockNTPClient()
+		mock.SetupSuccessfulServer(server, 5*time.Millisecond, 2)
+		c, m := newMockedQualityCollector(t, &partialMock{MockNTPClient: mock, answered: 3}, adaptive, server)
+		require.NoError(t, c.Collect(context.Background()))
+		require.Equal(t, 0.0, testutil.ToFloat64(m.PacketLossRatio.WithLabelValues(server)))
+
+		mock.SetupUnreachableServer(server)
+		require.NoError(t, c.Collect(context.Background()))
+		assert.Equal(t, 1.0, testutil.ToFloat64(m.PacketLossRatio.WithLabelValues(server)), "adaptive=%v", adaptive)
+		assert.Equal(t, 0.0, testutil.ToFloat64(m.SamplesCount.WithLabelValues(server)))
+	}
+}

@@ -46,11 +46,11 @@ func (c *QualityCollector) collectFromServer(ctx context.Context, server string)
 			MaxDuration:      cfg.NTP.AdaptiveSampling.MaxDuration,
 		}, client)
 
-		responses, err = sampler.Sample(ctx, server)
+		responses, sent, err = sampler.SampleWithCount(ctx, server)
 		if err != nil {
+			c.recordTotalLoss(server)
 			return fmt.Errorf("failed to adaptively sample server %s: %w", server, err)
 		}
-		sent = len(responses)
 
 		logger.SafeDebug("collector", "Adaptive sampling completed", map[string]interface{}{
 			"server":  server,
@@ -60,6 +60,7 @@ func (c *QualityCollector) collectFromServer(ctx context.Context, server string)
 		// Standard fixed sampling
 		responses, err = client.QueryMultiple(ctx, server, cfg.NTP.SamplesPerServer)
 		if err != nil {
+			c.recordTotalLoss(server)
 			return fmt.Errorf("failed to query multiple samples from server %s: %w", server, err)
 		}
 		sent = cfg.NTP.SamplesPerServer
@@ -83,4 +84,12 @@ func (c *QualityCollector) collectFromServer(ctx context.Context, server string)
 	})
 
 	return nil
+}
+
+// recordTotalLoss publishes a 100% packet loss when no sample was received,
+// instead of keeping the previous value
+func (c *QualityCollector) recordTotalLoss(server string) {
+	m := c.GetMetrics()
+	m.PacketLossRatio.WithLabelValues(server).Set(1)
+	m.SamplesCount.WithLabelValues(server).Set(0)
 }
