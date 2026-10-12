@@ -2,8 +2,19 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-# Deployment mode: "agent" for DaemonSet, "probe" for Deployment
+# Deployment mode:
+#   - "agent": DaemonSet, measures the clock of every node
+#   - "probe": Deployment, monitors NTP servers from a central place
+# ("hybrid" is deprecated: use mode=agent with kernel.enabled=true)
 mode: agent
+
+# Kernel clock state option (agent mode only, Linux nodes).
+# Read with an unprivileged read-only adjtimex call: no privilege required.
+kernel:
+  enabled: false
+  # Only expose ntp_kernel_error_bound_violated and ntp_kernel_sync_status,
+  # when node_exporter already exposes node_timex_* metrics
+  violationOnly: false
 
 # Number of replicas (only used in probe mode)
 replicaCount: 1
@@ -29,8 +40,8 @@ config:
   # Port to expose metrics on
   metricsPort: 9559
 
-  # Scrape interval (used for documentation)
-  scrapeInterval: 30s
+  # Interval between two collection cycles (64s or more for the public NTP pool)
+  scrapeInterval: 60s
 
   # NTP query timeout
   ntpTimeout: 5s

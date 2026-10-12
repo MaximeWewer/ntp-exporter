@@ -1,4 +1,4 @@
-{{- if or (eq .Values.mode "agent") (eq .Values.mode "hybrid") }}
+{{- if eq (include "ntp-exporter.mode" .) "agent" }}
 {{- include "ntp-exporter.validateMode" . -}}
 apiVersion: apps/v1
 kind: DaemonSet

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -720,8 +721,16 @@ func TestWarnings_PublicPoolEtiquette(t *testing.T) {
 		t.Fatalf("expected 2 warnings, got %v", warnings)
 	}
 
-	cfg.NTP.ScrapeInterval = 64 * time.Second
+	cfg.NTP.ScrapeInterval = 60 * time.Second
 	if w := Warnings(cfg); len(w) != 0 {
-		t.Errorf("no warning expected at 64s, got %v", w)
+		t.Errorf("no warning expected at 60s, got %v", w)
+	}
+}
+
+func TestWarnings_DeprecatedEnableKernel(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.NTP.EnableKernel = true
+	if w := Warnings(cfg); len(w) != 1 || !strings.Contains(w[0], "deprecated") {
+		t.Errorf("expected a deprecation warning, got %v", w)
 	}
 }

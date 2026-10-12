@@ -39,12 +39,15 @@ data:
       {{- end }}
       timeout: {{ .Values.config.ntpTimeout | default "5s" }}
       version: {{ .Values.config.ntpVersion | default 4 }}
-      samples_per_server: {{ .Values.config.samplesPerServer | default 3 }}
+      samples_per_server: {{ .Values.config.samplesPerServer | default 4 }}
+      sample_spacing: {{ .Values.config.sampleSpacing | default "2s" }}
       max_concurrency: {{ .Values.config.maxConcurrency | default 10 }}
-      scrape_interval: {{ .Values.config.scrapeInterval | default "30s" }}
+      scrape_interval: {{ .Values.config.scrapeInterval | default "60s" }}
       max_clock_offset: {{ .Values.config.maxClockOffset | default "100ms" }}
-      {{- if .Values.config.enableKernel }}
-      enable_kernel: {{ .Values.config.enableKernel }}
+      {{- if include "ntp-exporter.kernelEnabled" . }}
+      kernel:
+        enabled: true
+        violation_only: {{ and .Values.kernel .Values.kernel.violationOnly | default false }}
       {{- end }}
 
       {{- if .Values.config.rateLimit }}

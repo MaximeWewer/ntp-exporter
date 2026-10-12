@@ -2,12 +2,25 @@ Thank you for installing {{ .Chart.Name }}!
 
 Your release is named {{ .Release.Name }}.
 
-The NTP Exporter has been deployed in {{ .Values.mode }} mode.
+The NTP Exporter has been deployed in {{ include "ntp-exporter.mode" . }} mode.
 
-{{- if eq .Values.mode "agent" }}
+{{- if eq .Values.mode "hybrid" }}
+
+DEPRECATION WARNING:
+  mode=hybrid is deprecated and will be removed in a future release.
+  Use mode=agent with kernel.enabled=true instead.
+{{- end }}
+{{- if .Values.config.enableKernel }}
+
+DEPRECATION WARNING:
+  config.enableKernel is deprecated: use kernel.enabled=true instead.
+{{- end }}
+
+{{- if eq (include "ntp-exporter.mode" .) "agent" }}
 
 AGENT MODE (DaemonSet):
   The NTP Exporter is running on every node in your cluster.
+  Kernel clock state: {{ if include "ntp-exporter.kernelEnabled" . }}enabled (unprivileged read-only adjtimex){{ else }}disabled (set kernel.enabled=true to enable){{ end }}
 
   To verify the deployment:
     kubectl get daemonset {{ include "ntp-exporter.fullname" . }} -n {{ .Release.Namespace }}

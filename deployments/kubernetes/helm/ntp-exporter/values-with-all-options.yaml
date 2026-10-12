@@ -6,8 +6,14 @@
 # Use this as a reference to customize your deployment
 # =============================================================================
 
-# Deployment mode: "agent" for DaemonSet, "probe" for Deployment, "hybrid" for DaemonSet with kernel
+# Deployment mode: "agent" for DaemonSet, "probe" for Deployment
 mode: agent
+
+# Kernel clock state option (agent mode only, unprivileged read-only adjtimex)
+kernel:
+  enabled: false
+  # Only expose ntp_kernel_error_bound_violated and ntp_kernel_sync_status
+  violationOnly: false
 
 # Number of replicas (only used in probe mode)
 replicaCount: 1
@@ -70,9 +76,6 @@ config:
 
   # Maximum number of concurrent queries
   maxConcurrency: 10
-
-  # Enable kernel synchronization check (Linux only)
-  enableKernel: false
 
   # Scrape interval (used for documentation)
   scrapeInterval: 30s
@@ -333,7 +336,6 @@ terminationGracePeriodSeconds: 30
 # CONFIGURATION EXAMPLES BY MODE
 # =============================================================================
 # See separate files for pre-configured modes:
-# - values-agent.yaml: Agent mode (DaemonSet, frequent scrape)
+# - values-agent.yaml: Agent mode (DaemonSet, optional kernel state)
 # - values-probe.yaml: Probe mode (Deployment, centralized monitoring)
-# - values-hybrid.yaml: Hybrid mode (DaemonSet with kernel monitoring)
 # - values-with-yaml-config.yaml: Configuration via YAML ConfigMap

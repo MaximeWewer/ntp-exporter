@@ -178,18 +178,22 @@ func validateMetrics(cfg *MetricsConfig) error {
 	return nil
 }
 
-// PublicPoolMinInterval is the minimum average polling interval recommended
-// by the NTP Pool Project for a client (64s, the default NTP minpoll)
-const PublicPoolMinInterval = 64 * time.Second
+// PublicPoolMinInterval is the shortest collection interval considered
+// reasonable for servers of the public NTP pool: one burst per minute, in
+// line with the 64s minimum polling interval of NTP clients
+const PublicPoolMinInterval = 60 * time.Second
 
 // Warnings returns non-fatal configuration issues, such as polling the
 // public NTP pool more often than its usage policy allows
 func Warnings(cfg *Config) []string {
+	var warnings []string
+	if cfg.NTP.EnableKernel {
+		warnings = append(warnings, "enable_kernel (NTP_ENABLE_KERNEL) is deprecated: use kernel.enabled (NTP_KERNEL_ENABLED)")
+	}
 	if cfg.NTP.ScrapeInterval >= PublicPoolMinInterval {
-		return nil
+		return warnings
 	}
 
-	var warnings []string
 	check := func(host string) {
 		h := strings.ToLower(strings.TrimSuffix(host, "."))
 		if h == "pool.ntp.org" || strings.HasSuffix(h, ".pool.ntp.org") {

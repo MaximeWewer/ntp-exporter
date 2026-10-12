@@ -4,6 +4,14 @@
 
 mode: agent
 
+# Kernel clock state option (Linux nodes, unprivileged read-only adjtimex).
+# Exposes ntp_kernel_* metrics and ntp_kernel_error_bound_violated, which
+# flags nodes whose time daemon underestimates its error.
+kernel:
+  enabled: false
+  # Set to true when node_exporter already exposes node_timex_* metrics
+  violationOnly: false
+
 # Run on all nodes including master
 tolerations:
 - effect: NoSchedule

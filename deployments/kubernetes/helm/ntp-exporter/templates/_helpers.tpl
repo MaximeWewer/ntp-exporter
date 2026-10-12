@@ -110,10 +110,28 @@ rbac.authorization.k8s.io/v1beta1
 {{- end -}}
 
 {{/*
+Effective deployment mode: the deprecated "hybrid" mode is "agent" with the kernel option
+*/}}
+{{- define "ntp-exporter.mode" -}}
+{{- if eq .Values.mode "hybrid" -}}agent{{- else -}}{{ .Values.mode }}{{- end -}}
+{{- end -}}
+
+{{/*
+Whether the kernel clock state option is enabled (kernel.enabled, deprecated
+config.enableKernel or deprecated hybrid mode)
+*/}}
+{{- define "ntp-exporter.kernelEnabled" -}}
+{{- if or (and .Values.kernel .Values.kernel.enabled) .Values.config.enableKernel (eq .Values.mode "hybrid") -}}true{{- end -}}
+{{- end -}}
+
+{{/*
 Validate mode value
 */}}
 {{- define "ntp-exporter.validateMode" -}}
 {{- if and (ne .Values.mode "agent") (ne .Values.mode "probe") (ne .Values.mode "hybrid") -}}
-{{- fail "mode must be 'agent', 'probe', or 'hybrid'" -}}
+{{- fail "mode must be 'agent' or 'probe' ('hybrid' is deprecated: use mode=agent with kernel.enabled=true)" -}}
+{{- end -}}
+{{- if and (eq .Values.mode "probe") (include "ntp-exporter.kernelEnabled" .) -}}
+{{- fail "kernel.enabled only makes sense in agent mode: the kernel state describes the node the agent runs on" -}}
 {{- end -}}
 {{- end -}}

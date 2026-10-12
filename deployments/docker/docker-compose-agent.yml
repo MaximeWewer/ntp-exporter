@@ -1,8 +1,10 @@
 # =============================================================================
 # NTP Exporter - MODE AGENT
 # =============================================================================
-# Use case: Local agent on each machine, frequent scrape (10s)
+# Use case: Local agent on each machine, measures the host clock
 # Deployment: DaemonSet, systemd on each node
+# Kernel option: set NTP_KERNEL_ENABLED=true to also read the kernel clock
+# state (Linux, read-only adjtimex, no extra capability required)
 # =============================================================================
 
 services:
@@ -48,8 +50,10 @@ services:
       NTP_SAMPLES: "${NTP_SAMPLES:-1}"
       NTP_MAX_CONCURRENCY: "${NTP_MAX_CONCURRENCY:-5}"
 
-      # Kernel sync (Linux only)
-      NTP_ENABLE_KERNEL: "${NTP_ENABLE_KERNEL:-true}"
+      # Kernel clock state option (Linux only, unprivileged)
+      NTP_KERNEL_ENABLED: "${NTP_KERNEL_ENABLED:-false}"
+      # Only expose the error bound violation when node_exporter runs too
+      NTP_KERNEL_VIOLATION_ONLY: "${NTP_KERNEL_VIOLATION_ONLY:-false}"
 
       # -----------------------------------------------------------------------
       # RATE LIMIT - Rate limiting
