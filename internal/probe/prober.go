@@ -2,11 +2,13 @@ package probe
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
 	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"golang.org/x/sync/errgroup"
 )
 
 // Prober queries every target exactly once per cycle
@@ -14,6 +16,8 @@ type Prober struct {
 	cfg    *config.Config
 	client ntp.NTPQuerier
 	pools  []*ntp.Pool
+	// cycleTimeout bounds a cycle so that it always ends before the next one
+	cycleTimeout time.Duration
 }
 
 // New creates a prober. Pools are long-lived so that their DNS cache
@@ -25,25 +29,56 @@ func New(cfg *config.Config, client ntp.NTPQuerier) *Prober {
 	}
 
 	return &Prober{
-		cfg:    cfg,
-		client: client,
-		pools:  pools,
+		cfg:          cfg,
+		client:       client,
+		pools:        pools,
+		cycleTimeout: CycleTimeout(cfg.NTP.ScrapeInterval),
 	}
 }
 
-// Run executes one collection cycle
+// CycleTimeout returns the maximum duration of a cycle for an interval:
+// the interval minus a safety margin of 10% (at most 1s)
+func CycleTimeout(interval time.Duration) time.Duration {
+	margin := interval / 10
+	if margin > time.Second {
+		margin = time.Second
+	}
+	return interval - margin
+}
+
+// Run executes one collection cycle: targets are probed in parallel, with at
+// most max_concurrency bursts in flight, and the cycle is cut at its deadline
 func (p *Prober) Run(ctx context.Context) *CycleResult {
 	result := &CycleResult{Start: time.Now()}
-
-	targets := p.resolveTargets(ctx, result)
-	for _, target := range targets {
-		if ctx.Err() != nil {
-			break
-		}
-		result.Measurements = append(result.Measurements, p.measure(ctx, target))
+	if ctx.Err() != nil {
+		return result
 	}
 
+	cycleCtx, cancel := context.WithTimeout(ctx, p.cycleTimeout)
+	defer cancel()
+
+	targets := p.resolveTargets(cycleCtx, result)
+	result.Measurements = make([]*Measurement, len(targets))
+
+	var g errgroup.Group
+	g.SetLimit(p.cfg.NTP.MaxConcurrency)
+	for i, target := range targets {
+		g.Go(func() error {
+			result.Measurements[i] = p.measure(cycleCtx, target)
+			return nil
+		})
+	}
+	_ = g.Wait()
+
 	result.Duration = time.Since(result.Start)
+	result.Overrun = errors.Is(cycleCtx.Err(), context.DeadlineExceeded)
+	if result.Overrun {
+		logger.SafeWarn("probe", "Collection cycle reached its deadline", map[string]interface{}{
+			"deadline": p.cycleTimeout.String(),
+			"targets":  len(targets),
+		})
+	}
+
 	return result
 }
 

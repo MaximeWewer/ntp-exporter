@@ -43,6 +43,8 @@ type NTPMetrics struct {
 	ExporterScrapeDuration        prometheus.Histogram
 	ExporterScrapesTotal          *prometheus.CounterVec
 	ExporterServersConfigured     prometheus.Gauge
+	ExporterCycleDuration         prometheus.Gauge
+	ExporterCycleOverrunTotal     prometheus.Counter
 	ExporterDNSResolutionDuration *prometheus.HistogramVec
 	ExporterMemoryUsageBytes      prometheus.Gauge
 	ExporterGoroutinesCount       prometheus.Gauge
@@ -335,6 +337,22 @@ func NewNTPMetricsWithConfig(namespace, subsystem string) *NTPMetrics {
 				Help:      "Number of NTP servers configured",
 			},
 		),
+		ExporterCycleDuration: prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Subsystem: "exporter",
+				Name:      "cycle_duration_seconds",
+				Help:      "Duration of the last collection cycle in seconds",
+			},
+		),
+		ExporterCycleOverrunTotal: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: namespace,
+				Subsystem: "exporter",
+				Name:      "cycle_overrun_total",
+				Help:      "Total number of collection cycles cut at their deadline before every target answered",
+			},
+		),
 		ExporterDNSResolutionDuration: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: namespace,
@@ -559,6 +577,8 @@ func (m *NTPMetrics) getAllMetrics() []prometheus.Collector {
 		m.ExporterScrapeDuration,
 		m.ExporterScrapesTotal,
 		m.ExporterServersConfigured,
+		m.ExporterCycleDuration,
+		m.ExporterCycleOverrunTotal,
 		m.ExporterDNSResolutionDuration,
 		m.ExporterMemoryUsageBytes,
 		m.ExporterGoroutinesCount,

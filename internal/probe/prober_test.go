@@ -2,6 +2,8 @@ package probe
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -88,4 +90,73 @@ func TestProber_StopsOnCancelledContext(t *testing.T) {
 
 	result := New(newTestConfig("a.example.org"), mock).Run(ctx)
 	assert.Empty(t, result.Measurements)
+}
+
+// concurrencyMock records the maximum number of bursts in flight
+type concurrencyMock struct {
+	*ntp.MockNTPClient
+	mu       sync.Mutex
+	inFlight int
+	max      int
+}
+
+func (c *concurrencyMock) QueryMultiple(ctx context.Context, server string, count int) ([]*ntp.Response, error) {
+	c.mu.Lock()
+	c.inFlight++
+	if c.inFlight > c.max {
+		c.max = c.inFlight
+	}
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		c.inFlight--
+		c.mu.Unlock()
+	}()
+	time.Sleep(20 * time.Millisecond)
+	return c.MockNTPClient.QueryMultiple(ctx, server, count)
+}
+
+func TestProber_BoundedConcurrency(t *testing.T) {
+	mock := &concurrencyMock{MockNTPClient: ntp.NewMockNTPClient()}
+	servers := make([]string, 30)
+	for i := range servers {
+		servers[i] = fmt.Sprintf("s%d.example.org", i)
+		mock.SetupSuccessfulServer(servers[i], time.Millisecond, 2)
+	}
+	cfg := newTestConfig(servers...)
+	cfg.NTP.SamplesPerServer = 1
+	cfg.NTP.MaxConcurrency = 10
+
+	result := New(cfg, mock).Run(context.Background())
+
+	require.Len(t, result.Measurements, 30)
+	assert.LessOrEqual(t, mock.max, 10)
+	assert.Greater(t, mock.max, 1, "targets must be probed in parallel")
+	for i, m := range result.Measurements {
+		assert.Equal(t, servers[i], m.Target.Server, "measurements keep the target order")
+		assert.True(t, m.Reachable())
+	}
+}
+
+func TestProber_SlowTargetDoesNotBlockCycle(t *testing.T) {
+	mock := ntp.NewMockNTPClient()
+	mock.SetupSuccessfulServer("fast.example.org", time.Millisecond, 2)
+	mock.SetupSuccessfulServer("slow.example.org", time.Millisecond, 2)
+	mock.SetDelay("slow.example.org", time.Hour)
+
+	p := New(newTestConfig("slow.example.org", "fast.example.org"), mock)
+	p.cycleTimeout = 200 * time.Millisecond
+
+	start := time.Now()
+	result := p.Run(context.Background())
+
+	assert.Less(t, time.Since(start), time.Second)
+	assert.True(t, result.Overrun)
+	assert.False(t, result.Measurements[0].Reachable())
+	assert.True(t, result.Measurements[1].Reachable())
+}
+
+func TestCycleTimeout(t *testing.T) {
+	assert.Equal(t, 29*time.Second, CycleTimeout(30*time.Second))
+	assert.Equal(t, 4500*time.Millisecond, CycleTimeout(5*time.Second))
 }

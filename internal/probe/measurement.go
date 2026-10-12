@@ -70,6 +70,8 @@ type CycleResult struct {
 	Duration     time.Duration
 	Measurements []*Measurement
 	Pools        []PoolResult
+	// Overrun is set when the cycle hit its deadline before every target answered
+	Overrun bool
 }
 
 // PoolMeasurements returns the measurements of the members of a pool

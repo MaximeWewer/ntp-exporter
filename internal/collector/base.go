@@ -55,6 +55,10 @@ func (c *BaseCollector) Publish(result *probe.CycleResult) {
 	}
 
 	m.ExporterScrapeDuration.Observe(result.Duration.Seconds())
+	m.ExporterCycleDuration.Set(result.Duration.Seconds())
+	if result.Overrun {
+		m.ExporterCycleOverrunTotal.Inc()
+	}
 	if successCount > 0 {
 		m.ExporterScrapesTotal.WithLabelValues("success").Inc()
 	} else {
