@@ -75,15 +75,13 @@ func main() {
 	m.ExporterBuildInfo.WithLabelValues(version, "", runtime.Version()).Set(1)
 	m.ExporterServersConfigured.Set(float64(len(cfg.NTP.Servers) + len(cfg.NTP.Pools)))
 
-	// A single prober queries every target once per cycle; publishers turn
-	// the shared measurements into metrics
+	// A single prober queries every target once per cycle; the exporter
+	// exposes the measurements of the last cycle at scrape time
 	prober := probe.New(cfg, probe.NewClient(cfg))
-	collectorRegistry := newPublishers(cfg, m)
-
-	logger.SafeInfo("main", "Registered publishers", map[string]interface{}{
-		"total":          collectorRegistry.Count(),
-		"kernel_enabled": cfg.NTP.EnableKernel,
-	})
+	exporter := collector.NewExporter(cfg, m)
+	if err := registry.GetRegistry().Register(exporter); err != nil {
+		logger.Fatal("main", "Failed to register NTP collector", err)
+	}
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -99,7 +97,7 @@ func main() {
 	// Start collection loop
 	collectorErrChan := make(chan error, 1)
 	go func() {
-		collectorErrChan <- runCollectionLoop(ctx, cfg, prober, collectorRegistry)
+		collectorErrChan <- runCollectionLoop(ctx, cfg, prober, exporter)
 	}()
 
 	// Wait for interrupt signal
@@ -145,34 +143,19 @@ func loadConfig(configFile string) (*config.Config, error) {
 	return config.LoadFromEnvVarsOnly()
 }
 
-// newPublishers creates the metric publishers for the configuration
-func newPublishers(cfg *config.Config, m *metrics.NTPMetrics) *collector.Registry {
-	registry := collector.NewRegistry()
-	registry.Register(collector.NewBaseCollector(cfg, m))
-	registry.Register(collector.NewQualityCollector(cfg, m))
-	registry.Register(collector.NewSecurityCollector(cfg, m))
-
-	// Kernel state is an option of the agent mode
-	if cfg.NTP.EnableKernel {
-		registry.Register(collector.NewHybridCollector(cfg, m))
-	}
-
-	return registry
-}
-
 // runCollectionLoop runs one probe cycle per scrape interval
 func runCollectionLoop(
 	ctx context.Context,
 	cfg *config.Config,
 	prober *probe.Prober,
-	publishers *collector.Registry,
+	exporter *collector.Exporter,
 ) error {
 	runCycle := func() {
 		result := prober.Run(ctx)
 		if ctx.Err() != nil {
 			return
 		}
-		publishers.PublishAll(result)
+		exporter.Update(result)
 		logger.Metric("collection", "all", result.Duration, true)
 	}
 

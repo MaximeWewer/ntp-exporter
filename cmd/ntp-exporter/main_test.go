@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maximewewer/ntp-exporter/internal/collector"
 	"github.com/maximewewer/ntp-exporter/internal/config"
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
 	"github.com/maximewewer/ntp-exporter/internal/probe"
@@ -38,14 +39,6 @@ func TestLoadConfig_FromEnv(t *testing.T) {
 	assert.NotNil(t, cfg)
 }
 
-func TestNewPublishers(t *testing.T) {
-	cfg := config.DefaultConfig()
-	assert.Equal(t, 3, newPublishers(cfg, metrics.NewNTPMetrics()).Count())
-
-	cfg.NTP.EnableKernel = true
-	assert.Equal(t, 4, newPublishers(cfg, metrics.NewNTPMetrics()).Count())
-}
-
 func newMockedLoop(t *testing.T) (*config.Config, *probe.Prober, *ntp.MockNTPClient) {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -62,7 +55,7 @@ func TestRunCollectionLoop_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := runCollectionLoop(ctx, cfg, prober, newPublishers(cfg, metrics.NewNTPMetrics()))
+	err := runCollectionLoop(ctx, cfg, prober, collector.NewExporter(cfg, metrics.NewNTPMetrics()))
 	assert.NoError(t, err, "Collection loop should stop gracefully on context cancellation")
 }
 
@@ -72,7 +65,7 @@ func TestRunCollectionLoop_WithTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
-	err := runCollectionLoop(ctx, cfg, prober, newPublishers(cfg, metrics.NewNTPMetrics()))
+	err := runCollectionLoop(ctx, cfg, prober, collector.NewExporter(cfg, metrics.NewNTPMetrics()))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, mock.GetCallCount("time.example.org"), "initial cycle queries the server once")
 }
