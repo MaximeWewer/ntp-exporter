@@ -22,27 +22,29 @@ resources:
     cpu: 150m
     memory: 192Mi
 
-# REQUIRED: Host network for accurate time measurements
-hostNetwork: true
-dnsPolicy: ClusterFirstWithHostNet
+# Host network is NOT required: the pod shares the node clock, so the
+# measured offset is the node offset. Enable only if your CNI adds noticeable
+# latency or you want the exporter reachable on the node IP.
+hostNetwork: false
 
-# REQUIRED: Privileged mode for kernel timex access (adjtimex syscall)
+# Kernel state is read with a read-only adjtimex call (modes=0), which any
+# unprivileged process may perform: no root, no privileged mode, no capability.
 podSecurityContext:
-  runAsNonRoot: false # Required for privileged access
-  runAsUser: 0 # Run as root for SYS_TIME capability
-  fsGroup: 0
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
-  privileged: true
-  allowPrivilegeEscalation: true # Required when privileged=true
+  privileged: false
+  allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
-  runAsNonRoot: false
-  runAsUser: 0
+  runAsNonRoot: true
+  runAsUser: 65534
   capabilities:
     drop:
     - ALL
-    add:
-    - SYS_TIME # Required for adjtimex syscall
 
 # Update strategy - limit concurrent updates
 updateStrategy:

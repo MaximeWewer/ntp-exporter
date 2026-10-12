@@ -22,9 +22,9 @@ resources:
     cpu: 100m
     memory: 128Mi
 
-# Use host network for accurate time measurements
-hostNetwork: true
-dnsPolicy: ClusterFirstWithHostNet
+# Host network is optional: the pod shares the node clock, so the measured
+# offset is the node offset either way
+hostNetwork: false
 
 # Update strategy - limit concurrent updates
 updateStrategy:

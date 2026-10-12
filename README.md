@@ -336,7 +336,7 @@ config:
   metrics:
     namespace: ntp
     subsystem: ""  # Results in ntp_* metrics (no subsystem)
-hostNetwork: true
+hostNetwork: false  # Optional: the pod shares the node clock
 tolerations:
   - key: node-role.kubernetes.io/master
     operator: Exists
@@ -345,7 +345,7 @@ tolerations:
 **Key features:**
 
 - Runs on every Kubernetes node
-- Host network access for accurate measurements
+- Measures the node clock (pods share it), no host network or privilege required
 - Fewer samples per server (1-3)
 - Tolerates master/control-plane nodes
 
@@ -353,8 +353,8 @@ tolerations:
 
 **Deployment type:**
 
-- **Kubernetes:** DaemonSet with kernel monitoring enabled (requires CAP_SYS_TIME)
-- **Docker:** One container per Linux host (requires --cap-add=SYS_TIME)
+- **Kubernetes:** DaemonSet with kernel monitoring enabled (no privilege required)
+- **Docker:** One container per Linux host (no extra capability required)
 - **Systemd:** One service per Linux machine
 
 **When to use:**
@@ -409,11 +409,8 @@ config:
   metrics:
     namespace: ntp
     subsystem: ""  # Results in ntp_* metrics
-hostNetwork: true
-securityContext:
-  capabilities:
-    add:
-      - SYS_TIME  # Required for adjtimex syscall
+# No privilege, root user, capability or host network is needed:
+# the kernel state is read with a read-only adjtimex call (modes=0)
 ```
 
 **Key features:**
@@ -421,7 +418,7 @@ securityContext:
 - Correlates external NTP offset with kernel clock offset
 - Detects divergence between NTP and local system clock
 - Provides coherence score (0-1) for NTP/kernel agreement
-- Requires Linux kernel and CAP_SYS_TIME capability
+- Requires a Linux kernel; runs unprivileged (read-only `adjtimex`)
 - Exposes kernel synchronization status
 
 **Coherence score interpretation:**
@@ -440,7 +437,8 @@ securityContext:
 |---------|------------|------------|-------------|
 | **Deployment Type** | Deployment | DaemonSet | DaemonSet |
 | **Replicas** | 2+ | 1 per node | 1 per node |
-| **Host Network** | No | Yes | Yes |
+| **Host Network** | No | Optional | Optional |
+| **Privileges** | None | None | None |
 | **Kernel Metrics** | No | Optional | Yes |
 | **NTP Servers** | External/Public | Local/Pools | Local/Pools |
 | **Scrape Interval** | 60s | 30s | 30s |
@@ -478,8 +476,9 @@ ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/ntp-exporter
 
-# For kernel monitoring (hybrid/agent mode), add capability
-AmbientCapabilities=CAP_SYS_TIME
+# Kernel monitoring needs no capability: adjtimex is called read-only
+CapabilityBoundingSet=
+AmbientCapabilities=
 
 # Binary and config
 ExecStart=/usr/local/bin/ntp-exporter --config /etc/ntp-exporter/config.yaml
@@ -540,13 +539,6 @@ sudo journalctl -u ntp-exporter -n 100
 
 ### Systemd service configuration options
 
-**Without kernel monitoring (Probe mode):**
-
-```ini
-# Remove CAP_SYS_TIME capability
-# AmbientCapabilities=CAP_SYS_TIME
-```
-
 **With environment variables override:**
 
 ```ini
@@ -555,16 +547,6 @@ Environment="NTP_SERVERS=pool.ntp.org,time.google.com"
 Environment="LOG_LEVEL=debug"
 Environment="NTP_ENABLE_KERNEL=true"
 ExecStart=/usr/local/bin/ntp-exporter --config /etc/ntp-exporter/config.yaml
-```
-
-**With custom user and higher privileges:**
-
-```ini
-[Service]
-User=root
-Group=root
-# Full privileges for kernel monitoring
-AmbientCapabilities=CAP_SYS_TIME CAP_NET_RAW
 ```
 
 ### Health monitoring with systemd
@@ -1083,7 +1065,6 @@ config:
     - 2.pool.ntp.org
   metrics:
     subsystem: ""  # Metrics: ntp_*
-hostNetwork: true
 ```
 
 **Alert:**
@@ -1118,10 +1099,6 @@ config:
   enableKernel: true
   metrics:
     subsystem: ""  # Metrics: ntp_* and ntp_kernel_*
-hostNetwork: true
-securityContext:
-  capabilities:
-    add: [SYS_TIME]
 ```
 
 **Validation query:**
@@ -1273,16 +1250,7 @@ METRICS_SUBSYSTEM="probe"
 
 1. Verify `NTP_ENABLE_KERNEL=true` is set
 2. Check that you're running on Linux (not supported on Windows/macOS)
-3. Verify CAP_SYS_TIME capability:
-
-```yaml
-securityContext:
-  capabilities:
-    add:
-      - SYS_TIME
-```
-
-1. Check logs for kernel access errors:
+3. Check logs for kernel access errors:
 
 ```bash
 kubectl logs -n monitoring ntp-exporter-xxx | grep kernel
