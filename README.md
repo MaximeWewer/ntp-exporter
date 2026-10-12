@@ -12,8 +12,8 @@ accuracy of NTP servers, and the clock accuracy of the machines it runs on.
 - [Deployment modes](#deployment-modes)
 - [Quick start](#quick-start)
 - [How a measurement works](#how-a-measurement-works)
-- [Multi-target probing](#multi-target-probing)
 - [Network Time Security](#network-time-security)
+- [Multi-target probing](#multi-target-probing)
 - [Configuration](#configuration)
 - [Metrics reference](#metrics-reference)
 - [Alerting](#alerting)
@@ -40,6 +40,11 @@ accuracy of NTP servers, and the clock accuracy of the machines it runs on.
 - **Kernel clock state** (agent mode, Linux, optional): synchronization status,
   error bounds announced by the time daemon, and whether the offset measured
   from the outside violates those bounds.
+- **chronyd tracking report** (agent mode, optional): source selected by the
+  local chronyd, offset it is correcting, frequency and skew, to compare with
+  the offset measured from the outside.
+- **On-demand targets**: `/probe?target=` measures one server per scrape, the
+  targets being driven by Prometheus relabeling (like blackbox_exporter).
 
 ## Deployment modes
 
@@ -47,12 +52,13 @@ Two questions, two modes:
 
 | Question | Mode | Deployment | Key metrics |
 |---|---|---|---|
-| Are my time servers reliable? | **probe** | Deployment, Docker, systemd on a monitoring host | `ntp_up`, `ntp_response_valid`, `ntp_falseticker`, `ntp_offset_from_consensus_seconds`, `ntp_root_distance_seconds`, `ntp_target_suspended` |
-| Is the clock of each machine right? | **agent** | DaemonSet, one container or service per host | `ntp_consensus_offset_seconds`, `ntp_offset_seconds`, and with the kernel option `ntp_kernel_sync_status`, `ntp_kernel_error_bound_violated` |
+| Are my time servers reliable? | **probe** | Deployment, Docker, systemd on a monitoring host | `ntp_up`, `ntp_response_valid`, `ntp_falseticker`, `ntp_offset_from_consensus_seconds`, `ntp_root_distance_seconds`, `ntp_target_suspended`, `ntp_nts_ke_success`, `ntp_probe_success` |
+| Is the clock of each machine right? | **agent** | DaemonSet, one container or service per host | `ntp_consensus_offset_seconds`, `ntp_offset_seconds`, with the kernel option `ntp_kernel_sync_status`, `ntp_kernel_error_bound_violated`, with the chrony option `ntp_chrony_*` |
 
 The mode is only a deployment concern: the binary is the same. In agent mode,
 the pod shares the node clock, so the measured offset is the node offset.
-Neither mode needs privileges or host networking.
+Neither mode needs privileges or host networking (except the chrony option
+over UDP, see [chrony option](#chrony-option)).
 
 In probe mode, `ntp_offset_seconds` mixes the error of the probe host clock and
 the error of the server: use `ntp_offset_from_consensus_seconds` and
@@ -240,8 +246,15 @@ ntp:
       max_servers: 4
   scrape_interval: 60s
   samples_per_server: 4
+  ip_family: auto      # auto, ipv4 or ipv6
   kernel:
     enabled: false
+  chrony:
+    enabled: false
+    address: udp://127.0.0.1:323
+probe_endpoint:
+  enabled: true        # serve /probe?target=
+  only: false          # true: no static servers nor pools
 ```
 
 ### Flags
@@ -383,7 +396,7 @@ Go runtime and process metrics (`go_*`, `process_*`) are also exposed.
 | `/metrics` | Prometheus metrics |
 | `/healthz` | Liveness (`/health` is kept as an alias) |
 | `/readyz` | 503 until a cycle completed, or when the last cycle is older than 3 intervals |
-| `/probe?target=host[:port][&samples=N]` | Measures one target on demand (see [Multi-target probing](#multi-target-probing)) |
+| `/probe?target=[nts://]host[:port][&samples=N]` | Measures one target on demand (see [Multi-target probing](#multi-target-probing)) |
 
 ## Alerting
 
@@ -469,12 +482,14 @@ For the full chronyd state (every source, server statistics), run
 ## Security
 
 - Containers run as non-root on a distroless image, with all capabilities
-  dropped, a read-only root filesystem and no host network, in both modes.
+  dropped, a read-only root filesystem and no host network, in both modes
+  (the chrony option over UDP is the only case needing host networking).
 - TLS and basic authentication use the standard
   [Prometheus web configuration file](https://prometheus.io/docs/prometheus/latest/configuration/https/)
   (`--web.config.file`, Helm `webConfig.existingSecret`).
-- The exporter only sends NTP client requests (UDP 123) and honors
-  Kiss-o'-Death codes.
+- Outgoing traffic: NTP client requests (UDP 123), NTS key exchanges
+  (TLS 1.3, TCP 4460) for `nts://` servers, and read-only `tracking` requests
+  to the local chronyd with the chrony option. Kiss-o'-Death codes are honored.
 - `govulncheck` runs in CI on every change. It may report
   [GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932) at module level:
   `golang.org/x/crypto` is required (bcrypt, for basic auth) but its
@@ -506,6 +521,16 @@ exporter uses the family that answered last; force one with
 `NTP_IP_FAMILY=ipv4` or `ipv6`. `ntp_server_info{address}` shows the address
 used.
 
+**`ntp_nts_ke_success` is 0.** The key exchange failed: check that outgoing
+TCP 4460 is open and that the server supports NTS (not every NTP server does,
+for instance `time.google.com`). The `NTS key exchange failed` log gives the
+TLS or protocol error.
+
+**`ntp_chrony_up` is 0.** Over UDP, chronyd only answers from localhost: the
+exporter needs host networking. Over the unix socket, the exporter must belong
+to the group owning the socket. Check that chronyd allows commands
+(`cmdport` not 0).
+
 **No kernel metrics.** The kernel option is Linux only and must be enabled
 (`NTP_KERNEL_ENABLED=true`, Helm `kernel.enabled=true`); check the logs for
 `adjtimex` errors.
@@ -519,9 +544,13 @@ loop is stuck.
 ```bash
 go test -race ./...                 # unit tests, no network access needed
 golangci-lint run ./...             # lint (.golangci.yml, golangci-lint v2)
+govulncheck ./...                   # known vulnerabilities
 helm lint deployments/kubernetes/helm/ntp-exporter
 docker build -t ntp-exporter:dev .
+act -W .github/workflows/quality-assurance.yml   # run the CI locally (nektos/act)
 ```
+
+Under act, steps uploading artifacts and SARIF reports are skipped.
 
 Package layout:
 
@@ -530,8 +559,8 @@ Package layout:
 | `cmd/ntp-exporter` | Entry point, flags, collection loop |
 | `internal/config` | Loading (YAML, environment), defaults, validation |
 | `internal/probe` | Cycle: target resolution, parallel bursts, Kiss-o'-Death backoff, consensus |
-| `internal/ntp` | NTP client, response validation, statistics, pools and DNS cache, kernel reader |
-| `internal/collector` | `prometheus.Collector` exposing the snapshot of the last cycle |
+| `internal/ntp` | NTP and NTS clients, response validation, statistics, pools and DNS cache, kernel reader, chronyd client |
+| `internal/collector` | `prometheus.Collector` exposing the snapshot of the last cycle, `/probe` handler |
 | `internal/server` | HTTP server, health endpoints, web configuration |
 | `pkg/metrics`, `pkg/logger` | Exporter counters and registry, logging |
 
@@ -543,5 +572,6 @@ Release* workflow by hand, which takes the next index of the current month
 Contributions are welcome: open an issue or a pull request with tests.
 
 Built with [beevik/ntp](https://github.com/beevik/ntp),
+[beevik/nts](https://github.com/beevik/nts),
 [client_golang](https://github.com/prometheus/client_golang) and
 [exporter-toolkit](https://github.com/prometheus/exporter-toolkit).
