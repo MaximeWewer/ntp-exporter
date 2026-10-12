@@ -372,4 +372,9 @@ func TestExporter_OffsetFromLowestDelaySample(t *testing.T) {
 	assert.InDelta(t, 0.012, h.mustValue("ntp_rtt_seconds", srv(server)), 1e-9)
 	assert.InDelta(t, 0.004, h.mustValue("ntp_offset_median_seconds", srv(server)), 1e-9)
 	assert.Equal(t, 0.0, h.mustValue("ntp_clock_offset_exceeded", srv(server)), "threshold applies to the best sample")
+	assert.InDelta(t, 0.0039158, h.mustValue("ntp_jitter_seconds", srv(server)), 1e-6)
+	assert.Greater(t, h.mustValue("ntp_rtt_stddev_seconds", srv(server)), 0.02)
+	assert.Greater(t, h.mustValue("ntp_offset_stddev_seconds", srv(server)), 0.0)
+	h.absent("ntp_asymmetry_seconds", nil)
+	h.absent("ntp_stability_seconds", nil)
 }

@@ -259,8 +259,8 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 	gauge(ch, d.leapIndicator, float64(best.LeapIndicator), server)
 
 	gauge(ch, d.jitter, stats.Jitter.Seconds(), server)
-	gauge(ch, d.stability, stats.StdDevOffset.Seconds(), server)
-	gauge(ch, d.asymmetry, stats.Asymmetry.Seconds(), server)
+	gauge(ch, d.offsetStdDev, stats.StdDevOffset.Seconds(), server)
+	gauge(ch, d.rttStdDev, stats.StdDevRTT.Seconds(), server)
 
 	if e.kernelState != nil {
 		ntpOffset := best.Offset.Seconds()

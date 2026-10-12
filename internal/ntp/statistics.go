@@ -8,11 +8,15 @@ import (
 
 // Statistics represents statistical calculations from multiple NTP samples
 type Statistics struct {
-	MedianOffset    time.Duration
-	MeanOffset      time.Duration
-	StdDevOffset    time.Duration
+	MedianOffset time.Duration
+	MeanOffset   time.Duration
+	// StdDevOffset is the sample standard deviation of the offsets
+	StdDevOffset time.Duration
+	// StdDevRTT is the sample standard deviation of the round-trip delays
+	StdDevRTT time.Duration
+	// Jitter is the RFC 5905 jitter: RMS of the offset differences between the
+	// lowest-delay sample and the other samples
 	Jitter          time.Duration
-	Asymmetry       time.Duration
 	SamplesCount    int
 	PacketLossRatio float64
 }
@@ -57,13 +61,11 @@ func CalculateStatistics(responses []*Response, totalSamples int) *Statistics {
 	// Calculate standard deviation (stability)
 	stats.StdDevOffset = time.Duration(stdDev(offsets) * float64(time.Second))
 
-	// Calculate jitter (RTT variability)
-	stats.Jitter = time.Duration(stdDev(rtts) * float64(time.Second))
+	// Calculate delay variability
+	stats.StdDevRTT = time.Duration(stdDev(rtts) * float64(time.Second))
 
-	// Calculate asymmetry (simplified as RTT variance)
-	if len(rtts) >= 2 {
-		stats.Asymmetry = time.Duration((max(rtts) - min(rtts)) * float64(time.Second))
-	}
+	// Calculate RFC 5905 jitter around the lowest-delay sample
+	stats.Jitter = time.Duration(jitter(offsets, rtts) * float64(time.Second))
 
 	return stats
 }
@@ -135,6 +137,33 @@ func stdDev(values []float64) float64 {
 
 	variance := sumSquaredDiff / float64(len(values)-1)
 	return math.Sqrt(variance)
+}
+
+// jitter computes the RFC 5905 §10 jitter: the root mean square of the
+// differences between the offset of the lowest-delay sample and the offsets
+// of the other samples. Returns 0 with fewer than 2 samples.
+func jitter(offsets, rtts []float64) float64 {
+	n := len(offsets)
+	if n < 2 {
+		return 0
+	}
+
+	best := 0
+	for i := range rtts {
+		if rtts[i] < rtts[best] {
+			best = i
+		}
+	}
+
+	sum := 0.0
+	for i, offset := range offsets {
+		if i == best {
+			continue
+		}
+		diff := offsets[best] - offset
+		sum += diff * diff
+	}
+	return math.Sqrt(sum / float64(n-1))
 }
 
 // min returns the minimum value from a slice of float64 values.

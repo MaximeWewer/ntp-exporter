@@ -75,17 +75,17 @@ func TestAdaptiveSampler_CalculateConfidence(t *testing.T) {
 	}, client)
 
 	tests := []struct {
-		name              string
-		stats             *Statistics
-		sampleCount       int
-		expectedMin       float64
-		expectedMax       float64
+		name        string
+		stats       *Statistics
+		sampleCount int
+		expectedMin float64
+		expectedMax float64
 	}{
 		{
 			name: "high_confidence",
 			stats: &Statistics{
 				StdDevOffset:    5 * time.Millisecond,
-				Jitter:          10 * time.Millisecond,
+				StdDevRTT:       10 * time.Millisecond,
 				PacketLossRatio: 0.0,
 			},
 			sampleCount: 10,
@@ -96,7 +96,7 @@ func TestAdaptiveSampler_CalculateConfidence(t *testing.T) {
 			name: "low_confidence_high_stddev",
 			stats: &Statistics{
 				StdDevOffset:    50 * time.Millisecond,
-				Jitter:          10 * time.Millisecond,
+				StdDevRTT:       10 * time.Millisecond,
 				PacketLossRatio: 0.0,
 			},
 			sampleCount: 3,
@@ -107,7 +107,7 @@ func TestAdaptiveSampler_CalculateConfidence(t *testing.T) {
 			name: "low_confidence_high_jitter",
 			stats: &Statistics{
 				StdDevOffset:    5 * time.Millisecond,
-				Jitter:          100 * time.Millisecond,
+				StdDevRTT:       100 * time.Millisecond,
 				PacketLossRatio: 0.0,
 			},
 			sampleCount: 3,
@@ -118,7 +118,7 @@ func TestAdaptiveSampler_CalculateConfidence(t *testing.T) {
 			name: "low_confidence_packet_loss",
 			stats: &Statistics{
 				StdDevOffset:    5 * time.Millisecond,
-				Jitter:          10 * time.Millisecond,
+				StdDevRTT:       10 * time.Millisecond,
 				PacketLossRatio: 0.3,
 			},
 			sampleCount: 3,

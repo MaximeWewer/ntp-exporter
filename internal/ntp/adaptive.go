@@ -160,8 +160,8 @@ func (a *AdaptiveSampler) calculateConfidence(stats *Statistics, sampleCount int
 	}
 
 	// Reduce confidence if jitter is high (network instability)
-	if stats.Jitter > 20*time.Millisecond {
-		jitterPenalty := mathutil.Min(0.2, stats.Jitter.Seconds()/0.200) // 200ms = max penalty
+	if stats.StdDevRTT > 20*time.Millisecond {
+		jitterPenalty := mathutil.Min(0.2, stats.StdDevRTT.Seconds()/0.200) // 200ms = max penalty
 		confidence -= jitterPenalty
 	}
 

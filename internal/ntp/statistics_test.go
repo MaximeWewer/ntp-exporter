@@ -34,6 +34,7 @@ func TestCalculateStatistics_SingleSample(t *testing.T) {
 	assert.Equal(t, 100*time.Millisecond, stats.MeanOffset)
 	assert.Equal(t, time.Duration(0), stats.StdDevOffset) // Only one sample
 	assert.Equal(t, time.Duration(0), stats.Jitter)       // Only one sample
+	assert.Equal(t, time.Duration(0), stats.StdDevRTT)    // Only one sample
 }
 
 func TestCalculateStatistics_MultipleSamples(t *testing.T) {
@@ -53,7 +54,7 @@ func TestCalculateStatistics_MultipleSamples(t *testing.T) {
 	assert.Greater(t, stats.MeanOffset, time.Duration(0))
 	assert.Greater(t, stats.StdDevOffset, time.Duration(0))
 	assert.Greater(t, stats.Jitter, time.Duration(0))
-	assert.Greater(t, stats.Asymmetry, time.Duration(0))
+	assert.Greater(t, stats.StdDevRTT, time.Duration(0))
 }
 
 func TestCalculateStatistics_PacketLoss(t *testing.T) {
@@ -253,4 +254,20 @@ func BenchmarkStdDev(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = stdDev(values)
 	}
+}
+
+func TestCalculateStatistics_RFC5905Jitter(t *testing.T) {
+	ms := time.Millisecond
+	responses := []*Response{
+		{Offset: 5 * ms, RTT: 40 * ms},
+		{Offset: 2 * ms, RTT: 12 * ms}, // lowest delay: reference sample
+		{Offset: 8 * ms, RTT: 60 * ms},
+		{Offset: 3 * ms, RTT: 15 * ms},
+	}
+
+	stats := CalculateStatistics(responses, 4)
+
+	// sqrt(((2-5)^2 + (2-8)^2 + (2-3)^2) / 3) = sqrt(46/3) ms
+	assert.InDelta(t, 3.9158, float64(stats.Jitter)/float64(ms), 1e-3)
+	assert.Greater(t, stats.StdDevRTT, 20*ms)
 }

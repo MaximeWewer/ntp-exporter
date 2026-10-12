@@ -25,11 +25,11 @@ type descs struct {
 	leapIndicator  *prometheus.Desc
 
 	// Quality metrics
-	jitter     *prometheus.Desc
-	stability  *prometheus.Desc
-	asymmetry  *prometheus.Desc
-	samples    *prometheus.Desc
-	packetLoss *prometheus.Desc
+	jitter       *prometheus.Desc
+	offsetStdDev *prometheus.Desc
+	rttStdDev    *prometheus.Desc
+	samples      *prometheus.Desc
+	packetLoss   *prometheus.Desc
 
 	// Security metrics
 	trustScore *prometheus.Desc
@@ -77,11 +77,11 @@ func newDescs(namespace, subsystem string) *descs {
 		precision:      d(subsystem, "precision_seconds", "Precision of the NTP server in seconds", server...),
 		leapIndicator:  d(subsystem, "leap_indicator", "Leap second indicator (0=no warning, 1=61s, 2=59s, 3=unsync)", server...),
 
-		jitter:     d(subsystem, "jitter_seconds", "Jitter calculated from multiple samples in seconds", server...),
-		stability:  d(subsystem, "stability_seconds", "Stability of time offset (standard deviation) in seconds", server...),
-		asymmetry:  d(subsystem, "asymmetry_seconds", "Network asymmetry in seconds", server...),
-		samples:    d(subsystem, "samples_count", "Number of valid samples used for calculation", server...),
-		packetLoss: d(subsystem, "packet_loss_ratio", "Ratio of queries without valid response during the last cycle (0-1)", server...),
+		jitter:       d(subsystem, "jitter_seconds", "RFC 5905 jitter: RMS of the offset differences between the lowest-delay sample and the other samples, in seconds", server...),
+		offsetStdDev: d(subsystem, "offset_stddev_seconds", "Standard deviation of the offsets of the last burst in seconds", server...),
+		rttStdDev:    d(subsystem, "rtt_stddev_seconds", "Standard deviation of the round-trip delays of the last burst in seconds", server...),
+		samples:      d(subsystem, "samples_count", "Number of valid samples used for calculation", server...),
+		packetLoss:   d(subsystem, "packet_loss_ratio", "Ratio of queries without valid response during the last cycle (0-1)", server...),
 
 		trustScore: d(subsystem, "server_trust_score", "Trust score for the NTP server (0-1)", server...),
 
@@ -108,7 +108,7 @@ func (d *descs) all() []*prometheus.Desc {
 		d.up, d.lastSuccess, d.suspended,
 		d.offset, d.offsetMedian, d.offsetExceeded, d.rtt, d.stratum, d.referenceTime,
 		d.rootDelay, d.rootDispersion, d.rootDistance, d.precision, d.leapIndicator,
-		d.jitter, d.stability, d.asymmetry, d.samples, d.packetLoss,
+		d.jitter, d.offsetStdDev, d.rttStdDev, d.samples, d.packetLoss,
 		d.trustScore,
 		d.poolActive, d.poolTotal, d.poolDNS, d.poolBestOffset,
 		d.kernelOffset, d.kernelFrequency, d.kernelMaxError, d.kernelEstError,
