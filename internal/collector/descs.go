@@ -17,7 +17,7 @@ type descs struct {
 	offsetExceeded *prometheus.Desc
 	rtt            *prometheus.Desc
 	stratum        *prometheus.Desc
-	referenceTime  *prometheus.Desc
+	referenceAge   *prometheus.Desc
 	rootDelay      *prometheus.Desc
 	rootDispersion *prometheus.Desc
 	rootDistance   *prometheus.Desc
@@ -70,10 +70,10 @@ func newDescs(namespace, subsystem string) *descs {
 		offsetExceeded: d(subsystem, "clock_offset_exceeded", "Whether the clock offset exceeds the configured threshold (1 = exceeded, 0 = within limits)", server...),
 		rtt:            d(subsystem, "rtt_seconds", "Round-trip time to NTP server in seconds", server...),
 		stratum:        d(subsystem, "stratum", "NTP server stratum level (1-15)", server...),
-		referenceTime:  d(subsystem, "reference_timestamp_seconds", "Reference timestamp of the NTP server in Unix seconds", server...),
+		referenceAge:   d(subsystem, "reference_age_seconds", "Time elapsed since the server clock was last set or corrected (transmit time minus reference time) in seconds", server...),
 		rootDelay:      d(subsystem, "root_delay_seconds", "Root delay of the NTP server in seconds", server...),
 		rootDispersion: d(subsystem, "root_dispersion_seconds", "Root dispersion of the NTP server in seconds", server...),
-		rootDistance:   d(subsystem, "root_distance_seconds", "Calculated root distance in seconds", server...),
+		rootDistance:   d(subsystem, "root_distance_seconds", "Synchronization distance to the stratum 1 source (RFC 5905: root delay/2 + root dispersion + measurement delay and dispersion) in seconds", server...),
 		precision:      d(subsystem, "precision_seconds", "Precision of the NTP server in seconds", server...),
 		leapIndicator:  d(subsystem, "leap_indicator", "Leap second indicator (0=no warning, 1=61s, 2=59s, 3=unsync)", server...),
 
@@ -106,7 +106,7 @@ func newDescs(namespace, subsystem string) *descs {
 func (d *descs) all() []*prometheus.Desc {
 	return []*prometheus.Desc{
 		d.up, d.lastSuccess, d.suspended,
-		d.offset, d.offsetMedian, d.offsetExceeded, d.rtt, d.stratum, d.referenceTime,
+		d.offset, d.offsetMedian, d.offsetExceeded, d.rtt, d.stratum, d.referenceAge,
 		d.rootDelay, d.rootDispersion, d.rootDistance, d.precision, d.leapIndicator,
 		d.jitter, d.offsetStdDev, d.rttStdDev, d.samples, d.packetLoss,
 		d.trustScore,

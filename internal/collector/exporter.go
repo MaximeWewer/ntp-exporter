@@ -251,7 +251,9 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 	gauge(ch, d.offsetExceeded, offsetExceeded, server)
 	gauge(ch, d.rtt, best.RTT.Seconds(), server)
 	gauge(ch, d.stratum, float64(best.Stratum), server)
-	gauge(ch, d.referenceTime, float64(best.ReferenceTime.Unix()), server)
+	if !best.ReferenceTime.IsZero() && !best.Time.IsZero() {
+		gauge(ch, d.referenceAge, best.Time.Sub(best.ReferenceTime).Seconds(), server)
+	}
 	gauge(ch, d.rootDelay, best.RootDelay.Seconds(), server)
 	gauge(ch, d.rootDispersion, best.RootDispersion.Seconds(), server)
 	gauge(ch, d.rootDistance, best.RootDistance.Seconds(), server)
