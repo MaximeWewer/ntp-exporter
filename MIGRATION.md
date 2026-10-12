@@ -17,7 +17,7 @@ dashboards (new ones are provided in [`grafana/`](grafana/)) and alerts
 | Kiss-o'-Death | Only counted | `RATE` doubles the polling interval of the server; `DENY`/`RSTR` suspend it (`ntp_target_suspended`) |
 | Failed servers | Last values stayed exposed forever | Only `ntp_up=0`, `ntp_packet_loss_ratio` and `ntp_last_success_timestamp_seconds` remain |
 | Pool members gone from DNS | Their series stayed forever | Their series disappear |
-| Hostnames | Resolved for every packet (a burst to `pool.ntp.org` could hit several servers) | Resolved once per cycle; the burst targets a single address (IPv4 preferred) |
+| Hostnames | Resolved for every packet (a burst to `pool.ntp.org` could hit several servers) | Resolved once per cycle; the burst targets a single address; IPv6 and IPv4 are tried in turn (`ip_family`) |
 | Invalid configuration | Silently replaced by the defaults | Startup fails with an explicit error; unknown YAML keys are rejected |
 | Default interval / samples | 30 s / 3 | 60 s / 4 |
 
@@ -131,6 +131,7 @@ raise it for servers behind noisy links.
 | `ntp.kernel.enabled`, `ntp.kernel.violation_only` | `NTP_KERNEL_ENABLED`, `NTP_KERNEL_VIOLATION_ONLY` | `false` |
 | `ntp.kod.max_backoff`, `ntp.kod.suspend_duration` | `NTP_KOD_MAX_BACKOFF`, `NTP_KOD_SUSPEND_DURATION` | `1024s`, `1h` |
 | `ntp.consensus.enabled` | `NTP_CONSENSUS_ENABLED` | enabled with 3+ servers or pools |
+| `ntp.ip_family` | `NTP_IP_FAMILY` (`auto`, `ipv4`, `ipv6`) | `auto` |
 | `ntp.pools` | `NTP_POOLS` (`name[:strategy[:max_servers]]`) | none |
 | `metrics.labels` (now applied) | `METRICS_LABELS` (`key=value,...`) | none |
 | `server.web_config_file` | `WEB_CONFIG_FILE`, `--web.config.file` | none |

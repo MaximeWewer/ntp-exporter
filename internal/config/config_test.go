@@ -390,3 +390,28 @@ func TestValidate_DNSCacheTTL(t *testing.T) {
 	cfg.NTP.DNSCache.MinTTL = time.Hour
 	assert.Error(t, Validate(cfg))
 }
+
+func TestLoadFromEnvVarsOnly_IPFamily(t *testing.T) {
+	t.Setenv("NTP_SERVERS", "time.example.org")
+	cfg, err := LoadFromEnvVarsOnly()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.NTP.IPFamily != IPFamilyAuto {
+		t.Errorf("default ip_family must be auto, got %q", cfg.NTP.IPFamily)
+	}
+
+	t.Setenv("NTP_IP_FAMILY", "ipv6")
+	cfg, err = LoadFromEnvVarsOnly()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.NTP.IPFamily != IPFamilyIPv6 {
+		t.Errorf("NTP_IP_FAMILY not applied, got %q", cfg.NTP.IPFamily)
+	}
+
+	t.Setenv("NTP_IP_FAMILY", "both")
+	if _, err := LoadFromEnvVarsOnly(); err == nil {
+		t.Error("invalid NTP_IP_FAMILY must fail")
+	}
+}

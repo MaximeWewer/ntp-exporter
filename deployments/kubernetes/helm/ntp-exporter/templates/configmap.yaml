@@ -35,6 +35,7 @@ data:
       samples_per_server: {{ .Values.config.samplesPerServer | default 4 }}
       sample_spacing: {{ .Values.config.sampleSpacing | default "2s" }}
       max_concurrency: {{ .Values.config.maxConcurrency | default 10 }}
+      ip_family: {{ .Values.config.ipFamily | default "auto" }}
       scrape_interval: {{ .Values.config.scrapeInterval | default "60s" }}
       max_clock_offset: {{ .Values.config.maxClockOffset | default "100ms" }}
       {{- if include "ntp-exporter.kernelEnabled" . }}

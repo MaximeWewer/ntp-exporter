@@ -24,6 +24,7 @@
 //	  - NTP_SERVERS (comma-separated), NTP_TIMEOUT, NTP_VERSION
 //	  - NTP_POOLS (comma-separated name[:strategy[:max_servers]])
 //	  - NTP_SAMPLES, NTP_SAMPLE_SPACING, NTP_MAX_CONCURRENCY
+//	  - NTP_IP_FAMILY (auto, ipv4 or ipv6)
 //	  - NTP_KERNEL_ENABLED, NTP_KERNEL_VIOLATION_ONLY (NTP_ENABLE_KERNEL is deprecated)
 //	  - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET
 //
@@ -88,6 +89,7 @@ type NTPConfig struct {
 	SamplesPerServer int             `yaml:"samples_per_server"`
 	SampleSpacing    time.Duration   `yaml:"sample_spacing"` // Delay between two samples sent to the same server
 	MaxConcurrency   int             `yaml:"max_concurrency"`
+	IPFamily         string          `yaml:"ip_family"`     // auto, ipv4 or ipv6
 	EnableKernel     bool            `yaml:"enable_kernel"` // Deprecated: use kernel.enabled
 	Kernel           KernelConfig    `yaml:"kernel"`
 	ScrapeInterval   time.Duration   `yaml:"scrape_interval"`  // Interval between NTP collections
@@ -377,6 +379,7 @@ func applyEnvOverrides(cfg *Config) error {
 	e.int("NTP_SAMPLES", &cfg.NTP.SamplesPerServer)
 	e.duration("NTP_SAMPLE_SPACING", &cfg.NTP.SampleSpacing)
 	e.int("NTP_MAX_CONCURRENCY", &cfg.NTP.MaxConcurrency)
+	e.string("NTP_IP_FAMILY", &cfg.NTP.IPFamily)
 	e.duration("NTP_SCRAPE_INTERVAL", &cfg.NTP.ScrapeInterval)
 	e.duration("NTP_MAX_CLOCK_OFFSET", &cfg.NTP.MaxClockOffset)
 

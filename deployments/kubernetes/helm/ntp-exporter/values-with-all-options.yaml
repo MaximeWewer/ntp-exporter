@@ -76,6 +76,9 @@ config:
   # Maximum number of concurrent queries
   maxConcurrency: 10
 
+  # Address family: auto (IPv6 or IPv4, whichever answers), ipv4 or ipv6
+  ipFamily: auto
+
   # Interval between two collection cycles (60s or more for the public pool)
   scrapeInterval: 60s
 

@@ -13,6 +13,14 @@ const (
 	MaxScrapeInterval = 1 * time.Hour
 )
 
+// Address families accepted by ip_family
+const (
+	// IPFamilyAuto queries IPv6 or IPv4, whichever works
+	IPFamilyAuto = "auto"
+	IPFamilyIPv4 = "ipv4"
+	IPFamilyIPv6 = "ipv6"
+)
+
 // Validate checks if the configuration is valid
 func Validate(cfg *Config) error {
 	if err := validateServer(&cfg.Server); err != nil {
@@ -101,6 +109,12 @@ func validateNTP(cfg *NTPConfig) error {
 
 	if cfg.KoD.SuspendDuration <= 0 {
 		return errors.New("kod.suspend_duration must be positive, got " + cfg.KoD.SuspendDuration.String())
+	}
+
+	switch cfg.IPFamily {
+	case "", IPFamilyAuto, IPFamilyIPv4, IPFamilyIPv6: // empty means auto
+	default:
+		return errors.New("ip_family must be auto, ipv4 or ipv6, got " + cfg.IPFamily)
 	}
 
 	if cfg.MaxConcurrency < 1 || cfg.MaxConcurrency > 100 {

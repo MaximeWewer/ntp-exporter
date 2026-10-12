@@ -28,6 +28,7 @@ type Prober struct {
 	// cycleTimeout bounds a cycle so that it always ends before the next one
 	cycleTimeout time.Duration
 	backoff      *Backoff
+	families     *families
 
 	mu       sync.Mutex
 	previous map[string]*Measurement
@@ -49,6 +50,7 @@ func New(cfg *config.Config, client ntp.NTPQuerier) *Prober {
 		resolver:     net.DefaultResolver,
 		cycleTimeout: CycleTimeout(cfg.NTP.ScrapeInterval),
 		backoff:      NewBackoff(cfg.NTP.ScrapeInterval, cfg.NTP.KoD.MaxBackoff, cfg.NTP.KoD.SuspendDuration),
+		families:     newFamilies(cfg.NTP.IPFamily),
 		previous:     make(map[string]*Measurement),
 	}
 }
@@ -79,6 +81,7 @@ func (p *Prober) Run(ctx context.Context) *CycleResult {
 	cycleCtx, cancel := context.WithTimeout(ctx, p.cycleTimeout)
 	defer cancel()
 
+	p.families.refresh()
 	targets := p.resolveTargets(cycleCtx, result)
 	result.Measurements = make([]*Measurement, len(targets))
 
@@ -128,7 +131,7 @@ func (p *Prober) resolveTargets(ctx context.Context, result *CycleResult) []Targ
 			})
 			continue
 		}
-		for _, member := range members {
+		for _, member := range p.families.filter(members) {
 			targets = append(targets, Target{Server: member, Pool: pool.Name(), Address: member})
 		}
 	}
@@ -136,42 +139,35 @@ func (p *Prober) resolveTargets(ctx context.Context, result *CycleResult) []Targ
 	return targets
 }
 
-// resolve returns the address to query for a configured server. The host is
-// resolved once per cycle so that every sample of the burst reaches the same
-// server, even behind a round-robin name such as pool.ntp.org.
-func (p *Prober) resolve(ctx context.Context, server string) (string, error) {
+// resolve returns the addresses to try for a configured server, at most one
+// per address family. The host is resolved once per cycle so that every
+// sample of the burst reaches the same server, even behind a round-robin
+// name such as pool.ntp.org.
+func (p *Prober) resolve(ctx context.Context, target Target) ([]string, error) {
+	server := target.Server
 	host, port, err := net.SplitHostPort(server)
 	if err != nil {
 		host, port = server, ""
 	}
 	if net.ParseIP(host) != nil {
-		return server, nil
+		return []string{server}, nil
 	}
 
 	addrs, err := p.resolver.LookupHost(ctx, host)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve %s: %w", host, err)
+		return nil, fmt.Errorf("failed to resolve %s: %w", host, err)
 	}
-	if len(addrs) == 0 {
-		return "", fmt.Errorf("no address found for %s", host)
+	candidates := p.families.candidates(target.key(), addrs)
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no %s address found for %s", p.cfg.NTP.IPFamily, host)
 	}
 
-	address := preferIPv4(addrs)
 	if port != "" {
-		return net.JoinHostPort(address, port), nil
-	}
-	return address, nil
-}
-
-// preferIPv4 returns the first IPv4 address, or the first address when the
-// host only has IPv6 ones: IPv4 connectivity is the most common baseline
-func preferIPv4(addrs []string) string {
-	for _, a := range addrs {
-		if ip := net.ParseIP(a); ip != nil && ip.To4() != nil {
-			return a
+		for i, a := range candidates {
+			candidates[i] = net.JoinHostPort(a, port)
 		}
 	}
-	return addrs[0]
+	return candidates, nil
 }
 
 // probe measures a target unless the Kiss-o'-Death backoff forbids it
@@ -211,6 +207,7 @@ func (p *Prober) forget(targets []Target) {
 		keep[t.key()] = true
 	}
 	p.backoff.Forget(keep)
+	p.families.forget(keep)
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -226,8 +223,10 @@ func (p *Prober) measure(ctx context.Context, target Target) *Measurement {
 	m := &Measurement{Target: target, Timestamp: time.Now()}
 	defer func() { m.Duration = time.Since(m.Timestamp) }()
 
-	if m.Target.Address == "" {
-		address, err := p.resolve(ctx, target.Server)
+	candidates := []string{target.Address}
+	if target.Address == "" {
+		var err error
+		candidates, err = p.resolve(ctx, target)
 		if err != nil {
 			m.Sent = p.cfg.NTP.SamplesPerServer
 			m.Err = err
@@ -237,13 +236,44 @@ func (p *Prober) measure(ctx context.Context, target Target) *Measurement {
 			})
 			return m
 		}
-		m.Target.Address = address
 	}
-	address := m.Target.Address
 
-	m.Sent = p.cfg.NTP.SamplesPerServer
-	responses, err := p.client.QueryMultiple(ctx, address, m.Sent)
-	m.Responses = responses
+	// A dual-stack server is reached over the first family that answers a
+	// single query; that answer is the first sample of the burst
+	samples := p.cfg.NTP.SamplesPerServer
+	address := candidates[len(candidates)-1]
+	for _, candidate := range candidates[:len(candidates)-1] {
+		m.Sent++
+		resp, err := p.client.Query(ctx, candidate)
+		if err == nil {
+			address = candidate
+			m.Responses = append(m.Responses, resp)
+			samples--
+			break
+		}
+		logger.SafeDebug("probe", "No answer, trying the other address family", map[string]interface{}{
+			"server":  target.Server,
+			"address": candidate,
+			"error":   err.Error(),
+		})
+	}
+	m.Target.Address = address
+
+	var err error
+	if samples > 0 {
+		if len(m.Responses) > 0 {
+			err = sleep(ctx, p.cfg.NTP.SampleSpacing)
+		}
+		if err == nil {
+			var responses []*ntp.Response
+			m.Sent += samples
+			responses, err = p.client.QueryMultiple(ctx, address, samples)
+			m.Responses = append(m.Responses, responses...)
+		}
+	}
+	if len(m.Responses) > 0 {
+		p.families.remember(target.key(), address)
+	}
 
 	// Responses are labelled with the configured server name
 	for _, resp := range m.Responses {
@@ -261,4 +291,19 @@ func (p *Prober) measure(ctx context.Context, target Target) *Measurement {
 	}
 
 	return m
+}
+
+// sleep waits for d unless the context ends first
+func sleep(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

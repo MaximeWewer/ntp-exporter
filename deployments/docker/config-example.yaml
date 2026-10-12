@@ -108,6 +108,14 @@ ntp:
   # Default: 10
   max_concurrency: 10
 
+  # Address family used to reach the servers. In auto mode, families without
+  # a route on the host are skipped, and a dual-stack server is queried over
+  # the family that answered last, falling back to the other one in the same
+  # cycle when it does not answer.
+  # Values: auto, ipv4, ipv6
+  # Default: auto
+  ip_family: auto
+
   # Interval between two collection cycles. A cycle is cut 10% (at most 1s)
   # before the next one. Keep 60s or more when querying the public NTP pool.
   # Values: 5s-1h

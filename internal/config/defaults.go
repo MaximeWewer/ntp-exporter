@@ -47,6 +47,9 @@ func ApplyDefaults(cfg *Config) {
 	if cfg.NTP.SamplesPerServer == 0 {
 		cfg.NTP.SamplesPerServer = 4
 	}
+	if cfg.NTP.IPFamily == "" {
+		cfg.NTP.IPFamily = IPFamilyAuto
+	}
 	if cfg.NTP.SampleSpacing == 0 {
 		cfg.NTP.SampleSpacing = 2 * time.Second
 	}

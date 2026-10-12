@@ -126,10 +126,13 @@ WantedBy=multi-user.target
 
 Every `scrape_interval` (60 s by default), the exporter runs one **cycle**:
 
-1. **Targets**: configured servers are resolved once per cycle (IPv4 preferred),
-   so that every sample of a burst reaches the same server even behind a
-   round-robin name such as `pool.ntp.org`. Pools are resolved through a DNS
-   cache and their members become targets.
+1. **Targets**: configured servers are resolved once per cycle, so that every
+   sample of a burst reaches the same server even behind a round-robin name
+   such as `pool.ntp.org`. Pools are resolved through a DNS cache and their
+   members become targets. With `ip_family: auto`, address families without a
+   route on the host are skipped, and a dual-stack server is queried over the
+   family that answered last: when it does not answer, the other family is
+   tried in the same cycle.
 2. **Burst**: each target receives `samples_per_server` queries spaced by
    `sample_spacing` (2 s: NTP servers rate-limit clients sending packets closer
    than that). Up to `max_concurrency` targets are probed in parallel.
@@ -194,6 +197,7 @@ ntp:
 | `NTP_TIMEOUT` | `5s` | Timeout of one query |
 | `NTP_VERSION` | `4` | NTP protocol version (2 to 4) |
 | `NTP_MAX_CONCURRENCY` | `10` | Servers probed in parallel |
+| `NTP_IP_FAMILY` | `auto` | `auto`, `ipv4` or `ipv6` |
 | `NTP_MAX_CLOCK_OFFSET` | `100ms` | Threshold of `ntp_clock_offset_exceeded` |
 | `NTP_CONSENSUS_ENABLED` | enabled with 3+ servers or pools | Consensus and falseticker detection |
 | `NTP_KOD_MAX_BACKOFF` | `1024s` | Longest polling interval after repeated `RATE` |
@@ -378,6 +382,11 @@ responses: check `ntp_invalid_responses_total` by `reason` (for instance
 **`ntp_exporter_cycle_overrun_total` increases.** Unreachable servers consume
 `samples_per_server × timeout`. Lower the timeout or the samples, raise
 `max_concurrency` or `scrape_interval`.
+
+**A dual-stack server is reached over the wrong family.** In `auto` mode the
+exporter uses the family that answered last; force one with
+`NTP_IP_FAMILY=ipv4` or `ipv6`. `ntp_server_info{address}` shows the address
+used.
 
 **No kernel metrics.** The kernel option is Linux only and must be enabled
 (`NTP_KERNEL_ENABLED=true`, Helm `kernel.enabled=true`); check the logs for

@@ -653,3 +653,19 @@ func TestWarnings_DeprecatedEnableKernel(t *testing.T) {
 		t.Errorf("expected a deprecation warning, got %v", w)
 	}
 }
+
+func TestValidate_IPFamily(t *testing.T) {
+	for _, family := range []string{IPFamilyAuto, IPFamilyIPv4, IPFamilyIPv6} {
+		cfg := DefaultConfig()
+		cfg.NTP.IPFamily = family
+		if err := Validate(cfg); err != nil {
+			t.Errorf("ip_family %q must be accepted: %v", family, err)
+		}
+	}
+
+	cfg := DefaultConfig()
+	cfg.NTP.IPFamily = "inet6"
+	if err := Validate(cfg); err == nil {
+		t.Error("unknown ip_family must be rejected")
+	}
+}

@@ -66,6 +66,7 @@ configYaml:
       samples_per_server: 4
       sample_spacing: 2s
       max_concurrency: 10
+      ip_family: auto
       scrape_interval: 60s
 
       # Kernel clock state (agent mode only)
