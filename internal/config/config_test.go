@@ -440,3 +440,18 @@ func TestLoadFromYamlFile_PoolDefaults(t *testing.T) {
 	assert.Equal(t, 4, cfg.NTP.Pools[0].MaxServers)
 	assert.Equal(t, "best_n", cfg.NTP.Pools[0].Strategy)
 }
+
+func TestConsensusEnabled(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.NTP.Servers = []string{"a", "b"}
+	assert.False(t, cfg.NTP.ConsensusEnabled(), "auto: 2 servers")
+
+	cfg.NTP.Pools = []PoolConfig{{Name: "pool.ntp.org"}}
+	assert.True(t, cfg.NTP.ConsensusEnabled(), "auto: 2 servers + 1 pool")
+
+	t.Setenv("NTP_CONSENSUS_ENABLED", "false")
+	envCfg, err := LoadFromEnvVarsOnly()
+	require.NoError(t, err)
+	require.NotNil(t, envCfg.NTP.Consensus.Enabled)
+	assert.False(t, envCfg.NTP.ConsensusEnabled())
+}

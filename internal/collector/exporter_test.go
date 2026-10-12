@@ -398,3 +398,37 @@ func TestExporter_ServerInfo(t *testing.T) {
 		"server": "192.0.2.40", "pool": "192.0.2.40", "refid": "78.73.83.84", "stratum": "2",
 	}))
 }
+
+func TestExporter_Consensus(t *testing.T) {
+	servers := []string{"a.example.org", "b.example.org", "c.example.org", "bad.example.org"}
+	h := newHarness(t, servers...)
+	for _, s := range servers[:3] {
+		h.mock.SetupSuccessfulServer(s, 2*time.Millisecond, 2) // root distance 15ms
+	}
+	h.mock.SetupSuccessfulServer("bad.example.org", 800*time.Millisecond, 2)
+
+	h.cycle()
+
+	assert.InDelta(t, 0.002, h.mustValue("ntp_consensus_offset_seconds", nil), 1e-9)
+	assert.Equal(t, 4.0, h.mustValue("ntp_consensus_servers", nil))
+	assert.Equal(t, 3.0, h.mustValue("ntp_consensus_truechimers", nil))
+	assert.Equal(t, 1.0, h.mustValue("ntp_falseticker", srv("bad.example.org")))
+	assert.Equal(t, 0.0, h.mustValue("ntp_falseticker", srv("a.example.org")))
+	assert.InDelta(t, 0.798, h.mustValue("ntp_offset_from_consensus_seconds", srv("bad.example.org")), 1e-9)
+}
+
+func TestExporter_ConsensusDisabled(t *testing.T) {
+	h := newHarness(t, "a.example.org", "b.example.org")
+	h.mock.SetupSuccessfulServer("a.example.org", time.Millisecond, 2)
+	h.mock.SetupSuccessfulServer("b.example.org", time.Millisecond, 2)
+
+	h.cycle()
+	h.absent("ntp_consensus_offset_seconds", nil)
+
+	enabled := false
+	h.cfg.NTP.Servers = append(h.cfg.NTP.Servers, "c.example.org")
+	h.mock.SetupSuccessfulServer("c.example.org", time.Millisecond, 2)
+	h.cfg.NTP.Consensus.Enabled = &enabled
+	h.cycle()
+	h.absent("ntp_consensus_offset_seconds", nil)
+}

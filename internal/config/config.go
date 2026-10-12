@@ -26,6 +26,9 @@
 //	  - NTP_SAMPLES, NTP_SAMPLE_SPACING, NTP_MAX_CONCURRENCY, NTP_ENABLE_KERNEL
 //	  - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET
 //
+//	CONSENSUS:
+//	  - NTP_CONSENSUS_ENABLED (default: enabled with 3+ servers or pools)
+//
 //	KISS-O'-DEATH:
 //	  - NTP_KOD_MAX_BACKOFF, NTP_KOD_SUSPEND_DURATION
 //
@@ -105,6 +108,7 @@ type NTPConfig struct {
 	RateLimit        RateLimitConfig        `yaml:"rate_limit"`
 	CircuitBreaker   CircuitBreakerConfig   `yaml:"circuit_breaker"`
 	KoD              KoDConfig              `yaml:"kod"`
+	Consensus        ConsensusConfig        `yaml:"consensus"`
 	AdaptiveSampling AdaptiveSamplingConfig `yaml:"adaptive_sampling"`
 	WorkerPool       WorkerPoolConfig       `yaml:"worker_pool"`
 	DNSCache         DNSCacheConfig         `yaml:"dns_cache"`
@@ -133,6 +137,21 @@ type KoDConfig struct {
 	MaxBackoff time.Duration `yaml:"max_backoff"`
 	// SuspendDuration is how long a target stays unqueried after DENY or RSTR
 	SuspendDuration time.Duration `yaml:"suspend_duration"`
+}
+
+// ConsensusConfig controls the multi-server consensus and falseticker detection
+type ConsensusConfig struct {
+	// Enabled forces the consensus on or off. When unset, it is enabled as soon
+	// as at least 3 servers or pools are configured.
+	Enabled *bool `yaml:"enabled"`
+}
+
+// ConsensusEnabled tells whether the consensus must be computed
+func (c *NTPConfig) ConsensusEnabled() bool {
+	if c.Consensus.Enabled != nil {
+		return *c.Consensus.Enabled
+	}
+	return len(c.Servers)+len(c.Pools) >= 3
 }
 
 // CircuitBreakerConfig contains circuit breaker configuration
@@ -323,6 +342,14 @@ func (e *envReader) bool(name string, dst *bool) {
 	}
 }
 
+func (e *envReader) boolPtr(name string, dst **bool) {
+	var b bool
+	if v, ok := os.LookupEnv(name); ok && v != "" {
+		e.bool(name, &b)
+		*dst = &b
+	}
+}
+
 func (e *envReader) duration(name string, dst *time.Duration) {
 	if v, ok := os.LookupEnv(name); ok && v != "" {
 		d, err := time.ParseDuration(v)
@@ -405,6 +432,9 @@ func applyEnvOverrides(cfg *Config) error {
 	e.int("RATE_LIMIT_PER_SERVER", &cfg.NTP.RateLimit.PerServerRate)
 	e.int("RATE_LIMIT_BURST_SIZE", &cfg.NTP.RateLimit.BurstSize)
 	e.duration("RATE_LIMIT_BACKOFF_DURATION", &cfg.NTP.RateLimit.BackoffDuration)
+
+	// CONSENSUS
+	e.boolPtr("NTP_CONSENSUS_ENABLED", &cfg.NTP.Consensus.Enabled)
 
 	// KISS-O'-DEATH
 	e.duration("NTP_KOD_MAX_BACKOFF", &cfg.NTP.KoD.MaxBackoff)

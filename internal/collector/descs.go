@@ -37,6 +37,13 @@ type descs struct {
 	// Security metrics
 	trustScore *prometheus.Desc
 
+	// Consensus metrics
+	consensusOffset     *prometheus.Desc
+	consensusServers    *prometheus.Desc
+	consensusChimers    *prometheus.Desc
+	offsetFromConsensus *prometheus.Desc
+	falseticker         *prometheus.Desc
+
 	// Pool metrics
 	poolActive     *prometheus.Desc
 	poolTotal      *prometheus.Desc
@@ -91,6 +98,12 @@ func newDescs(namespace, subsystem string) *descs {
 
 		trustScore: d(subsystem, "server_trust_score", "Trust score for the NTP server (0-1)", server...),
 
+		consensusOffset:     d(subsystem, "consensus_offset_seconds", "Offset of the local clock against the consensus of the servers (median of the truechimers) in seconds"),
+		consensusServers:    d(subsystem, "consensus_servers", "Number of valid servers taking part in the consensus"),
+		consensusChimers:    d(subsystem, "consensus_truechimers", "Number of servers agreeing with the consensus"),
+		offsetFromConsensus: d(subsystem, "offset_from_consensus_seconds", "Offset of the server against the consensus in seconds, independent of the local clock", server...),
+		falseticker:         d(subsystem, "falseticker", "Whether the server correctness interval misses the majority intersection (1) or not (0)", server...),
+
 		poolActive:     d("pool", "servers_active", "Number of pool servers with a valid response", pool...),
 		poolTotal:      d("pool", "servers_total", "Total number of servers returned by the pool resolution", pool...),
 		poolDNS:        d("pool", "dns_resolution_seconds", "DNS resolution duration for pool in seconds", pool...),
@@ -116,6 +129,7 @@ func (d *descs) all() []*prometheus.Desc {
 		d.rootDelay, d.rootDispersion, d.rootDistance, d.precision, d.leapIndicator,
 		d.jitter, d.offsetStdDev, d.rttStdDev, d.samples, d.packetLoss,
 		d.trustScore,
+		d.consensusOffset, d.consensusServers, d.consensusChimers, d.offsetFromConsensus, d.falseticker,
 		d.poolActive, d.poolTotal, d.poolDNS, d.poolBestOffset,
 		d.kernelOffset, d.kernelFrequency, d.kernelMaxError, d.kernelEstError,
 		d.kernelPrecision, d.kernelSyncStatus, d.kernelStatusCode,

@@ -41,6 +41,7 @@ type Exporter struct {
 
 	mu          sync.RWMutex
 	last        *probe.CycleResult
+	consensus   *probe.Consensus
 	kernelState *ntp.KernelTimex
 	lastSuccess map[string]time.Time
 }
@@ -90,6 +91,20 @@ func (e *Exporter) Update(result *probe.CycleResult) {
 
 	e.updateCounters(result)
 
+	var consensus *probe.Consensus
+	if e.cfg.NTP.ConsensusEnabled() {
+		consensus = probe.ComputeConsensus(result.Measurements)
+		if consensus != nil && len(consensus.Falsetickers) > 0 {
+			servers := make([]string, 0, len(consensus.Falsetickers))
+			for s := range consensus.Falsetickers {
+				servers = append(servers, s)
+			}
+			logger.SafeWarn("collector", "Falsetickers detected", map[string]interface{}{
+				"servers": servers,
+			})
+		}
+	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -116,6 +131,7 @@ func (e *Exporter) Update(result *probe.CycleResult) {
 	}
 
 	e.last = result
+	e.consensus = consensus
 	e.kernelState = kernelState
 }
 
@@ -189,6 +205,10 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		for _, pool := range e.last.Pools {
 			e.collectPool(ch, pool)
 		}
+	}
+
+	if e.consensus != nil {
+		e.collectConsensus(ch)
 	}
 
 	if e.kernelState != nil {
@@ -273,6 +293,25 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 		kernelOffset := e.kernelState.GetOffsetSeconds()
 		gauge(ch, d.kernelDivergence, math.Abs(ntpOffset-kernelOffset), e.nodeName, server)
 		gauge(ch, d.kernelCoherence, calculateCoherence(ntpOffset, kernelOffset), e.nodeName, server)
+	}
+}
+
+// collectConsensus emits the consensus and the per-server agreement
+func (e *Exporter) collectConsensus(ch chan<- prometheus.Metric) {
+	d := e.descs
+	c := e.consensus
+
+	gauge(ch, d.consensusOffset, c.Offset.Seconds())
+	gauge(ch, d.consensusServers, float64(c.Servers))
+	gauge(ch, d.consensusChimers, float64(c.Truechimers))
+
+	for server, offset := range c.Offsets {
+		gauge(ch, d.offsetFromConsensus, (offset - c.Offset).Seconds(), server)
+		falseticker := 0.0
+		if c.Falsetickers[server] {
+			falseticker = 1
+		}
+		gauge(ch, d.falseticker, falseticker, server)
 	}
 }
 
