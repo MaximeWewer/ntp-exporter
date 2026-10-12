@@ -17,7 +17,8 @@
 //	SERVER:
 //	  - NTP_EXPORTER_ADDRESS, NTP_EXPORTER_PORT
 //	  - SERVER_READ_TIMEOUT, SERVER_WRITE_TIMEOUT
-//	  - TLS_ENABLED, TLS_CERT_FILE, TLS_KEY_FILE
+//	  - WEB_CONFIG_FILE (Prometheus web configuration: TLS, basic auth)
+//	  - TLS_ENABLED, TLS_CERT_FILE, TLS_KEY_FILE (deprecated)
 //
 //	NTP:
 //	  - NTP_SERVERS (comma-separated), NTP_TIMEOUT, NTP_VERSION
@@ -74,9 +75,12 @@ type ServerConfig struct {
 	Port         int           `yaml:"port"`
 	ReadTimeout  time.Duration `yaml:"read_timeout"`
 	WriteTimeout time.Duration `yaml:"write_timeout"`
-	TLSEnabled   bool          `yaml:"tls_enabled"`
-	TLSCertFile  string        `yaml:"tls_cert_file"`
-	TLSKeyFile   string        `yaml:"tls_key_file"`
+	// WebConfigFile is a Prometheus web configuration file (TLS, basic auth)
+	WebConfigFile string `yaml:"web_config_file"`
+	// Legacy TLS options, superseded by WebConfigFile
+	TLSEnabled  bool   `yaml:"tls_enabled"`
+	TLSCertFile string `yaml:"tls_cert_file"`
+	TLSKeyFile  string `yaml:"tls_key_file"`
 }
 
 // NTPConfig contains NTP client configuration
@@ -374,6 +378,7 @@ func applyEnvOverrides(cfg *Config) error {
 	e.int("NTP_EXPORTER_PORT", &cfg.Server.Port)
 	e.duration("SERVER_READ_TIMEOUT", &cfg.Server.ReadTimeout)
 	e.duration("SERVER_WRITE_TIMEOUT", &cfg.Server.WriteTimeout)
+	e.string("WEB_CONFIG_FILE", &cfg.Server.WebConfigFile)
 	e.bool("TLS_ENABLED", &cfg.Server.TLSEnabled)
 	e.string("TLS_CERT_FILE", &cfg.Server.TLSCertFile)
 	e.string("TLS_KEY_FILE", &cfg.Server.TLSKeyFile)

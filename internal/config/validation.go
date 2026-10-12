@@ -182,6 +182,9 @@ const PublicPoolMinInterval = 60 * time.Second
 // public NTP pool more often than its usage policy allows
 func Warnings(cfg *Config) []string {
 	var warnings []string
+	if cfg.Server.TLSEnabled {
+		warnings = append(warnings, "tls_enabled, tls_cert_file and tls_key_file are deprecated: use web_config_file (--web.config.file)")
+	}
 	if cfg.NTP.EnableKernel {
 		warnings = append(warnings, "enable_kernel (NTP_ENABLE_KERNEL) is deprecated: use kernel.enabled (NTP_KERNEL_ENABLED)")
 	}

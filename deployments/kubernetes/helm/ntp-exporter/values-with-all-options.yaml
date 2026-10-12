@@ -46,6 +46,7 @@ config:
   writeTimeout: 10s
 
   # TLS/HTTPS configuration
+  # Deprecated: use webConfig.existingSecret instead
   tls:
     enabled: false
     certFile: ""
@@ -133,6 +134,16 @@ config:
 # =============================================================================
 
 # Service Account
+# Prometheus web configuration (TLS, basic auth), see
+# https://prometheus.io/docs/prometheus/latest/configuration/https/
+# The secret must contain the web configuration file under `key`, plus the
+# certificate files it references (paths relative to /etc/ntp-exporter/web).
+# When TLS or basic auth is enabled, adapt the probes (scheme: HTTPS) and the
+# ServiceMonitor endpoint accordingly.
+webConfig:
+  existingSecret: ""
+  key: web.yml
+
 serviceAccount:
   create: true
   annotations: {}

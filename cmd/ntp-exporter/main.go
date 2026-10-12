@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/maximewewer/ntp-exporter/internal/server"
 	"github.com/maximewewer/ntp-exporter/pkg/logger"
 	"github.com/maximewewer/ntp-exporter/pkg/metrics"
+	"github.com/prometheus/exporter-toolkit/web"
 )
 
 // Build information, set with -ldflags "-X main.version=... -X main.commit=... -X main.buildDate=..."
@@ -32,6 +34,8 @@ func main() {
 	// Parse command-line flags
 	configFile := flag.String("config", "", "Path to configuration file")
 	showVersion := flag.Bool("version", false, "Show version information")
+	webConfigFile := flag.String("web.config.file", "", "Path to a Prometheus web configuration file (TLS, basic auth)")
+	listenAddress := flag.String("web.listen-address", "", "Address to listen on, e.g. :9559 (overrides server address and port)")
 	healthcheck := flag.Bool("healthcheck", false, "Query the local /healthz endpoint and exit (for container health checks)")
 	flag.Parse()
 
@@ -43,6 +47,9 @@ func main() {
 
 	// Load configuration (before logger is initialized)
 	cfg, err := loadConfig(*configFile)
+	if err == nil {
+		err = applyWebFlags(cfg, *webConfigFile, *listenAddress)
+	}
 	if *healthcheck {
 		os.Exit(runHealthcheck(cfg, err))
 	}
@@ -242,24 +249,64 @@ func runHealthcheck(cfg *config.Config, cfgErr error) int {
 	if host == "" || host == "0.0.0.0" || host == "::" {
 		host = "127.0.0.1"
 	}
-	scheme := "http"
-	client := &http.Client{Timeout: 3 * time.Second}
-	if cfg.Server.TLSEnabled {
-		scheme = "https"
-		// Local check of our own endpoint: the certificate is issued for the public name
-		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // loopback health check
+	hostPort := net.JoinHostPort(host, strconv.Itoa(cfg.Server.Port))
+
+	// TLS may be enabled by the web configuration file: try HTTPS first then.
+	// Local check of our own endpoint: the certificate is issued for the public name.
+	client := &http.Client{
+		Timeout:   3 * time.Second,
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, //nolint:gosec // loopback health check
+	}
+	schemes := []string{"http"}
+	if cfg.Server.TLSEnabled || cfg.Server.WebConfigFile != "" {
+		schemes = []string{"https", "http"}
 	}
 
-	url := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(cfg.Server.Port)) + "/healthz"
-	resp, err := client.Get(url)
-	if err != nil {
-		_, _ = os.Stderr.WriteString("healthcheck: " + err.Error() + "\n")
-		return 1
+	var lastErr string
+	for _, scheme := range schemes {
+		url := scheme + "://" + hostPort + "/healthz"
+		resp, err := client.Get(url)
+		if err != nil {
+			lastErr = err.Error()
+			continue
+		}
+		_ = resp.Body.Close()
+		// 401 means basic auth is enabled: the exporter is alive
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusUnauthorized {
+			return 0
+		}
+		lastErr = url + " returned " + resp.Status
 	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		_, _ = os.Stderr.WriteString("healthcheck: " + url + " returned " + resp.Status + "\n")
-		return 1
+
+	_, _ = os.Stderr.WriteString("healthcheck: " + lastErr + "\n")
+	return 1
+}
+
+// applyWebFlags applies the standard Prometheus exporter web flags, which take
+// precedence over the configuration file and environment variables
+func applyWebFlags(cfg *config.Config, webConfigFile, listenAddress string) error {
+	if webConfigFile != "" {
+		cfg.Server.WebConfigFile = webConfigFile
 	}
-	return 0
+	if listenAddress != "" {
+		host, port, err := net.SplitHostPort(listenAddress)
+		if err != nil {
+			return fmt.Errorf("invalid --web.listen-address %q: %w", listenAddress, err)
+		}
+		p, err := strconv.Atoi(port)
+		if err != nil || p < 1 || p > 65535 {
+			return fmt.Errorf("invalid port in --web.listen-address %q", listenAddress)
+		}
+		if host == "" {
+			host = "0.0.0.0"
+		}
+		cfg.Server.Address = host
+		cfg.Server.Port = p
+	}
+	if cfg.Server.WebConfigFile != "" {
+		if err := web.Validate(cfg.Server.WebConfigFile); err != nil {
+			return fmt.Errorf("invalid web configuration file %s: %w", cfg.Server.WebConfigFile, err)
+		}
+	}
+	return nil
 }

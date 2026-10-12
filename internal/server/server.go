@@ -2,16 +2,19 @@ package server
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
 	"github.com/maximewewer/ntp-exporter/pkg/logger"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/exporter-toolkit/web"
 )
 
 // Server represents the HTTP server
@@ -50,34 +53,38 @@ func (s *Server) Start(ctx context.Context) error {
 	handler := s.Handler()
 
 	// Configure server
-	addr := s.config.Server.Address + ":" + strconv.Itoa(s.config.Server.Port)
+	addr := net.JoinHostPort(s.config.Server.Address, strconv.Itoa(s.config.Server.Port))
 	s.server = &http.Server{
-		Addr:         addr,
-		Handler:      handler,
-		ReadTimeout:  s.config.Server.ReadTimeout,
-		WriteTimeout: s.config.Server.WriteTimeout,
+		Addr:              addr,
+		Handler:           handler,
+		ReadTimeout:       s.config.Server.ReadTimeout,
+		ReadHeaderTimeout: s.config.Server.ReadTimeout,
+		WriteTimeout:      s.config.Server.WriteTimeout,
 	}
 
-	// Configure TLS if enabled
-	if s.config.Server.TLSEnabled {
-		s.server.TLSConfig = createSecureTLSConfig()
-		logger.Infof("server", "Starting HTTPS server on %s with TLS 1.2+", addr)
-	} else {
-		logger.Infof("server", "Starting HTTP server on %s", addr)
-	}
-
-	// Start server
 	errChan := make(chan error, 1)
-	go func() {
-		if s.config.Server.TLSEnabled {
-			errChan <- s.server.ListenAndServeTLS(
-				s.config.Server.TLSCertFile,
-				s.config.Server.TLSKeyFile,
-			)
-		} else {
-			errChan <- s.server.ListenAndServe()
+	if s.config.Server.TLSEnabled && s.config.Server.WebConfigFile == "" {
+		// Deprecated tls_* options: same TLS defaults as the web config file
+		tlsConfig, err := web.ConfigToTLSConfig(&web.TLSConfig{
+			TLSCertPath: s.config.Server.TLSCertFile,
+			TLSKeyPath:  s.config.Server.TLSKeyFile,
+		})
+		if err != nil {
+			return fmt.Errorf("invalid TLS configuration: %w", err)
 		}
-	}()
+		s.server.TLSConfig = tlsConfig
+		logger.Infof("server", "Starting HTTPS server on %s", addr)
+		go func() { errChan <- s.server.ListenAndServeTLS("", "") }()
+	} else {
+		// Standard Prometheus web configuration (TLS, basic auth, headers)
+		// https://prometheus.io/docs/prometheus/latest/configuration/https/
+		listen := []string{addr}
+		systemd := false
+		webConfig := s.config.Server.WebConfigFile
+		flags := &web.FlagConfig{WebListenAddresses: &listen, WebSystemdSocket: &systemd, WebConfigFile: &webConfig}
+		logger.Infof("server", "Starting HTTP server on %s", addr)
+		go func() { errChan <- web.ListenAndServe(s.server, flags, toolkitLogger) }()
+	}
 
 	// Wait for context cancellation or server error
 	select {
@@ -112,34 +119,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// createSecureTLSConfig creates a secure TLS configuration
-// Following best practices for TLS 1.2+ with secure cipher suites
-func createSecureTLSConfig() *tls.Config {
-	return &tls.Config{
-		// Minimum TLS version 1.2
-		MinVersion: tls.VersionTLS12,
-
-		// Preferred elliptic curves for ECDHE
-		CurvePreferences: []tls.CurveID{
-			tls.CurveP521,
-			tls.CurveP384,
-			tls.CurveP256,
-		},
-
-		// Secure cipher suites (TLS 1.2+)
-		// Prioritize ECDHE for Perfect Forward Secrecy
-		CipherSuites: []uint16{
-			// TLS 1.3 cipher suites (automatically used if available)
-
-			// TLS 1.2 cipher suites with ECDHE (PFS)
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-
-			// ChaCha20-Poly1305 (modern, fast on ARM)
-			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-		},
-	}
-}
+// toolkitLogger only reports exporter-toolkit warnings and errors: startup
+// information is already logged by the exporter
+var toolkitLogger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))

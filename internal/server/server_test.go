@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/maximewewer/ntp-exporter/pkg/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func newTestServer(t *testing.T, readiness ReadinessFunc) *httptest.Server {
@@ -138,4 +141,47 @@ func TestServer_StartAndShutdown(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("server did not stop")
 	}
+}
+
+func freePort(t *testing.T) int {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
+}
+
+func TestServer_WebConfigBasicAuth(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.MinCost)
+	require.NoError(t, err)
+	webConfig := filepath.Join(t.TempDir(), "web.yml")
+	require.NoError(t, os.WriteFile(webConfig, []byte("basic_auth_users:\n  prometheus: "+string(hash)+"\n"), 0o600))
+
+	cfg := config.DefaultConfig()
+	cfg.Server.Address = "127.0.0.1"
+	cfg.Server.Port = freePort(t)
+	cfg.Server.WebConfigFile = webConfig
+	reg := metrics.NewRegistryWithConfig("ntp", "")
+	require.NoError(t, reg.Register())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = New(cfg, reg.GetRegistry(), nil).Start(ctx) }()
+
+	url := "http://127.0.0.1:" + strconv.Itoa(cfg.Server.Port) + "/metrics"
+	require.Eventually(t, func() bool {
+		resp, err := http.Get(url)
+		if err != nil {
+			return false
+		}
+		resp.Body.Close()
+		return resp.StatusCode == http.StatusUnauthorized
+	}, 2*time.Second, 20*time.Millisecond, "metrics require authentication")
+
+	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req.SetBasicAuth("prometheus", "secret")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -107,4 +108,26 @@ func TestRunHealthcheck(t *testing.T) {
 
 	ts.Close()
 	assert.Equal(t, 1, runHealthcheck(cfg, nil), "server down")
+}
+
+func TestApplyWebFlags(t *testing.T) {
+	cfg := config.DefaultConfig()
+	require.NoError(t, applyWebFlags(cfg, "", ":19100"))
+	assert.Equal(t, "0.0.0.0", cfg.Server.Address)
+	assert.Equal(t, 19100, cfg.Server.Port)
+
+	require.NoError(t, applyWebFlags(cfg, "", "127.0.0.1:9200"))
+	assert.Equal(t, "127.0.0.1", cfg.Server.Address)
+
+	assert.Error(t, applyWebFlags(cfg, "", "no-port"))
+	assert.Error(t, applyWebFlags(cfg, "", ":99999"))
+
+	missing := filepath.Join(t.TempDir(), "missing.yml")
+	assert.ErrorContains(t, applyWebFlags(config.DefaultConfig(), missing, ""), "web configuration")
+
+	valid := filepath.Join(t.TempDir(), "web.yml")
+	require.NoError(t, os.WriteFile(valid, []byte("http_server_config:\n  http2: true\n"), 0o600))
+	c := config.DefaultConfig()
+	require.NoError(t, applyWebFlags(c, valid, ""))
+	assert.Equal(t, valid, c.Server.WebConfigFile)
 }

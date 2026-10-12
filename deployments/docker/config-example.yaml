@@ -26,7 +26,13 @@ server:
   # Default: 10s
   write_timeout: 10s
 
-  # Enable TLS/HTTPS
+  # Prometheus web configuration file (TLS, basic auth, HTTP headers):
+  # https://prometheus.io/docs/prometheus/latest/configuration/https/
+  # Also settable with --web.config.file or WEB_CONFIG_FILE
+  # Default: "" (plain HTTP)
+  web_config_file: ""
+
+  # DEPRECATED: use web_config_file. Enable TLS/HTTPS
   # Values: true, false
   # Default: false
   tls_enabled: false
