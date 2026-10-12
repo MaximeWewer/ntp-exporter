@@ -27,7 +27,11 @@ func Validate(cfg *Config) error {
 		return err
 	}
 
-	if err := validateNTP(&cfg.NTP); err != nil {
+	if err := validateProbeEndpoint(cfg); err != nil {
+		return err
+	}
+
+	if err := validateNTP(&cfg.NTP, cfg.ProbeEndpoint.Only); err != nil {
 		return err
 	}
 
@@ -67,8 +71,21 @@ func validateServer(cfg *ServerConfig) error {
 	return nil
 }
 
-func validateNTP(cfg *NTPConfig) error {
-	if len(cfg.Servers) == 0 && len(cfg.Pools) == 0 {
+func validateProbeEndpoint(cfg *Config) error {
+	if !cfg.ProbeEndpoint.Only {
+		return nil
+	}
+	if !cfg.ProbeEndpoint.IsEnabled() {
+		return errors.New("probe_endpoint.only requires probe_endpoint.enabled")
+	}
+	if len(cfg.NTP.Servers) > 0 || len(cfg.NTP.Pools) > 0 {
+		return errors.New("probe_endpoint.only excludes static servers and pools: targets come from /probe requests")
+	}
+	return nil
+}
+
+func validateNTP(cfg *NTPConfig, probeOnly bool) error {
+	if len(cfg.Servers) == 0 && len(cfg.Pools) == 0 && !probeOnly {
 		return errors.New("at least one NTP server or pool must be configured")
 	}
 

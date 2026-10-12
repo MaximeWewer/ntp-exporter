@@ -1,0 +1,34 @@
+{{- if and (include "ntp-exporter.probeEndpointEnabled" .) .Values.probeEndpoint.probe .Values.probeEndpoint.probe.enabled }}
+{{- if not .Values.probeEndpoint.probe.targets }}
+{{- fail "probeEndpoint.probe.targets must list at least one target" }}
+{{- end }}
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: {{ include "ntp-exporter.fullname" . }}
+  namespace: {{ .Values.probeEndpoint.probe.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "ntp-exporter.labels" . | nindent 4 }}
+    {{- with .Values.probeEndpoint.probe.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  jobName: {{ include "ntp-exporter.fullname" . }}-probe
+  interval: {{ .Values.probeEndpoint.probe.interval }}
+  scrapeTimeout: {{ .Values.probeEndpoint.probe.scrapeTimeout }}
+  prober:
+    url: {{ include "ntp-exporter.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+    path: /probe
+  targets:
+    staticConfig:
+      static:
+        {{- toYaml .Values.probeEndpoint.probe.targets | nindent 8 }}
+      {{- with .Values.probeEndpoint.probe.labels }}
+      labels:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- with .Values.probeEndpoint.probe.metricRelabelings }}
+  metricRelabelings:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

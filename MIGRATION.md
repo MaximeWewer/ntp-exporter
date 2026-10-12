@@ -131,6 +131,7 @@ raise it for servers behind noisy links.
 | `ntp.kernel.enabled`, `ntp.kernel.violation_only` | `NTP_KERNEL_ENABLED`, `NTP_KERNEL_VIOLATION_ONLY` | `false` |
 | `ntp.kod.max_backoff`, `ntp.kod.suspend_duration` | `NTP_KOD_MAX_BACKOFF`, `NTP_KOD_SUSPEND_DURATION` | `1024s`, `1h` |
 | `ntp.consensus.enabled` | `NTP_CONSENSUS_ENABLED` | enabled with 3+ servers or pools |
+| `probe_endpoint.enabled`, `probe_endpoint.only` | `PROBE_ENDPOINT_ENABLED`, `PROBE_ENDPOINT_ONLY` | `true`, `false` |
 | `ntp.ip_family` | `NTP_IP_FAMILY` (`auto`, `ipv4`, `ipv6`) | `auto` |
 | `ntp.pools` | `NTP_POOLS` (`name[:strategy[:max_servers]]`) | none |
 | `metrics.labels` (now applied) | `METRICS_LABELS` (`key=value,...`) | none |
@@ -147,6 +148,7 @@ deprecated: use a [Prometheus web configuration file](https://prometheus.io/docs
 |---|---|
 | `/health` (always healthy) | `/healthz` (liveness; `/health` kept as an alias) |
 | | `/readyz`: 503 until a cycle completed, or when the last one is older than 3 intervals |
+| | `/probe?target=host[:port][&samples=N]`: multi-target probing driven by Prometheus, like blackbox_exporter (`probe_endpoint.*`) |
 
 The Helm chart now uses `/healthz` for the liveness probe and `/readyz` for
 the readiness probe. Container images check their health with

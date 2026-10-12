@@ -37,6 +37,10 @@ type descs struct {
 	// Validity
 	responseValid *prometheus.Desc
 
+	// /probe endpoint
+	probeSuccess  *prometheus.Desc
+	probeDuration *prometheus.Desc
+
 	// Consensus metrics
 	consensusOffset     *prometheus.Desc
 	consensusServers    *prometheus.Desc
@@ -96,6 +100,9 @@ func newDescs(namespace, subsystem string) *descs {
 		packetLoss:   d(subsystem, "packet_loss_ratio", "Ratio of queries without valid response during the last cycle (0-1)", server...),
 
 		responseValid: d(subsystem, "response_valid", "Whether the server returned at least one valid time measurement during the last cycle (1) or only invalid responses (0)", server...),
+
+		probeSuccess:  d(subsystem, "probe_success", "Whether the /probe request got a valid time measurement from the target (1) or not (0)"),
+		probeDuration: d(subsystem, "probe_duration_seconds", "Duration of the /probe request burst in seconds"),
 
 		consensusOffset:     d(subsystem, "consensus_offset_seconds", "Offset of the local clock against the consensus of the servers (median of the truechimers) in seconds"),
 		consensusServers:    d(subsystem, "consensus_servers", "Number of valid servers taking part in the consensus"),

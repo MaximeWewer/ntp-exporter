@@ -129,11 +129,18 @@ func (f *families) candidates(key string, addrs []string) []string {
 	return out
 }
 
+// maxRemembered bounds the memory of the families that answered: /probe
+// targets come from HTTP requests and are never forgotten by a cycle
+const maxRemembered = 4096
+
 // remember records the family that answered a target
 func (f *families) remember(key, address string) {
 	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.preferred[key]; !ok && len(f.preferred) >= maxRemembered {
+		clear(f.preferred)
+	}
 	f.preferred[key] = addressFamily(address)
-	f.mu.Unlock()
 }
 
 // forget drops the state of targets that are no longer probed

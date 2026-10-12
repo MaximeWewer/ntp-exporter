@@ -28,6 +28,9 @@
 //	  - NTP_KERNEL_ENABLED, NTP_KERNEL_VIOLATION_ONLY (NTP_ENABLE_KERNEL is deprecated)
 //	  - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET
 //
+//	PROBE ENDPOINT:
+//	  - PROBE_ENDPOINT_ENABLED, PROBE_ENDPOINT_ONLY
+//
 //	CONSENSUS:
 //	  - NTP_CONSENSUS_ENABLED (default: enabled with 3+ servers or pools)
 //
@@ -60,10 +63,26 @@ import (
 
 // Config represents the complete application configuration
 type Config struct {
-	Server  ServerConfig  `yaml:"server"`
-	NTP     NTPConfig     `yaml:"ntp"`
-	Logging LoggingConfig `yaml:"logging"`
-	Metrics MetricsConfig `yaml:"metrics"`
+	Server        ServerConfig        `yaml:"server"`
+	ProbeEndpoint ProbeEndpointConfig `yaml:"probe_endpoint"`
+	NTP           NTPConfig           `yaml:"ntp"`
+	Logging       LoggingConfig       `yaml:"logging"`
+	Metrics       MetricsConfig       `yaml:"metrics"`
+}
+
+// ProbeEndpointConfig controls the multi-target /probe?target= endpoint, which
+// lets Prometheus drive the targets through relabel_configs
+type ProbeEndpointConfig struct {
+	// Enabled serves the endpoint (default: true)
+	Enabled *bool `yaml:"enabled"`
+	// Only disables the static targets: no server nor pool is probed in the
+	// background, targets only come from /probe requests
+	Only bool `yaml:"only"`
+}
+
+// IsEnabled tells whether the /probe endpoint is served
+func (c *ProbeEndpointConfig) IsEnabled() bool {
+	return c.Enabled == nil || *c.Enabled
 }
 
 // ServerConfig contains HTTP server configuration
@@ -367,6 +386,10 @@ func applyEnvOverrides(cfg *Config) error {
 	e.bool("TLS_ENABLED", &cfg.Server.TLSEnabled)
 	e.string("TLS_CERT_FILE", &cfg.Server.TLSCertFile)
 	e.string("TLS_KEY_FILE", &cfg.Server.TLSKeyFile)
+
+	// PROBE ENDPOINT
+	e.boolPtr("PROBE_ENDPOINT_ENABLED", &cfg.ProbeEndpoint.Enabled)
+	e.bool("PROBE_ENDPOINT_ONLY", &cfg.ProbeEndpoint.Only)
 
 	// NTP
 	e.list("NTP_SERVERS", &cfg.NTP.Servers)

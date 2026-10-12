@@ -110,6 +110,9 @@ func main() {
 
 	// Start HTTP server
 	srv := server.New(cfg, registry.GetRegistry(), exporter.Ready)
+	if cfg.ProbeEndpoint.IsEnabled() {
+		srv.SetProbeHandler(collector.NewProbeHandler(cfg, prober))
+	}
 	serverErrChan := make(chan error, 1)
 	go func() {
 		serverErrChan <- srv.Start(ctx)

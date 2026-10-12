@@ -154,7 +154,7 @@ func TestValidateNTP_ServersOrPools(t *testing.T) {
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
-			err := validateNTP(cfg)
+			err := validateNTP(cfg, false)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -193,7 +193,7 @@ func TestValidateNTP_Timeout(t *testing.T) {
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
-			err := validateNTP(cfg)
+			err := validateNTP(cfg, false)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -233,7 +233,7 @@ func TestValidateNTP_Version(t *testing.T) {
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
-			err := validateNTP(cfg)
+			err := validateNTP(cfg, false)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -272,7 +272,7 @@ func TestValidateNTP_SamplesPerServer(t *testing.T) {
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
-			err := validateNTP(cfg)
+			err := validateNTP(cfg, false)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -311,7 +311,7 @@ func TestValidateNTP_MaxConcurrency(t *testing.T) {
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
-			err := validateNTP(cfg)
+			err := validateNTP(cfg, false)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -375,7 +375,7 @@ func TestValidateNTP_Pools(t *testing.T) {
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
-			err := validateNTP(cfg)
+			err := validateNTP(cfg, false)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -410,7 +410,7 @@ func TestValidateNTP_PoolStrategies(t *testing.T) {
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
-			err := validateNTP(cfg)
+			err := validateNTP(cfg, false)
 
 			if strategy == "" || strategy == "best_n" || strategy == "round_robin" || strategy == "all" {
 				assert.NoError(t, err)
@@ -668,4 +668,20 @@ func TestValidate_IPFamily(t *testing.T) {
 	if err := Validate(cfg); err == nil {
 		t.Error("unknown ip_family must be rejected")
 	}
+}
+
+func TestValidate_ProbeEndpoint(t *testing.T) {
+	cfg := DefaultConfig()
+	assert.True(t, cfg.ProbeEndpoint.IsEnabled(), "the endpoint is served by default")
+
+	cfg.ProbeEndpoint.Only = true
+	assert.ErrorContains(t, Validate(cfg), "excludes static servers")
+
+	cfg.NTP.Servers = nil
+	cfg.NTP.Pools = nil
+	assert.NoError(t, Validate(cfg), "no static target needed with probe_endpoint.only")
+
+	disabled := false
+	cfg.ProbeEndpoint.Enabled = &disabled
+	assert.ErrorContains(t, Validate(cfg), "requires probe_endpoint.enabled")
 }

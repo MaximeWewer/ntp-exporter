@@ -16,6 +16,31 @@ kernel:
   # when node_exporter already exposes node_timex_* metrics
   violationOnly: false
 
+# Multi-target endpoint /probe?target=host[&samples=N], like blackbox_exporter:
+# Prometheus drives the targets through relabeling, so probe replicas hold no
+# target list and no state.
+probeEndpoint:
+  enabled: true
+  # Only serve /probe: config.ntpServers are not probed in the background
+  only: false
+  # Prometheus Operator Probe resource scraping /probe for each target
+  probe:
+    enabled: false
+    # Namespace of the Probe (defaults to the release namespace)
+    namespace: ""
+    additionalLabels: {}
+    # Keep 60s or more for public servers
+    interval: 60s
+    # The burst (samples x 2s spacing) must fit in the scrape timeout
+    scrapeTimeout: 10s
+    # Targets: host or host:port
+    targets: []
+    #  - time.cloudflare.com
+    #  - ptbtime1.ptb.de
+    # Labels added to every target
+    labels: {}
+    metricRelabelings: []
+
 # Number of replicas (only used in probe mode)
 replicaCount: 1
 

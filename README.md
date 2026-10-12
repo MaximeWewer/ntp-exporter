@@ -12,6 +12,7 @@ accuracy of NTP servers, and the clock accuracy of the machines it runs on.
 - [Deployment modes](#deployment-modes)
 - [Quick start](#quick-start)
 - [How a measurement works](#how-a-measurement-works)
+- [Multi-target probing](#multi-target-probing)
 - [Configuration](#configuration)
 - [Metrics reference](#metrics-reference)
 - [Alerting](#alerting)
@@ -152,6 +153,45 @@ Every `scrape_interval` (60 s by default), the exporter runs one **cycle**:
 A cycle is cut 10% (at most 1 s) before the next one
 (`ntp_exporter_cycle_overrun_total`).
 
+## Multi-target probing
+
+Like blackbox_exporter, `/probe?target=host[:port]` measures one target on
+demand, so that Prometheus drives the targets through relabeling and probe
+replicas hold no target list:
+
+```yaml
+scrape_configs:
+  - job_name: ntp-probe
+    metrics_path: /probe
+    params:
+      samples: ["4"]          # optional, defaults to samples_per_server
+    scrape_interval: 60s      # keep 60s or more for public servers
+    scrape_timeout: 10s
+    static_configs:
+      - targets: [time.cloudflare.com, ptbtime1.ptb.de, 192.0.2.10:123]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: ntp-exporter:9559
+```
+
+The response holds the per-server metrics of the target (`ntp_up`,
+`ntp_offset_seconds`, `ntp_server_info`...) plus `ntp_probe_success` and
+`ntp_probe_duration_seconds`. The burst is shortened to fit in the scrape
+timeout announced by Prometheus (minus 0.5 s): `(samples − 1) × sample_spacing`
+plus one query timeout. No Kiss-o'-Death state is kept between requests: the
+scrape interval sets the polling rate.
+
+With the Prometheus Operator, the Helm chart creates the `Probe` resource
+(`probeEndpoint.probe.enabled`, `probeEndpoint.probe.targets`). Set
+`probe_endpoint.only: true` (`PROBE_ENDPOINT_ONLY=true`, Helm
+`probeEndpoint.only`) to stop probing static servers in the background.
+Consensus and pool metrics need the static targets: they are not available
+through `/probe`.
+
 ## Configuration
 
 The exporter reads, by increasing priority: defaults, a YAML file
@@ -189,6 +229,8 @@ ntp:
 
 | Variable | Default | Description |
 |---|---|---|
+| `PROBE_ENDPOINT_ENABLED` | `true` | Serve `/probe?target=` |
+| `PROBE_ENDPOINT_ONLY` | `false` | Only measure `/probe` targets (no static servers) |
 | `NTP_SERVERS` | `pool.ntp.org,time.google.com` (when no pool) | Comma-separated servers (`host` or `host:port`) |
 | `NTP_POOLS` | | Comma-separated pools, `name[:strategy[:max_servers]]` |
 | `NTP_SCRAPE_INTERVAL` | `60s` | Interval between two cycles (5 s to 1 h) |
@@ -295,6 +337,7 @@ Go runtime and process metrics (`go_*`, `process_*`) are also exposed.
 | `/metrics` | Prometheus metrics |
 | `/healthz` | Liveness (`/health` is kept as an alias) |
 | `/readyz` | 503 until a cycle completed, or when the last cycle is older than 3 intervals |
+| `/probe?target=host[:port][&samples=N]` | Measures one target on demand (see [Multi-target probing](#multi-target-probing)) |
 
 ## Alerting
 
@@ -364,6 +407,9 @@ Notes per daemon:
   (`--web.config.file`, Helm `webConfig.existingSecret`).
 - The exporter only sends NTP client requests (UDP 123) and honors
   Kiss-o'-Death codes.
+- `/probe` sends NTP requests to any host given by the caller, at most
+  `max_concurrency` bursts at a time. Restrict who can reach it (network
+  policy, basic auth) or disable it with `PROBE_ENDPOINT_ENABLED=false`.
 
 ## Troubleshooting
 

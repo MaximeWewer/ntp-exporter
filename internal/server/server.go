@@ -22,6 +22,7 @@ type Server struct {
 	config    *config.Config
 	registry  *prometheus.Registry
 	readiness ReadinessFunc
+	probe     http.Handler
 	server    *http.Server
 }
 
@@ -34,6 +35,11 @@ func New(cfg *config.Config, registry *prometheus.Registry, readiness ReadinessF
 	}
 }
 
+// SetProbeHandler serves the multi-target /probe endpoint
+func (s *Server) SetProbeHandler(h http.Handler) {
+	s.probe = h
+}
+
 // Handler returns the HTTP handler with every route and middleware
 func (s *Server) Handler() http.Handler {
 	handlers := NewHandlers(s.config, s.registry, s.readiness)
@@ -43,6 +49,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/healthz", handlers.LivenessHandler)
 	mux.HandleFunc("/health", handlers.LivenessHandler) // kept for compatibility
 	mux.HandleFunc("/readyz", handlers.ReadinessHandler)
+	if s.probe != nil {
+		mux.Handle("/probe", s.probe)
+	}
 	mux.HandleFunc("/", handlers.IndexHandler)
 
 	return withMiddleware(mux)

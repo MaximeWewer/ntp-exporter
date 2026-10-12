@@ -15,6 +15,21 @@ kernel:
   # Only expose ntp_kernel_error_bound_violated and ntp_kernel_sync_status
   violationOnly: false
 
+# Multi-target /probe?target= endpoint (Prometheus drives the targets)
+probeEndpoint:
+  enabled: true
+  only: false
+  # Prometheus Operator Probe resource
+  probe:
+    enabled: false
+    namespace: ""
+    additionalLabels: {}
+    interval: 60s
+    scrapeTimeout: 10s
+    targets: []
+    labels: {}
+    metricRelabelings: []
+
 # Number of replicas (only used in probe mode)
 replicaCount: 1
 

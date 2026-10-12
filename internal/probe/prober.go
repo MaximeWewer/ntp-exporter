@@ -190,7 +190,7 @@ func (p *Prober) probe(ctx context.Context, target Target) *Measurement {
 		return &skipped
 	}
 
-	m := p.measure(ctx, target)
+	m := p.measure(ctx, target, p.cfg.NTP.SamplesPerServer)
 	p.backoff.Record(key, m)
 
 	p.mu.Lock()
@@ -218,8 +218,15 @@ func (p *Prober) forget(targets []Target) {
 	}
 }
 
+// Probe measures a single target outside of the collection cycles, for the
+// /probe endpoint: no Kiss-o'-Death state is kept, the scrape interval chosen
+// in Prometheus sets the polling rate
+func (p *Prober) Probe(ctx context.Context, server string, samples int) *Measurement {
+	return p.measure(ctx, Target{Server: server}, samples)
+}
+
 // measure sends one burst of queries to a target
-func (p *Prober) measure(ctx context.Context, target Target) *Measurement {
+func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measurement {
 	m := &Measurement{Target: target, Timestamp: time.Now()}
 	defer func() { m.Duration = time.Since(m.Timestamp) }()
 
@@ -228,7 +235,7 @@ func (p *Prober) measure(ctx context.Context, target Target) *Measurement {
 		var err error
 		candidates, err = p.resolve(ctx, target)
 		if err != nil {
-			m.Sent = p.cfg.NTP.SamplesPerServer
+			m.Sent = samples
 			m.Err = err
 			logger.SafeDebug("probe", "Target resolution failed", map[string]interface{}{
 				"server": target.Server,
@@ -240,7 +247,6 @@ func (p *Prober) measure(ctx context.Context, target Target) *Measurement {
 
 	// A dual-stack server is reached over the first family that answers a
 	// single query; that answer is the first sample of the burst
-	samples := p.cfg.NTP.SamplesPerServer
 	address := candidates[len(candidates)-1]
 	for _, candidate := range candidates[:len(candidates)-1] {
 		m.Sent++

@@ -125,6 +125,20 @@ config.enableKernel or deprecated hybrid mode)
 {{- end -}}
 
 {{/*
+Whether the /probe endpoint is served (enabled unless explicitly disabled)
+*/}}
+{{- define "ntp-exporter.probeEndpointEnabled" -}}
+{{- if or (not .Values.probeEndpoint) (ne (toString .Values.probeEndpoint.enabled) "false") -}}true{{- end -}}
+{{- end -}}
+
+{{/*
+Whether only /probe targets are measured (no static servers)
+*/}}
+{{- define "ntp-exporter.probeEndpointOnly" -}}
+{{- if and .Values.probeEndpoint .Values.probeEndpoint.only -}}true{{- end -}}
+{{- end -}}
+
+{{/*
 Validate mode value
 */}}
 {{- define "ntp-exporter.validateMode" -}}
@@ -133,5 +147,8 @@ Validate mode value
 {{- end -}}
 {{- if and (eq .Values.mode "probe") (include "ntp-exporter.kernelEnabled" .) -}}
 {{- fail "kernel.enabled only makes sense in agent mode: the kernel state describes the node the agent runs on" -}}
+{{- end -}}
+{{- if and (include "ntp-exporter.probeEndpointOnly" .) (not (include "ntp-exporter.probeEndpointEnabled" .)) -}}
+{{- fail "probeEndpoint.only requires probeEndpoint.enabled" -}}
 {{- end -}}
 {{- end -}}

@@ -232,16 +232,26 @@ func gauge(ch chan<- prometheus.Metric, desc *prometheus.Desc, value float64, la
 
 // collectMeasurement emits the metrics of one target
 func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.Measurement) {
-	d := e.descs
+	server := meas.Target.Server
+	if ts, ok := e.lastSuccess[server]; ok {
+		gauge(ch, e.descs.lastSuccess, float64(ts.UnixNano())/1e9, server)
+	}
+
+	best := writeMeasurement(ch, e.descs, e.cfg, meas)
+	if best != nil && e.kernelState != nil && e.kernelState.IsSynchronized() {
+		e.collectBoundViolation(ch, server, best)
+	}
+}
+
+// writeMeasurement emits the metrics of one measurement and returns its
+// reference sample, or nil when no valid time measurement was received
+func writeMeasurement(ch chan<- prometheus.Metric, d *descs, cfg *config.Config, meas *probe.Measurement) *ntp.Response {
 	server := meas.Target.Server
 
 	if meas.SuspendCode != "" {
 		gauge(ch, d.up, 0, server)
 		gauge(ch, d.suspended, 1, server, meas.SuspendCode)
-		if ts, ok := e.lastSuccess[server]; ok {
-			gauge(ch, d.lastSuccess, float64(ts.UnixNano())/1e9, server)
-		}
-		return
+		return nil
 	}
 
 	up := 0.0
@@ -249,9 +259,6 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 		up = 1
 	}
 	gauge(ch, d.up, up, server)
-	if ts, ok := e.lastSuccess[server]; ok {
-		gauge(ch, d.lastSuccess, float64(ts.UnixNano())/1e9, server)
-	}
 
 	stats := meas.Stats()
 	gauge(ch, d.packetLoss, stats.PacketLossRatio, server)
@@ -269,14 +276,14 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 	// not time measurements: nothing is published for them
 	best := meas.Best()
 	if best == nil {
-		return
+		return nil
 	}
 
 	gauge(ch, d.info, 1, server, meas.Target.Address, meas.Target.Pool, best.ReferenceIDString(),
-		strconv.Itoa(int(best.Stratum)), strconv.Itoa(int(best.LeapIndicator)), strconv.Itoa(e.cfg.NTP.Version))
+		strconv.Itoa(int(best.Stratum)), strconv.Itoa(int(best.LeapIndicator)), strconv.Itoa(cfg.NTP.Version))
 
 	offsetExceeded := 0.0
-	if best.Offset.Abs() > e.cfg.NTP.MaxClockOffset {
+	if best.Offset.Abs() > cfg.NTP.MaxClockOffset {
 		offsetExceeded = 1
 	}
 
@@ -298,9 +305,7 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 	gauge(ch, d.offsetStdDev, stats.StdDevOffset.Seconds(), server)
 	gauge(ch, d.rttStdDev, stats.StdDevRTT.Seconds(), server)
 
-	if e.kernelState != nil && e.kernelState.IsSynchronized() {
-		e.collectBoundViolation(ch, server, best)
-	}
+	return best
 }
 
 // collectBoundViolation compares the offset measured from the outside with

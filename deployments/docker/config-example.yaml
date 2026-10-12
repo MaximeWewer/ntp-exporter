@@ -48,6 +48,21 @@ server:
   tls_key_file: ""
 
 # ----------------------------------------------------------------------------
+# PROBE ENDPOINT - /probe?target=host[:port][&samples=N], like blackbox_exporter.
+# Prometheus drives the targets through relabeling; the burst fits in the
+# scrape timeout announced by Prometheus.
+# ----------------------------------------------------------------------------
+probe_endpoint:
+  # Serve /probe
+  # Default: true
+  enabled: true
+
+  # Only measure /probe targets: no server nor pool is probed in the
+  # background (ntp.servers and ntp.pools must then be empty)
+  # Default: false
+  only: false
+
+# ----------------------------------------------------------------------------
 # NTP - NTP client configuration and query strategy
 # ----------------------------------------------------------------------------
 ntp:

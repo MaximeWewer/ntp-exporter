@@ -415,3 +415,19 @@ func TestLoadFromEnvVarsOnly_IPFamily(t *testing.T) {
 		t.Error("invalid NTP_IP_FAMILY must fail")
 	}
 }
+
+func TestLoadFromEnvVarsOnly_ProbeEndpointOnly(t *testing.T) {
+	t.Setenv("PROBE_ENDPOINT_ONLY", "true")
+	cfg, err := LoadFromEnvVarsOnly()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.NTP.Servers) != 0 {
+		t.Errorf("no default server expected with PROBE_ENDPOINT_ONLY, got %v", cfg.NTP.Servers)
+	}
+
+	t.Setenv("PROBE_ENDPOINT_ENABLED", "false")
+	if _, err := LoadFromEnvVarsOnly(); err == nil {
+		t.Error("PROBE_ENDPOINT_ONLY without the endpoint must fail")
+	}
+}

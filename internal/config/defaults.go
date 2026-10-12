@@ -19,7 +19,7 @@ func ApplyDefaults(cfg *Config) {
 	}
 
 	// NTP defaults
-	if len(cfg.NTP.Servers) == 0 && len(cfg.NTP.Pools) == 0 {
+	if len(cfg.NTP.Servers) == 0 && len(cfg.NTP.Pools) == 0 && !cfg.ProbeEndpoint.Only {
 		cfg.NTP.Servers = []string{
 			"pool.ntp.org",
 			"time.google.com",

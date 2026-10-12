@@ -77,6 +77,19 @@ networkPolicy:
     - protocol: TCP
       port: 443
 
+# /probe endpoint: targets listed in a Prometheus Operator Probe resource are
+# measured on demand. Set only=true to drop config.ntpServers and let
+# Prometheus drive every target.
+probeEndpoint:
+  enabled: true
+  only: false
+  probe:
+    enabled: false
+    interval: 60s
+    scrapeTimeout: 10s
+    targets: []
+    #  - ptbtime1.ptb.de
+
 # NTP configuration optimized for probe mode
 config:
   ntpServers:

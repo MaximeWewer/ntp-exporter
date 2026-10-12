@@ -25,10 +25,18 @@ data:
       {{- end }}
       {{- end }}
 
+    probe_endpoint:
+      enabled: {{ include "ntp-exporter.probeEndpointEnabled" . | empty | not }}
+      only: {{ include "ntp-exporter.probeEndpointOnly" . | empty | not }}
+
     ntp:
+      {{- if include "ntp-exporter.probeEndpointOnly" . }}
+      servers: []
+      {{- else }}
       servers:
       {{- range .Values.config.ntpServers }}
       - {{ . }}
+      {{- end }}
       {{- end }}
       timeout: {{ .Values.config.ntpTimeout | default "5s" }}
       version: {{ .Values.config.ntpVersion | default 4 }}

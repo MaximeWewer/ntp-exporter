@@ -185,3 +185,32 @@ func TestServer_WebConfigBasicAuth(t *testing.T) {
 	resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
+
+func TestServer_ProbeRoute(t *testing.T) {
+	reg := metrics.NewRegistryWithConfig("ntp", "")
+	cfg := config.DefaultConfig()
+
+	without := httptest.NewServer(New(cfg, reg.GetRegistry(), nil).Handler())
+	t.Cleanup(without.Close)
+	code, _ := get(t, without.URL+"/probe?target=time.example.org")
+	assert.Equal(t, http.StatusNotFound, code, "no route without probe handler")
+
+	srv := New(cfg, reg.GetRegistry(), nil)
+	srv.SetProbeHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("probed " + r.URL.Query().Get("target")))
+	}))
+	with := httptest.NewServer(srv.Handler())
+	t.Cleanup(with.Close)
+
+	code, body := get(t, with.URL+"/probe?target=time.example.org")
+	assert.Equal(t, http.StatusOK, code)
+	assert.Equal(t, "probed time.example.org", body)
+
+	_, index := get(t, with.URL+"/")
+	assert.Contains(t, index, "/probe?target=")
+
+	disabled := false
+	cfg.ProbeEndpoint.Enabled = &disabled
+	_, index = get(t, without.URL+"/")
+	assert.NotContains(t, index, "/probe?target=")
+}
