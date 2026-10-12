@@ -71,37 +71,33 @@ config:
   # NTP protocol version (2, 3, 4)
   ntpVersion: 4
 
-  # Number of samples per server
-  samplesPerServer: 3
+  # Number of queries per server and per cycle (lowest delay sample is kept)
+  samplesPerServer: 4
+
+  # Delay between two queries of a burst to the same server
+  sampleSpacing: 2s
 
   # Maximum number of concurrent queries
   maxConcurrency: 10
 
-  # Scrape interval (used for documentation)
-  scrapeInterval: 30s
+  # Interval between two collection cycles (60s or more for the public pool)
+  scrapeInterval: 60s
 
   # Maximum clock offset threshold
   maxClockOffset: 100ms
 
   # ---------------------------------------------------------------------------
-  # RATE LIMIT - NTP query rate limiting
+  # KISS-O'-DEATH - RATE doubles the polling interval, DENY/RSTR suspends
   # ---------------------------------------------------------------------------
-  rateLimit:
-    enabled: false
-    globalRate: 1000
-    perServerRate: 60
-    burstSize: 10
-    backoffDuration: 1m
+  kod:
+    maxBackoff: 1024s
+    suspendDuration: 1h
 
   # ---------------------------------------------------------------------------
-  # CIRCUIT BREAKER - Protection against failing servers
+  # CONSENSUS - Falseticker detection (default: enabled with 3+ servers/pools)
   # ---------------------------------------------------------------------------
-  circuitBreaker:
-    enabled: true
-    maxRequests: 3
-    interval: 60s
-    timeout: 30s
-    failureThreshold: 0.6
+  consensus: {}
+  #  enabled: true
 
   # ---------------------------------------------------------------------------
   # ADAPTIVE SAMPLING - Adaptive sampling based on drift
@@ -114,20 +110,11 @@ config:
     maxDuration: 30s
 
   # ---------------------------------------------------------------------------
-  # WORKER POOL - Worker pool for parallel queries
-  # ---------------------------------------------------------------------------
-  workerPool:
-    enabled: false
-    size: 5
-
-  # ---------------------------------------------------------------------------
-  # DNS CACHE - DNS cache for NTP hostname resolution
+  # DNS CACHE - Cache of pool DNS answers
   # ---------------------------------------------------------------------------
   dnsCache:
-    enabled: true
     minTTL: 5m
     maxTTL: 60m
-    cleanupWorkers: 1
 
   # ---------------------------------------------------------------------------
   # LOGGING - Log configuration

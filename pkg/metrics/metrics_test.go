@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -51,4 +52,24 @@ func TestNewRegistryWithConfig_Namespace(t *testing.T) {
 	names := gatherNames(t, r.GetRegistry())
 	assert.True(t, names["custom_probe_invalid_responses_total"])
 	assert.True(t, names["custom_exporter_scrapes_total"], "exporter metrics keep the exporter subsystem")
+}
+
+func TestRegistry_ConstLabels(t *testing.T) {
+	r := NewRegistryWithConfig("ntp", "", map[string]string{"site": "par1"})
+	require.NoError(t, r.Register())
+	r.GetMetrics().ExporterScrapesTotal.WithLabelValues("success").Inc()
+	require.NoError(t, r.RegisterCollector(prometheus.NewGauge(prometheus.GaugeOpts{Name: "ntp_extra"})))
+
+	families, err := r.GetRegistry().Gather()
+	require.NoError(t, err)
+	for _, mf := range families {
+		hasSite := false
+		for _, lp := range mf.GetMetric()[0].GetLabel() {
+			if lp.GetName() == "site" && lp.GetValue() == "par1" {
+				hasSite = true
+			}
+		}
+		isRuntime := strings.HasPrefix(mf.GetName(), "go_") || strings.HasPrefix(mf.GetName(), "process_")
+		assert.Equal(t, !isRuntime, hasSite, mf.GetName())
+	}
 }

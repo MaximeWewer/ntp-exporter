@@ -6,6 +6,10 @@ metadata:
   labels:
     {{- include "ntp-exporter.labels" . | nindent 4 }}
 data:
+  {{- if and .Values.configYaml .Values.configYaml.enabled .Values.configYaml.content }}
+  config.yaml: |
+    {{- .Values.configYaml.content | nindent 4 }}
+  {{- else }}
   config.yaml: |
     # NTP Exporter Configuration
     server:
@@ -50,26 +54,15 @@ data:
         violation_only: {{ and .Values.kernel .Values.kernel.violationOnly | default false }}
       {{- end }}
 
-      {{- if .Values.config.rateLimit }}
-      rate_limit:
-        enabled: {{ .Values.config.rateLimit.enabled | default false }}
-        {{- if .Values.config.rateLimit.enabled }}
-        global_rate: {{ .Values.config.rateLimit.globalRate | default 1000 }}
-        per_server_rate: {{ .Values.config.rateLimit.perServerRate | default 60 }}
-        burst_size: {{ .Values.config.rateLimit.burstSize | default 10 }}
-        backoff_duration: {{ .Values.config.rateLimit.backoffDuration | default "1m" }}
-        {{- end }}
+      {{- if .Values.config.kod }}
+      kod:
+        max_backoff: {{ .Values.config.kod.maxBackoff | default "1024s" }}
+        suspend_duration: {{ .Values.config.kod.suspendDuration | default "1h" }}
       {{- end }}
 
-      {{- if .Values.config.circuitBreaker }}
-      circuit_breaker:
-        enabled: {{ .Values.config.circuitBreaker.enabled | default true }}
-        {{- if .Values.config.circuitBreaker.enabled }}
-        max_requests: {{ .Values.config.circuitBreaker.maxRequests | default 3 }}
-        interval: {{ .Values.config.circuitBreaker.interval | default "60s" }}
-        timeout: {{ .Values.config.circuitBreaker.timeout | default "30s" }}
-        failure_threshold: {{ .Values.config.circuitBreaker.failureThreshold | default 0.6 }}
-        {{- end }}
+      {{- if and .Values.config.consensus (hasKey .Values.config.consensus "enabled") }}
+      consensus:
+        enabled: {{ .Values.config.consensus.enabled }}
       {{- end }}
 
       {{- if .Values.config.adaptiveSampling }}
@@ -83,22 +76,10 @@ data:
         {{- end }}
       {{- end }}
 
-      {{- if .Values.config.workerPool }}
-      worker_pool:
-        enabled: {{ .Values.config.workerPool.enabled | default false }}
-        {{- if .Values.config.workerPool.enabled }}
-        size: {{ .Values.config.workerPool.size | default 5 }}
-        {{- end }}
-      {{- end }}
-
       {{- if .Values.config.dnsCache }}
       dns_cache:
-        enabled: {{ .Values.config.dnsCache.enabled | default true }}
-        {{- if .Values.config.dnsCache.enabled }}
         min_ttl: {{ .Values.config.dnsCache.minTTL | default "5m" }}
         max_ttl: {{ .Values.config.dnsCache.maxTTL | default "60m" }}
-        cleanup_workers: {{ .Values.config.dnsCache.cleanupWorkers | default 1 }}
-        {{- end }}
       {{- end }}
 
     logging:
@@ -124,3 +105,4 @@ data:
       namespace: ntp
       subsystem: ""
       {{- end }}
+  {{- end }}

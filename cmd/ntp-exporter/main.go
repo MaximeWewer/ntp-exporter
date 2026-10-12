@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// Create metrics registry with custom namespace and subsystem from config
-	registry := metrics.NewRegistryWithConfig(cfg.Metrics.Namespace, cfg.Metrics.Subsystem)
+	registry := metrics.NewRegistryWithConfig(cfg.Metrics.Namespace, cfg.Metrics.Subsystem, cfg.Metrics.Labels)
 	if err := registry.Register(); err != nil {
 		logger.Fatal("main", "Failed to register metrics", err)
 	}
@@ -83,7 +83,7 @@ func main() {
 	// exposes the measurements of the last cycle at scrape time
 	prober := probe.New(cfg, probe.NewClient(cfg))
 	exporter := collector.NewExporter(cfg, m)
-	if err := registry.GetRegistry().Register(exporter); err != nil {
+	if err := registry.RegisterCollector(exporter); err != nil {
 		logger.Fatal("main", "Failed to register NTP collector", err)
 	}
 

@@ -95,82 +95,66 @@ ntp:
   # Default: 4
   version: 4
 
-  # Number of samples to collect per server (averaged for precision)
-  # Values: positive integer (1-100)
-  # Default: 3
-  samples_per_server: 3
+  # Number of queries sent to each server per cycle (burst). The offset is
+  # taken from the sample with the lowest delay (RFC 5905 clock filter).
+  # Values: 1-20
+  # Default: 4
+  samples_per_server: 4
 
-  # Maximum number of concurrent (parallel) queries
-  # Values: positive integer (1-1000)
+  # Delay between two queries of a burst to the same server. NTP servers
+  # rate-limit clients sending packets closer than 2s.
+  # Values: valid Go duration
+  # Default: 2s
+  sample_spacing: 2s
+
+  # Maximum number of servers probed in parallel
+  # Values: 1-100
   # Default: 10
   max_concurrency: 10
 
-  # Enable kernel synchronization check (Linux only)
-  # Uses adjtimex() system call to check STA_UNSYNC status
-  # Values: true, false
-  # Default: false
-  enable_kernel: false
+  # Interval between two collection cycles. A cycle is cut 10% (at most 1s)
+  # before the next one. Keep 60s or more when querying the public NTP pool.
+  # Values: 5s-1h
+  # Default: 60s
+  scrape_interval: 60s
+
+  # Offset above which ntp_clock_offset_exceeded is set to 1
+  # Default: 100ms
+  max_clock_offset: 100ms
 
   # ----------------------------------------------------------------------------
-  # RATE LIMIT - NTP query rate limiting
-  # Protects against overloading public NTP servers
+  # KERNEL - Kernel clock state (agent mode, Linux only)
+  # Read with an unprivileged read-only adjtimex call
   # ----------------------------------------------------------------------------
-  rate_limit:
-    # Enable rate limiting
-    # Values: true, false
+  kernel:
+    # Expose ntp_kernel_* metrics and ntp_kernel_error_bound_violated
     # Default: false
     enabled: false
 
-    # Global request limit per second (all servers combined)
-    # Values: positive integer (1-10000)
-    # Default: 1000
-    global_rate: 1000
-
-    # Request limit per minute for an individual server
-    # Values: positive integer (1-1000)
-    # Default: 60
-    per_server_rate: 60
-
-    # Allowed burst size (temporary burst above the limit)
-    # Values: positive integer (1-100)
-    # Default: 10
-    burst_size: 10
-
-    # Backoff duration after limit exceeded
-    # Values: valid Go duration (e.g., "1m", "30s")
-    # Default: 1m
-    backoff_duration: 1m
+    # Only expose ntp_kernel_error_bound_violated and ntp_kernel_sync_status
+    # (when node_exporter already exposes node_timex_* metrics)
+    # Default: false
+    violation_only: false
 
   # ----------------------------------------------------------------------------
-  # CIRCUIT BREAKER - Protection against failing servers
-  # Opens circuit after X consecutive failures, avoids hammering a dead server
-  # ENABLED BY DEFAULT for resilience
+  # KISS-O'-DEATH - Handling of KoD codes (RFC 5905 section 7.4)
+  # RATE: the server polling interval doubles; DENY/RSTR: the server is suspended
   # ----------------------------------------------------------------------------
-  circuit_breaker:
-    # Enable circuit breaker
-    # Values: true, false
-    # Default: true
-    enabled: true
+  kod:
+    # Longest polling interval reached after repeated RATE codes
+    # Default: 1024s
+    max_backoff: 1024s
 
-    # Number of requests allowed in half-open state (recovery test)
-    # Values: positive integer (1-100)
-    # Default: 3
-    max_requests: 3
+    # How long a server stays unqueried after DENY or RSTR
+    # Default: 1h
+    suspend_duration: 1h
 
-    # Interval to reset failure counters
-    # Values: valid Go duration (e.g., "60s", "1m")
-    # Default: 60s
-    interval: 60s
-
-    # Timeout before transitioning to half-open state (recovery attempt)
-    # Values: valid Go duration (e.g., "30s", "1m")
-    # Default: 30s
-    timeout: 30s
-
-    # Failure ratio that triggers circuit opening
-    # Values: float between 0.0 and 1.0 (e.g., 0.6 = 60% failures)
-    # Default: 0.6
-    failure_threshold: 0.6
+  # ----------------------------------------------------------------------------
+  # CONSENSUS - Falseticker detection across servers
+  # ----------------------------------------------------------------------------
+  consensus:
+    # Default (unset): enabled when at least 3 servers or pools are configured
+    # enabled: true
 
   # ----------------------------------------------------------------------------
   # ADAPTIVE SAMPLING - Adaptive sampling based on drift
@@ -204,46 +188,16 @@ ntp:
     max_duration: 30s
 
   # ----------------------------------------------------------------------------
-  # WORKER POOL - Worker pool for parallel queries
-  # Executes NTP queries in parallel via a worker pool
-  # DISABLED BY DEFAULT (sequential processing)
-  # ----------------------------------------------------------------------------
-  worker_pool:
-    # Enable worker pool
-    # Values: true, false
-    # Default: false
-    enabled: false
-
-    # Pool size (number of concurrent workers)
-    # Values: positive integer (1-100)
-    # Default: 5
-    size: 5
-
-  # ----------------------------------------------------------------------------
-  # DNS CACHE - DNS cache for NTP hostname resolution
-  # Reduces repeated DNS queries, improves performance
-  # ENABLED BY DEFAULT
+  # DNS CACHE - Cache of pool DNS answers
   # ----------------------------------------------------------------------------
   dns_cache:
-    # Enable DNS cache
-    # Values: true, false
-    # Default: true
-    enabled: true
-
-    # Minimum TTL for cache entries
-    # Values: valid Go duration (e.g., "5m", "10m")
+    # TTL used after a resolution failure
     # Default: 5m
     min_ttl: 5m
 
-    # Maximum TTL for cache entries
-    # Values: valid Go duration (e.g., "60m", "2h")
+    # TTL used after consecutive successful resolutions
     # Default: 60m
     max_ttl: 60m
-
-    # Number of workers for cache cleanup
-    # Values: positive integer (1-10)
-    # Default: 1
-    cleanup_workers: 1
 
 # ----------------------------------------------------------------------------
 # LOGGING - Log configuration (JSON FORMAT ONLY)

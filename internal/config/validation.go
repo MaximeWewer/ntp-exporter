@@ -123,17 +123,8 @@ func validateNTP(cfg *NTPConfig) error {
 		}
 	}
 
-	// Validate rate limiting
-	if cfg.RateLimit.Enabled {
-		if cfg.RateLimit.GlobalRate < 1 {
-			return errors.New("rate_limit.global_rate must be at least 1")
-		}
-		if cfg.RateLimit.PerServerRate < 1 {
-			return errors.New("rate_limit.per_server_rate must be at least 1")
-		}
-		if cfg.RateLimit.BurstSize < 1 {
-			return errors.New("rate_limit.burst_size must be at least 1")
-		}
+	if cfg.DNSCache.MinTTL <= 0 || cfg.DNSCache.MaxTTL < cfg.DNSCache.MinTTL {
+		return errors.New("dns_cache requires 0 < min_ttl <= max_ttl")
 	}
 
 	return nil

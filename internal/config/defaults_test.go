@@ -7,44 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestApplyDefaults_EmptyConfig(t *testing.T) {
-	cfg := &Config{}
-
-	ApplyDefaults(cfg)
-
-	// Server defaults
-	assert.Equal(t, "0.0.0.0", cfg.Server.Address)
-	assert.Equal(t, 9559, cfg.Server.Port)
-	assert.Equal(t, 10*time.Second, cfg.Server.ReadTimeout)
-	assert.Equal(t, 10*time.Second, cfg.Server.WriteTimeout)
-
-	// NTP defaults
-	assert.NotEmpty(t, cfg.NTP.Servers)
-	assert.Contains(t, cfg.NTP.Servers, "pool.ntp.org")
-	assert.Contains(t, cfg.NTP.Servers, "time.google.com")
-	assert.Equal(t, 5*time.Second, cfg.NTP.Timeout)
-	assert.Equal(t, 4, cfg.NTP.Version)
-	assert.Equal(t, 4, cfg.NTP.SamplesPerServer)
-	assert.Equal(t, 2*time.Second, cfg.NTP.SampleSpacing)
-	assert.Equal(t, 60*time.Second, cfg.NTP.ScrapeInterval)
-	assert.Equal(t, 10, cfg.NTP.MaxConcurrency)
-
-	// Rate limiting defaults
-	assert.Equal(t, 1000, cfg.NTP.RateLimit.GlobalRate)
-	assert.Equal(t, 60, cfg.NTP.RateLimit.PerServerRate)
-	assert.Equal(t, 10, cfg.NTP.RateLimit.BurstSize)
-	assert.Equal(t, 1*time.Minute, cfg.NTP.RateLimit.BackoffDuration)
-
-	// Logging defaults
-	assert.Equal(t, "info", cfg.Logging.Level)
-	assert.Equal(t, "json", cfg.Logging.Format)
-	assert.Equal(t, "stdout", cfg.Logging.Output)
-
-	// Metrics defaults
-	assert.Equal(t, "ntp", cfg.Metrics.Namespace)
-	assert.NotNil(t, cfg.Metrics.Labels)
-}
-
 func TestApplyDefaults_PartialConfig(t *testing.T) {
 	cfg := &Config{
 		Server: ServerConfig{
@@ -140,26 +102,6 @@ func TestApplyDefaults_ZeroCounters(t *testing.T) {
 	assert.Equal(t, 4, cfg.NTP.Version)
 	assert.Equal(t, 4, cfg.NTP.SamplesPerServer)
 	assert.Equal(t, 10, cfg.NTP.MaxConcurrency)
-}
-
-func TestApplyDefaults_RateLimitValues(t *testing.T) {
-	cfg := &Config{
-		NTP: NTPConfig{
-			RateLimit: RateLimitConfig{
-				GlobalRate:      0,
-				PerServerRate:   0,
-				BurstSize:       0,
-				BackoffDuration: 0,
-			},
-		},
-	}
-
-	ApplyDefaults(cfg)
-
-	assert.Equal(t, 1000, cfg.NTP.RateLimit.GlobalRate)
-	assert.Equal(t, 60, cfg.NTP.RateLimit.PerServerRate)
-	assert.Equal(t, 10, cfg.NTP.RateLimit.BurstSize)
-	assert.Equal(t, 1*time.Minute, cfg.NTP.RateLimit.BackoffDuration)
 }
 
 func TestApplyDefaults_LoggingEmptyStrings(t *testing.T) {

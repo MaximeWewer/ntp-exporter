@@ -65,25 +65,20 @@ configYaml:
 
       timeout: 5s
       version: 4
-      samples_per_server: 3
+      samples_per_server: 4
+      sample_spacing: 2s
       max_concurrency: 10
-      enable_kernel: false
+      scrape_interval: 60s
 
-      # Rate limiting
-      rate_limit:
+      # Kernel clock state (agent mode only)
+      kernel:
         enabled: false
-        global_rate: 1000
-        per_server_rate: 60
-        burst_size: 10
-        backoff_duration: 1m
+        violation_only: false
 
-      # Circuit breaker
-      circuit_breaker:
-        enabled: true
-        max_requests: 3
-        interval: 60s
-        timeout: 30s
-        failure_threshold: 0.6
+      # Kiss-o'-Death handling
+      kod:
+        max_backoff: 1024s
+        suspend_duration: 1h
 
       # Adaptive sampling
       adaptive_sampling:
@@ -93,17 +88,10 @@ configYaml:
         drift_threshold: 50ms
         max_duration: 30s
 
-      # Worker pool
-      worker_pool:
-        enabled: false
-        size: 5
-
-      # DNS cache
+      # DNS cache of pool answers
       dns_cache:
-        enabled: true
         min_ttl: 5m
         max_ttl: 60m
-        cleanup_workers: 1
 
     # ----------------------------------------------------------------------------
     # LOGGING - Log configuration (JSON FORMAT ONLY)
@@ -303,7 +291,6 @@ terminationGracePeriodSeconds: 30
 #
 # The ConfigMap allows you to use advanced features not available via env vars:
 # - NTP pools with selection strategies (best_n, round_robin, all)
-# - Fine-tuned circuit breaker settings
 # - Adaptive sampling configuration
 # - Worker pool settings
 # - DNS cache customization

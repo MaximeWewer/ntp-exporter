@@ -8,29 +8,50 @@ import (
 // Registry manages Prometheus metric registration
 type Registry struct {
 	registry   *prometheus.Registry
+	registerer prometheus.Registerer
 	ntpMetrics *NTPMetrics
 }
 
-// NewRegistryWithConfig creates a new metrics registry with custom namespace and subsystem
-func NewRegistryWithConfig(namespace, subsystem string) *Registry {
+// NewRegistryWithConfig creates a new metrics registry with custom namespace
+// and subsystem. Optional constant labels are added to every exporter metric.
+func NewRegistryWithConfig(namespace, subsystem string, constLabels ...map[string]string) *Registry {
+	registry := prometheus.NewRegistry()
+
+	labels := prometheus.Labels{}
+	for _, l := range constLabels {
+		for k, v := range l {
+			labels[k] = v
+		}
+	}
+
+	var registerer prometheus.Registerer = registry
+	if len(labels) > 0 {
+		registerer = prometheus.WrapRegistererWith(labels, registry)
+	}
+
 	return &Registry{
-		registry:   prometheus.NewRegistry(),
+		registry:   registry,
+		registerer: registerer,
 		ntpMetrics: NewNTPMetricsWithConfig(namespace, subsystem),
 	}
 }
 
-// Register registers all NTP exporter metrics
+// Register registers the exporter metrics and the Go runtime collectors
 func (r *Registry) Register() error {
-	// Register the NTP metrics collector
-	if err := r.registry.Register(r.ntpMetrics); err != nil {
+	if err := r.registerer.Register(r.ntpMetrics); err != nil {
 		return err
 	}
 
-	// Register Go runtime metrics
-	r.registry.MustRegister(collectors.NewGoCollector())
-	r.registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	if err := r.registry.Register(collectors.NewGoCollector()); err != nil {
+		return err
+	}
+	return r.registry.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+}
 
-	return nil
+// RegisterCollector registers an additional exporter collector, with the
+// configured constant labels
+func (r *Registry) RegisterCollector(c prometheus.Collector) error {
+	return r.registerer.Register(c)
 }
 
 // GetRegistry returns the underlying Prometheus registry

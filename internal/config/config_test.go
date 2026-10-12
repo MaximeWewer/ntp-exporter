@@ -195,96 +195,6 @@ func TestParseCommaSeparated(t *testing.T) {
 	}
 }
 
-func TestSplitByComma(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected []string
-	}{
-		{
-			name:     "single_item",
-			input:    "test",
-			expected: []string{"test"},
-		},
-		{
-			name:     "multiple_items",
-			input:    "a,b,c",
-			expected: []string{"a", "b", "c"},
-		},
-		{
-			name:     "empty_string",
-			input:    "",
-			expected: nil,
-		},
-		{
-			name:     "trailing_comma",
-			input:    "a,b,",
-			expected: []string{"a", "b"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := splitByComma(tt.input)
-			if tt.expected == nil && result == nil {
-				return
-			}
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestTrim(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "no_whitespace",
-			input:    "test",
-			expected: "test",
-		},
-		{
-			name:     "leading_spaces",
-			input:    "   test",
-			expected: "test",
-		},
-		{
-			name:     "trailing_spaces",
-			input:    "test   ",
-			expected: "test",
-		},
-		{
-			name:     "both_sides",
-			input:    "  test  ",
-			expected: "test",
-		},
-		{
-			name:     "tabs_and_newlines",
-			input:    "\t\ntest\n\t",
-			expected: "test",
-		},
-		{
-			name:     "empty_string",
-			input:    "",
-			expected: "",
-		},
-		{
-			name:     "only_whitespace",
-			input:    "   ",
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := trim(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestLoadFromEnvVarsOnly_WithServersWithSpaces(t *testing.T) {
 	os.Setenv("NTP_SERVERS", " pool.ntp.org , time.google.com , time.cloudflare.com ")
 	defer os.Unsetenv("NTP_SERVERS")
@@ -461,4 +371,22 @@ func TestKernelConfig_DeprecatedEnableKernel(t *testing.T) {
 	cfg, err := LoadFromEnvVarsOnly()
 	require.NoError(t, err)
 	assert.True(t, cfg.NTP.Kernel.Enabled)
+}
+
+func TestLoadFromEnvVarsOnly_MetricsLabels(t *testing.T) {
+	t.Setenv("METRICS_LABELS", "site=par1, env = prod")
+	cfg, err := LoadFromEnvVarsOnly()
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"site": "par1", "env": "prod"}, cfg.Metrics.Labels)
+
+	t.Setenv("METRICS_LABELS", "broken")
+	_, err = LoadFromEnvVarsOnly()
+	assert.ErrorContains(t, err, "METRICS_LABELS")
+}
+
+func TestValidate_DNSCacheTTL(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.NTP.DNSCache.MaxTTL = time.Minute
+	cfg.NTP.DNSCache.MinTTL = time.Hour
+	assert.Error(t, Validate(cfg))
 }

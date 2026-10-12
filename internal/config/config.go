@@ -33,26 +33,13 @@
 //	KISS-O'-DEATH:
 //	  - NTP_KOD_MAX_BACKOFF, NTP_KOD_SUSPEND_DURATION
 //
-//	RATE_LIMIT:
-//	  - RATE_LIMIT_ENABLED, RATE_LIMIT_GLOBAL, RATE_LIMIT_PER_SERVER
-//	  - RATE_LIMIT_BURST_SIZE, RATE_LIMIT_BACKOFF_DURATION
-//
-//	CIRCUIT_BREAKER:
-//	  - CIRCUIT_BREAKER_ENABLED, CIRCUIT_BREAKER_MAX_REQUESTS
-//	  - CIRCUIT_BREAKER_INTERVAL, CIRCUIT_BREAKER_TIMEOUT
-//	  - CIRCUIT_BREAKER_FAILURE_THRESHOLD
-//
 //	ADAPTIVE_SAMPLING:
 //	  - ADAPTIVE_SAMPLING_ENABLED, ADAPTIVE_SAMPLING_DEFAULT_SAMPLES
 //	  - ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES, ADAPTIVE_SAMPLING_DRIFT_THRESHOLD
 //	  - ADAPTIVE_SAMPLING_MAX_DURATION
 //
-//	WORKER_POOL:
-//	  - WORKER_POOL_ENABLED, WORKER_POOL_SIZE
-//
 //	DNS_CACHE:
-//	  - DNS_CACHE_ENABLED, DNS_CACHE_MIN_TTL, DNS_CACHE_MAX_TTL
-//	  - DNS_CACHE_CLEANUP_WORKERS
+//	  - DNS_CACHE_MIN_TTL, DNS_CACHE_MAX_TTL
 //
 //	LOGGING:
 //	  - LOG_LEVEL (trace|debug|info|warn|error|fatal|panic)
@@ -60,6 +47,7 @@
 //
 //	METRICS:
 //	  - METRICS_NAMESPACE, METRICS_SUBSYSTEM
+//	  - METRICS_LABELS (comma-separated key=value constant labels)
 package config
 
 import (
@@ -107,12 +95,9 @@ type NTPConfig struct {
 	Kernel           KernelConfig           `yaml:"kernel"`
 	ScrapeInterval   time.Duration          `yaml:"scrape_interval"`  // Interval between NTP collections
 	MaxClockOffset   time.Duration          `yaml:"max_clock_offset"` // Maximum acceptable clock offset threshold
-	RateLimit        RateLimitConfig        `yaml:"rate_limit"`
-	CircuitBreaker   CircuitBreakerConfig   `yaml:"circuit_breaker"`
 	KoD              KoDConfig              `yaml:"kod"`
 	Consensus        ConsensusConfig        `yaml:"consensus"`
 	AdaptiveSampling AdaptiveSamplingConfig `yaml:"adaptive_sampling"`
-	WorkerPool       WorkerPoolConfig       `yaml:"worker_pool"`
 	DNSCache         DNSCacheConfig         `yaml:"dns_cache"`
 }
 
@@ -122,15 +107,6 @@ type PoolConfig struct {
 	Strategy   string `yaml:"strategy"`
 	MaxServers int    `yaml:"max_servers"`
 	Fallback   string `yaml:"fallback"`
-}
-
-// RateLimitConfig contains rate limiting configuration
-type RateLimitConfig struct {
-	Enabled         bool          `yaml:"enabled"`
-	GlobalRate      int           `yaml:"global_rate"`
-	PerServerRate   int           `yaml:"per_server_rate"`
-	BurstSize       int           `yaml:"burst_size"`
-	BackoffDuration time.Duration `yaml:"backoff_duration"`
 }
 
 // KoDConfig contains the Kiss-o'-Death handling configuration (RFC 5905 §7.4)
@@ -165,15 +141,6 @@ func (c *NTPConfig) ConsensusEnabled() bool {
 	return len(c.Servers)+len(c.Pools) >= 3
 }
 
-// CircuitBreakerConfig contains circuit breaker configuration
-type CircuitBreakerConfig struct {
-	Enabled          bool          `yaml:"enabled"`
-	MaxRequests      uint32        `yaml:"max_requests"`
-	Interval         time.Duration `yaml:"interval"`
-	Timeout          time.Duration `yaml:"timeout"`
-	FailureThreshold float64       `yaml:"failure_threshold"`
-}
-
 // AdaptiveSamplingConfig contains adaptive sampling configuration
 type AdaptiveSamplingConfig struct {
 	Enabled          bool          `yaml:"enabled"`
@@ -183,18 +150,10 @@ type AdaptiveSamplingConfig struct {
 	MaxDuration      time.Duration `yaml:"max_duration"`
 }
 
-// WorkerPoolConfig contains worker pool configuration
-type WorkerPoolConfig struct {
-	Enabled bool `yaml:"enabled"`
-	Size    int  `yaml:"size"`
-}
-
-// DNSCacheConfig contains DNS cache configuration
+// DNSCacheConfig contains the cache configuration for pool DNS answers
 type DNSCacheConfig struct {
-	Enabled        bool          `yaml:"enabled"`
-	MinTTL         time.Duration `yaml:"min_ttl"`
-	MaxTTL         time.Duration `yaml:"max_ttl"`
-	CleanupWorkers int           `yaml:"cleanup_workers"`
+	MinTTL time.Duration `yaml:"min_ttl"` // TTL after a resolution failure
+	MaxTTL time.Duration `yaml:"max_ttl"` // TTL after consecutive successful resolutions
 }
 
 // LoggingConfig contains logging configuration
@@ -208,9 +167,10 @@ type LoggingConfig struct {
 
 // MetricsConfig contains Prometheus metrics configuration
 type MetricsConfig struct {
-	Namespace string            `yaml:"namespace"`
-	Subsystem string            `yaml:"subsystem"`
-	Labels    map[string]string `yaml:"labels"`
+	Namespace string `yaml:"namespace"`
+	Subsystem string `yaml:"subsystem"`
+	// Labels are constant labels added to every exporter metric
+	Labels map[string]string `yaml:"labels"`
 }
 
 // LoadFromYamlFile reads configuration from a YAML file only (no env var overrides)
@@ -320,28 +280,6 @@ func (e *envReader) int(name string, dst *int) {
 	}
 }
 
-func (e *envReader) uint32(name string, dst *uint32) {
-	if v, ok := os.LookupEnv(name); ok && v != "" {
-		n, err := strconv.ParseUint(v, 10, 32)
-		if err != nil {
-			e.fail(name, v, err)
-			return
-		}
-		*dst = uint32(n)
-	}
-}
-
-func (e *envReader) float(name string, dst *float64) {
-	if v, ok := os.LookupEnv(name); ok && v != "" {
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			e.fail(name, v, err)
-			return
-		}
-		*dst = f
-	}
-}
-
 func (e *envReader) bool(name string, dst *bool) {
 	if v, ok := os.LookupEnv(name); ok && v != "" {
 		b, err := strconv.ParseBool(v)
@@ -370,6 +308,23 @@ func (e *envReader) duration(name string, dst *time.Duration) {
 		}
 		*dst = d
 	}
+}
+
+func (e *envReader) labels(name string, dst *map[string]string) {
+	v, ok := os.LookupEnv(name)
+	if !ok || v == "" {
+		return
+	}
+	labels := make(map[string]string)
+	for _, item := range parseCommaSeparated(v) {
+		key, value, found := strings.Cut(item, "=")
+		if !found || strings.TrimSpace(key) == "" {
+			e.fail(name, v, fmt.Errorf("label %q must be key=value", item))
+			return
+		}
+		labels[strings.TrimSpace(key)] = strings.TrimSpace(value)
+	}
+	*dst = labels
 }
 
 func (e *envReader) pools(name string, dst *[]PoolConfig) {
@@ -439,26 +394,12 @@ func applyEnvOverrides(cfg *Config) error {
 	e.duration("NTP_SCRAPE_INTERVAL", &cfg.NTP.ScrapeInterval)
 	e.duration("NTP_MAX_CLOCK_OFFSET", &cfg.NTP.MaxClockOffset)
 
-	// RATE LIMIT
-	e.bool("RATE_LIMIT_ENABLED", &cfg.NTP.RateLimit.Enabled)
-	e.int("RATE_LIMIT_GLOBAL", &cfg.NTP.RateLimit.GlobalRate)
-	e.int("RATE_LIMIT_PER_SERVER", &cfg.NTP.RateLimit.PerServerRate)
-	e.int("RATE_LIMIT_BURST_SIZE", &cfg.NTP.RateLimit.BurstSize)
-	e.duration("RATE_LIMIT_BACKOFF_DURATION", &cfg.NTP.RateLimit.BackoffDuration)
-
 	// CONSENSUS
 	e.boolPtr("NTP_CONSENSUS_ENABLED", &cfg.NTP.Consensus.Enabled)
 
 	// KISS-O'-DEATH
 	e.duration("NTP_KOD_MAX_BACKOFF", &cfg.NTP.KoD.MaxBackoff)
 	e.duration("NTP_KOD_SUSPEND_DURATION", &cfg.NTP.KoD.SuspendDuration)
-
-	// CIRCUIT BREAKER
-	e.bool("CIRCUIT_BREAKER_ENABLED", &cfg.NTP.CircuitBreaker.Enabled)
-	e.uint32("CIRCUIT_BREAKER_MAX_REQUESTS", &cfg.NTP.CircuitBreaker.MaxRequests)
-	e.duration("CIRCUIT_BREAKER_INTERVAL", &cfg.NTP.CircuitBreaker.Interval)
-	e.duration("CIRCUIT_BREAKER_TIMEOUT", &cfg.NTP.CircuitBreaker.Timeout)
-	e.float("CIRCUIT_BREAKER_FAILURE_THRESHOLD", &cfg.NTP.CircuitBreaker.FailureThreshold)
 
 	// ADAPTIVE SAMPLING
 	e.bool("ADAPTIVE_SAMPLING_ENABLED", &cfg.NTP.AdaptiveSampling.Enabled)
@@ -467,15 +408,9 @@ func applyEnvOverrides(cfg *Config) error {
 	e.duration("ADAPTIVE_SAMPLING_DRIFT_THRESHOLD", &cfg.NTP.AdaptiveSampling.DriftThreshold)
 	e.duration("ADAPTIVE_SAMPLING_MAX_DURATION", &cfg.NTP.AdaptiveSampling.MaxDuration)
 
-	// WORKER POOL
-	e.bool("WORKER_POOL_ENABLED", &cfg.NTP.WorkerPool.Enabled)
-	e.int("WORKER_POOL_SIZE", &cfg.NTP.WorkerPool.Size)
-
 	// DNS CACHE
-	e.bool("DNS_CACHE_ENABLED", &cfg.NTP.DNSCache.Enabled)
 	e.duration("DNS_CACHE_MIN_TTL", &cfg.NTP.DNSCache.MinTTL)
 	e.duration("DNS_CACHE_MAX_TTL", &cfg.NTP.DNSCache.MaxTTL)
-	e.int("DNS_CACHE_CLEANUP_WORKERS", &cfg.NTP.DNSCache.CleanupWorkers)
 
 	// LOGGING
 	e.string("LOG_LEVEL", &cfg.Logging.Level)
@@ -486,50 +421,19 @@ func applyEnvOverrides(cfg *Config) error {
 	// METRICS
 	e.string("METRICS_NAMESPACE", &cfg.Metrics.Namespace)
 	e.string("METRICS_SUBSYSTEM", &cfg.Metrics.Subsystem)
+	e.labels("METRICS_LABELS", &cfg.Metrics.Labels)
 
 	return errors.Join(e.errs...)
 }
 
-// parseCommaSeparated splits a comma-separated string
+// parseCommaSeparated splits a comma-separated string, trimming spaces and
+// dropping empty items
 func parseCommaSeparated(s string) []string {
 	var result []string
-	for _, item := range splitByComma(s) {
-		if trimmed := trim(item); trimmed != "" {
+	for _, item := range strings.Split(s, ",") {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
 			result = append(result, trimmed)
 		}
 	}
 	return result
-}
-
-// splitByComma splits a string by comma delimiters.
-// This is a utility function for parsing comma-separated values.
-func splitByComma(s string) []string {
-	var parts []string
-	current := ""
-	for _, char := range s {
-		if char == ',' {
-			parts = append(parts, current)
-			current = ""
-		} else {
-			current += string(char)
-		}
-	}
-	if current != "" {
-		parts = append(parts, current)
-	}
-	return parts
-}
-
-// trim removes leading and trailing whitespace characters from a string.
-// Handles spaces, tabs, and newlines.
-func trim(s string) string {
-	start := 0
-	end := len(s)
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n') {
-		start++
-	}
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n') {
-		end--
-	}
-	return s[start:end]
 }

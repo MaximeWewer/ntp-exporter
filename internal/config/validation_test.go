@@ -151,6 +151,7 @@ func TestValidateNTP_ServersOrPools(t *testing.T) {
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -189,6 +190,7 @@ func TestValidateNTP_Timeout(t *testing.T) {
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -228,6 +230,7 @@ func TestValidateNTP_Version(t *testing.T) {
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -266,6 +269,7 @@ func TestValidateNTP_SamplesPerServer(t *testing.T) {
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -304,6 +308,7 @@ func TestValidateNTP_MaxConcurrency(t *testing.T) {
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -367,6 +372,7 @@ func TestValidateNTP_Pools(t *testing.T) {
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -401,6 +407,7 @@ func TestValidateNTP_PoolStrategies(t *testing.T) {
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg)
@@ -409,89 +416,6 @@ func TestValidateNTP_PoolStrategies(t *testing.T) {
 				assert.NoError(t, err)
 			} else {
 				assert.Error(t, err)
-			}
-		})
-	}
-}
-
-func TestValidateNTP_RateLimit(t *testing.T) {
-	tests := []struct {
-		name      string
-		rateLimit RateLimitConfig
-		wantErr   bool
-		errMsg    string
-	}{
-		{
-			name:      "disabled",
-			rateLimit: RateLimitConfig{Enabled: false},
-			wantErr:   false,
-		},
-		{
-			name: "valid_enabled",
-			rateLimit: RateLimitConfig{
-				Enabled:       true,
-				GlobalRate:    1000,
-				PerServerRate: 60,
-				BurstSize:     10,
-			},
-			wantErr: false,
-		},
-		{
-			name: "invalid_global_rate",
-			rateLimit: RateLimitConfig{
-				Enabled:       true,
-				GlobalRate:    0,
-				PerServerRate: 60,
-				BurstSize:     10,
-			},
-			wantErr: true,
-			errMsg:  "global_rate",
-		},
-		{
-			name: "invalid_per_server_rate",
-			rateLimit: RateLimitConfig{
-				Enabled:       true,
-				GlobalRate:    1000,
-				PerServerRate: 0,
-				BurstSize:     10,
-			},
-			wantErr: true,
-			errMsg:  "per_server_rate",
-		},
-		{
-			name: "invalid_burst_size",
-			rateLimit: RateLimitConfig{
-				Enabled:       true,
-				GlobalRate:    1000,
-				PerServerRate: 60,
-				BurstSize:     0,
-			},
-			wantErr: true,
-			errMsg:  "burst_size",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &NTPConfig{
-				Servers:          []string{"pool.ntp.org"},
-				Timeout:          5 * time.Second,
-				Version:          4,
-				SamplesPerServer: 3,
-				MaxConcurrency:   10,
-				ScrapeInterval:   30 * time.Second,
-				MaxClockOffset:   100 * time.Millisecond,
-				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
-				RateLimit:        tt.rateLimit,
-			}
-
-			err := validateNTP(cfg)
-
-			if tt.wantErr {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errMsg)
-			} else {
-				assert.NoError(t, err)
 			}
 		})
 	}
@@ -637,6 +561,7 @@ func TestValidate_CompleteConfig(t *testing.T) {
 			ScrapeInterval:   30 * time.Second,
 			MaxClockOffset:   100 * time.Millisecond,
 			KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+			DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 		},
 		Logging: LoggingConfig{
 			Level:  "info",

@@ -72,35 +72,6 @@ func ApplyDefaults(cfg *Config) {
 		cfg.NTP.KoD.SuspendDuration = 1 * time.Hour
 	}
 
-	// Rate limiting defaults
-	if cfg.NTP.RateLimit.GlobalRate == 0 {
-		cfg.NTP.RateLimit.GlobalRate = 1000
-	}
-	if cfg.NTP.RateLimit.PerServerRate == 0 {
-		cfg.NTP.RateLimit.PerServerRate = 60
-	}
-	if cfg.NTP.RateLimit.BurstSize == 0 {
-		cfg.NTP.RateLimit.BurstSize = 10
-	}
-	if cfg.NTP.RateLimit.BackoffDuration == 0 {
-		cfg.NTP.RateLimit.BackoffDuration = 1 * time.Minute
-	}
-
-	// Circuit breaker defaults (enabled by default for fault tolerance)
-	cfg.NTP.CircuitBreaker.Enabled = true // Always enabled
-	if cfg.NTP.CircuitBreaker.MaxRequests == 0 {
-		cfg.NTP.CircuitBreaker.MaxRequests = 3
-	}
-	if cfg.NTP.CircuitBreaker.Interval == 0 {
-		cfg.NTP.CircuitBreaker.Interval = 60 * time.Second
-	}
-	if cfg.NTP.CircuitBreaker.Timeout == 0 {
-		cfg.NTP.CircuitBreaker.Timeout = 30 * time.Second
-	}
-	if cfg.NTP.CircuitBreaker.FailureThreshold == 0 {
-		cfg.NTP.CircuitBreaker.FailureThreshold = 0.6 // 60%
-	}
-
 	// Adaptive sampling defaults (disabled by default)
 	if cfg.NTP.AdaptiveSampling.DefaultSamples == 0 {
 		cfg.NTP.AdaptiveSampling.DefaultSamples = 3
@@ -115,21 +86,12 @@ func ApplyDefaults(cfg *Config) {
 		cfg.NTP.AdaptiveSampling.MaxDuration = 30 * time.Second
 	}
 
-	// Worker pool defaults (disabled by default, uses sequential processing)
-	if cfg.NTP.WorkerPool.Size == 0 {
-		cfg.NTP.WorkerPool.Size = 5
-	}
-
-	// DNS cache defaults (enabled by default for performance)
-	cfg.NTP.DNSCache.Enabled = true // Always enabled
+	// DNS cache defaults for pool resolutions
 	if cfg.NTP.DNSCache.MinTTL == 0 {
 		cfg.NTP.DNSCache.MinTTL = 5 * time.Minute
 	}
 	if cfg.NTP.DNSCache.MaxTTL == 0 {
 		cfg.NTP.DNSCache.MaxTTL = 60 * time.Minute
-	}
-	if cfg.NTP.DNSCache.CleanupWorkers == 0 {
-		cfg.NTP.DNSCache.CleanupWorkers = 1
 	}
 
 	// Logging defaults
