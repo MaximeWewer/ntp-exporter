@@ -2,11 +2,10 @@ package ntp
 
 import (
 	"fmt"
-	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"golang.org/x/sys/unix"
 )
 
 // Linux kernel time status constants
@@ -35,79 +34,70 @@ const (
 	STA_CLK       = 0x8000
 )
 
-// timex structure matching Linux kernel struct timex
-type timex struct {
-	Modes     uint32
-	Offset    int64
-	Freq      int64
-	Maxerror  int64
-	Esterror  int64
-	Status    int32
-	Constant  int64
-	Precision int64
-	Tolerance int64
-	Time      syscall.Timeval
-	Tick      int64
-	Ppsfreq   int64
-	Jitter    int64
-	Shift     int32
-	Stabil    int64
-	Jitcnt    int64
-	Calcnt    int64
-	Errcnt    int64
-	Stbcnt    int64
-	Tai       int32
-	_         [44]byte // Padding
-}
-
-// Read reads the current kernel NTP state
+// Read reads the current kernel NTP state.
+// adjtimex with Modes=0 is read-only and requires no privilege nor capability.
 func (k *KernelReader) Read() (*KernelTimex, error) {
 	if !k.enabled {
 		return nil, fmt.Errorf("kernel reader is disabled")
 	}
 
-	var tx timex
-
-	// Call adjtimex syscall (read-only mode with Modes=0)
-	_, _, errno := syscall.Syscall(syscall.SYS_ADJTIMEX, uintptr(unsafe.Pointer(&tx)), 0, 0)
-	if errno != 0 {
+	var tx unix.Timex
+	state, err := unix.Adjtimex(&tx)
+	if err != nil {
 		logger.SafeWarn("ntp", "Failed to read kernel timex", map[string]interface{}{
-			"error": errno.Error(),
+			"error": err.Error(),
 		})
-		return nil, fmt.Errorf("adjtimex syscall failed: %v", errno)
+		return nil, fmt.Errorf("adjtimex syscall failed: %w", err)
 	}
 
-	// Convert to our structure
-	result := &KernelTimex{
-		Offset:     time.Duration(tx.Offset) * time.Microsecond,
-		Frequency:  tx.Freq,
-		MaxError:   time.Duration(tx.Maxerror) * time.Microsecond,
-		EstError:   time.Duration(tx.Esterror) * time.Microsecond,
-		Status:     tx.Status,
-		Constant:   tx.Constant,
-		Precision:  time.Duration(tx.Precision) * time.Microsecond,
-		Tolerance:  tx.Tolerance,
-		Tick:       tx.Tick,
-		PpsFreq:    tx.Ppsfreq,
-		PpsJitter:  tx.Jitter,
-		Shift:      tx.Shift,
-		Stabil:     tx.Stabil,
-		JitCnt:     tx.Jitcnt,
-		CalCnt:     tx.Calcnt,
-		ErrCnt:     tx.Errcnt,
-		StbCnt:     tx.Stbcnt,
-		SyncStatus: getStatusString(tx.Status),
-		StatusCode: tx.Status,
-	}
+	result := fromTimex(&tx, state)
 
 	logger.SafeDebug("ntp", "Kernel timex state read", map[string]interface{}{
-		"offset_us":   result.Offset.Microseconds(),
+		"offset_ns":   result.Offset.Nanoseconds(),
 		"frequency":   result.Frequency,
 		"status":      result.SyncStatus,
 		"status_code": result.StatusCode,
+		"state":       result.State,
 	})
 
 	return result, nil
+}
+
+// fromTimex converts the raw kernel structure. Field widths differ between
+// 32 and 64-bit architectures, hence the explicit int64 conversions.
+func fromTimex(tx *unix.Timex, state int) *KernelTimex {
+	status := int32(tx.Status)
+
+	// The offset unit depends on STA_NANO: nanoseconds when set, microseconds otherwise.
+	// maxerror, esterror and precision are always expressed in microseconds.
+	offsetUnit := time.Microsecond
+	if status&STA_NANO != 0 {
+		offsetUnit = time.Nanosecond
+	}
+
+	return &KernelTimex{
+		Offset:     time.Duration(int64(tx.Offset)) * offsetUnit,
+		Frequency:  int64(tx.Freq),
+		MaxError:   time.Duration(int64(tx.Maxerror)) * time.Microsecond,
+		EstError:   time.Duration(int64(tx.Esterror)) * time.Microsecond,
+		Status:     status,
+		Constant:   int64(tx.Constant),
+		Precision:  time.Duration(int64(tx.Precision)) * time.Microsecond,
+		Tolerance:  int64(tx.Tolerance),
+		Tick:       int64(tx.Tick),
+		PpsFreq:    int64(tx.Ppsfreq),
+		PpsJitter:  int64(tx.Jitter),
+		Shift:      int32(tx.Shift),
+		Stabil:     int64(tx.Stabil),
+		JitCnt:     int64(tx.Jitcnt),
+		CalCnt:     int64(tx.Calcnt),
+		ErrCnt:     int64(tx.Errcnt),
+		StbCnt:     int64(tx.Stbcnt),
+		TAI:        int64(tx.Tai),
+		State:      state,
+		SyncStatus: getStatusString(state, status),
+		StatusCode: status,
+	}
 }
 
 // IsSynchronized returns true if the kernel clock is synchronized
@@ -125,8 +115,9 @@ func (k *KernelTimex) IsPPSActive() bool {
 	return (k.Status & STA_PPSSIGNAL) != 0
 }
 
-// getStatusString converts numeric status to human-readable string
-func getStatusString(status int32) string {
+// getStatusString converts the clock state returned by adjtimex (TIME_*)
+// and the status flags into a human-readable string
+func getStatusString(state int, status int32) string {
 	if (status & STA_UNSYNC) != 0 {
 		return "unsynchronized"
 	}
@@ -135,7 +126,12 @@ func getStatusString(status int32) string {
 		return "clock_error"
 	}
 
-	switch status & 0x7 {
+	return stateString(state)
+}
+
+// stateString returns the name of a TIME_* clock state
+func stateString(state int) string {
+	switch state {
 	case TIME_OK:
 		return "synchronized"
 	case TIME_INS:
@@ -152,4 +148,3 @@ func getStatusString(status int32) string {
 		return "unknown"
 	}
 }
-

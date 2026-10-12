@@ -4,7 +4,7 @@ import "time"
 
 // KernelTimex represents the kernel NTP state
 type KernelTimex struct {
-	Offset     time.Duration // Time offset in microseconds
+	Offset     time.Duration // Residual PLL time offset
 	Frequency  int64         // Frequency offset (scaled ppm)
 	MaxError   time.Duration // Maximum error
 	EstError   time.Duration // Estimated error
@@ -21,8 +21,10 @@ type KernelTimex struct {
 	CalCnt     int64         // PPS calibration intervals
 	ErrCnt     int64         // PPS calibration errors
 	StbCnt     int64         // PPS stability limit exceeded count
+	TAI        int64         // TAI-UTC offset in seconds
+	State      int           // Clock state returned by adjtimex (TIME_*)
 	SyncStatus string        // Human-readable sync status
-	StatusCode int32         // Numeric status code
+	StatusCode int32         // Status flags (STA_*)
 }
 
 // KernelReader reads kernel NTP state

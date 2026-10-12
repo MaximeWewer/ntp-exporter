@@ -5,6 +5,9 @@ package ntp
 
 import (
 	"testing"
+	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // These tests run ONLY on Linux where adjtimex syscall is available
@@ -12,27 +15,53 @@ import (
 func TestGetStatusString(t *testing.T) {
 	tests := []struct {
 		name     string
+		state    int
 		status   int32
 		expected string
 	}{
-		{"synchronized", TIME_OK, "synchronized"},
-		{"unsync", STA_UNSYNC, "unsynchronized"},
-		{"clock_error", STA_CLOCKERR, "clock_error"},
-		{"leap_insert", TIME_INS, "leap_insert_pending"},
-		{"leap_delete", TIME_DEL, "leap_delete_pending"},
-		{"leap_in_progress", TIME_OOP, "leap_in_progress"},
-		{"leap_occurred", TIME_WAIT, "leap_occurred"},
-		{"error", TIME_ERROR, "error"},
-		{"unknown", 99, "unknown"},
+		// ntpd typically sets STA_PLL|STA_NANO: must not be read as a leap state
+		{"ntpd synchronized", TIME_OK, STA_PLL | STA_NANO, "synchronized"},
+		// chrony sets STA_NANO (and STA_MODE) without using the kernel PLL
+		{"chrony synchronized", TIME_OK, STA_NANO, "synchronized"},
+		{"chrony mode", TIME_OK, STA_NANO | STA_MODE, "synchronized"},
+		{"unsync flag", TIME_ERROR, STA_UNSYNC, "unsynchronized"},
+		{"unsync wins over state", TIME_OK, STA_PLL | STA_UNSYNC | STA_NANO, "unsynchronized"},
+		{"clock_error", TIME_OK, STA_CLOCKERR, "clock_error"},
+		{"leap_insert", TIME_INS, STA_PLL | STA_INS, "leap_insert_pending"},
+		{"leap_delete", TIME_DEL, STA_PLL | STA_DEL, "leap_delete_pending"},
+		{"leap_in_progress", TIME_OOP, STA_PLL, "leap_in_progress"},
+		{"leap_occurred", TIME_WAIT, STA_PLL, "leap_occurred"},
+		{"error state", TIME_ERROR, 0, "error"},
+		{"unknown state", 99, 0, "unknown"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := getStatusString(tt.status)
+			result := getStatusString(tt.state, tt.status)
 			if result != tt.expected {
-				t.Errorf("getStatusString(0x%04x) = %q, want %q", tt.status, result, tt.expected)
+				t.Errorf("getStatusString(%d, 0x%04x) = %q, want %q", tt.state, tt.status, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestFromTimexOffsetUnits(t *testing.T) {
+	micro := fromTimex(&unix.Timex{Offset: 1500, Status: STA_PLL}, TIME_OK)
+	if micro.Offset != 1500*time.Microsecond {
+		t.Errorf("microsecond offset = %v, want 1.5ms", micro.Offset)
+	}
+
+	nano := fromTimex(&unix.Timex{Offset: 1500, Status: STA_PLL | STA_NANO}, TIME_OK)
+	if nano.Offset != 1500*time.Nanosecond {
+		t.Errorf("nanosecond offset = %v, want 1.5us", nano.Offset)
+	}
+
+	errs := fromTimex(&unix.Timex{Maxerror: 16000, Esterror: 250, Status: STA_NANO, Tai: 37}, TIME_OK)
+	if errs.MaxError != 16*time.Millisecond || errs.EstError != 250*time.Microsecond {
+		t.Errorf("error bounds must stay in microseconds: max=%v est=%v", errs.MaxError, errs.EstError)
+	}
+	if errs.TAI != 37 || errs.State != TIME_OK {
+		t.Errorf("TAI=%d State=%d, want 37 and TIME_OK", errs.TAI, errs.State)
 	}
 }
 
@@ -112,10 +141,9 @@ func TestKernelReaderReadLinux(t *testing.T) {
 	kr := NewKernelReader(true)
 	state, err := kr.Read()
 
-	// May fail if not running as root or without CAP_SYS_TIME
+	// Read-only adjtimex (modes=0) must work without any privilege
 	if err != nil {
-		t.Skipf("Kernel timex read failed (needs CAP_SYS_TIME or root): %v", err)
-		return
+		t.Fatalf("Kernel timex read failed: %v", err)
 	}
 
 	if state == nil {
