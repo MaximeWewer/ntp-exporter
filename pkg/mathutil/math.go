@@ -1,6 +1,9 @@
 package mathutil
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // AbsFloat64 returns the absolute value of a float64
 func AbsFloat64(f float64) float64 {
@@ -59,4 +62,19 @@ func MaxDuration(a, b time.Duration) time.Duration {
 		return a
 	}
 	return b
+}
+
+// Median returns the median of values (the mean of the two middle values for
+// an even count), or 0 for an empty slice. The input is not modified.
+func Median(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+	n := len(sorted)
+	if n%2 == 0 {
+		return (sorted[n/2-1] + sorted[n/2]) / 2
+	}
+	return sorted[n/2]
 }

@@ -251,3 +251,16 @@ func TestClampEdgeCases(t *testing.T) {
 		t.Error("Clamp(-Inf, 0, 100) should be 0")
 	}
 }
+
+func TestMedian(t *testing.T) {
+	if Median(nil) != 0 {
+		t.Error("median of empty slice must be 0")
+	}
+	in := []float64{3, 1, 2}
+	if Median(in) != 2 || in[0] != 3 {
+		t.Error("odd median wrong or input modified")
+	}
+	if Median([]float64{4, 1, 3, 2}) != 2.5 {
+		t.Error("even median must average the middle values")
+	}
+}

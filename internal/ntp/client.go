@@ -2,6 +2,7 @@ package ntp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -254,18 +255,41 @@ func (r *Response) ReferenceIDString() string {
 	return net.IPv4(b[0], b[1], b[2], b[3]).String()
 }
 
-// InvalidReason returns a short reason explaining why the response is not valid,
-// or an empty string for a valid response
+// Reasons for which a response is not a valid time measurement
+const (
+	ReasonKoD            = "kod"
+	ReasonUnsync         = "unsync"
+	ReasonStratum        = "stratum"
+	ReasonRootDistance   = "root_distance"
+	ReasonStaleReference = "stale_reference"
+	ReasonInvalidTime    = "invalid_time"
+	ReasonOther          = "other"
+	// ReasonTimeout is used for queries left without any response
+	ReasonTimeout = "timeout"
+)
+
+// InvalidReason returns a short reason, from a closed set, explaining why the
+// response is not valid, or an empty string for a valid response
 func (r *Response) InvalidReason() string {
 	switch {
-	case r.KissCode != "":
-		return "kod"
-	case r.LeapIndicator == 3:
-		return "unsync"
-	case r.Stratum < 1 || r.Stratum > 15:
-		return "stratum"
+	case r.KissCode != "" || errors.Is(r.ValidateError, ntp.ErrKissOfDeath):
+		return ReasonKoD
+	case r.LeapIndicator == 3 ||
+		errors.Is(r.ValidateError, ntp.ErrServerNotSynchronized) ||
+		errors.Is(r.ValidateError, ntp.ErrInvalidLeapSecond):
+		return ReasonUnsync
+	case r.Stratum < 1 || r.Stratum > 15 || errors.Is(r.ValidateError, ntp.ErrInvalidStratum):
+		return ReasonStratum
+	case errors.Is(r.ValidateError, ntp.ErrInvalidDispersion):
+		return ReasonRootDistance
+	case errors.Is(r.ValidateError, ntp.ErrServerClockFreshness):
+		return ReasonStaleReference
+	case errors.Is(r.ValidateError, ntp.ErrInvalidTime),
+		errors.Is(r.ValidateError, ntp.ErrServerTickedBackwards),
+		errors.Is(r.ValidateError, ntp.ErrInvalidTransmitTime):
+		return ReasonInvalidTime
 	case r.ValidateError != nil:
-		return "validation"
+		return ReasonOther
 	default:
 		return ""
 	}

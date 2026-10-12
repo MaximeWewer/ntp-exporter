@@ -51,10 +51,10 @@ func TestRegistry_MustRegisterPanicsOnDuplicate(t *testing.T) {
 func TestNewRegistryWithConfig_Namespace(t *testing.T) {
 	r := NewRegistryWithConfig("custom", "probe")
 	require.NoError(t, r.Register())
-	r.GetMetrics().MalformedResponsesTotal.WithLabelValues("time.example.org").Inc()
+	r.GetMetrics().InvalidResponsesTotal.WithLabelValues("time.example.org", "kod").Inc()
 	r.GetMetrics().ExporterScrapesTotal.WithLabelValues("success").Inc()
 
 	names := gatherNames(t, r.GetRegistry())
-	assert.True(t, names["custom_probe_malformed_responses_total"])
+	assert.True(t, names["custom_probe_invalid_responses_total"])
 	assert.True(t, names["custom_exporter_scrapes_total"], "exporter metrics keep the exporter subsystem")
 }

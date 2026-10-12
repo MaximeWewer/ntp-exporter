@@ -29,10 +29,9 @@ type KernelReader interface {
 
 // Exporter is a prometheus.Collector built on the last probe cycle
 type Exporter struct {
-	cfg       *config.Config
-	metrics   *metrics.NTPMetrics
-	descs     *descs
-	validator *ntp.Validator
+	cfg     *config.Config
+	metrics *metrics.NTPMetrics
+	descs   *descs
 
 	// Kernel state, only read when kernel monitoring is enabled
 	kernelReader KernelReader
@@ -52,7 +51,6 @@ func NewExporter(cfg *config.Config, m *metrics.NTPMetrics) *Exporter {
 		cfg:         cfg,
 		metrics:     m,
 		descs:       newDescs(cfg.Metrics.Namespace, cfg.Metrics.Subsystem),
-		validator:   ntp.NewValidator(),
 		lastSuccess: make(map[string]time.Time),
 	}
 
@@ -147,21 +145,17 @@ func (e *Exporter) updateCounters(result *probe.CycleResult) {
 		if meas.Skipped {
 			continue
 		}
+		server := meas.Target.Server
 		for _, resp := range meas.Responses {
-			server := meas.Target.Server
 			if resp.IsKissOfDeath() {
 				m.KissOfDeathTotal.WithLabelValues(server, resp.KissCode).Inc()
-				logger.SafeWarn("collector", "Kiss-of-Death received", map[string]interface{}{
-					"server":   server,
-					"kod_code": resp.KissCode,
-				})
 			}
-			if resp.IsSuspicious() {
-				m.ServerSuspiciousTotal.WithLabelValues(server, e.validator.GetSuspicionReason(resp)).Inc()
+			if reason := resp.InvalidReason(); reason != "" {
+				m.InvalidResponsesTotal.WithLabelValues(server, reason).Inc()
 			}
-			if !resp.IsValid() {
-				m.MalformedResponsesTotal.WithLabelValues(server).Inc()
-			}
+		}
+		if lost := meas.Sent - len(meas.Responses); lost > 0 {
+			m.InvalidResponsesTotal.WithLabelValues(server, ntp.ReasonTimeout).Add(float64(lost))
 		}
 	}
 
@@ -181,8 +175,7 @@ func (e *Exporter) updateCounters(result *probe.CycleResult) {
 func (e *Exporter) deleteServerCounters(server string) {
 	labels := prometheus.Labels{"server": server}
 	e.metrics.KissOfDeathTotal.DeletePartialMatch(labels)
-	e.metrics.ServerSuspiciousTotal.DeletePartialMatch(labels)
-	e.metrics.MalformedResponsesTotal.DeletePartialMatch(labels)
+	e.metrics.InvalidResponsesTotal.DeletePartialMatch(labels)
 }
 
 // Describe implements prometheus.Collector
@@ -247,11 +240,11 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 	gauge(ch, d.samples, float64(stats.SamplesCount), server)
 
 	if meas.Reachable() {
-		ref := meas.Best()
-		if ref == nil {
-			ref = meas.Responses[0]
+		valid := 0.0
+		if meas.Best() != nil {
+			valid = 1
 		}
-		gauge(ch, d.trustScore, e.validator.Validate(ref).TrustScore, server)
+		gauge(ch, d.responseValid, valid, server)
 	}
 
 	// Invalid responses (KoD, unsynchronized server, failed validation) are
@@ -339,22 +332,16 @@ func (e *Exporter) collectPool(ch chan<- prometheus.Metric, pool probe.PoolResul
 	gauge(ch, d.poolTotal, float64(pool.Total), pool.Name)
 	gauge(ch, d.poolDNS, pool.DNSDuration.Seconds(), pool.Name)
 
-	active := 0
-	var bestOffset *ntp.Response
+	var offsets []float64
 	for _, meas := range e.last.PoolMeasurements(pool.Name) {
-		best := meas.Best()
-		if best == nil {
-			continue
-		}
-		active++
-		if bestOffset == nil || mathutil.AbsDuration(best.Offset) < mathutil.AbsDuration(bestOffset.Offset) {
-			bestOffset = best
+		if best := meas.Best(); best != nil {
+			offsets = append(offsets, best.Offset.Seconds())
 		}
 	}
 
-	gauge(ch, d.poolActive, float64(active), pool.Name)
-	if bestOffset != nil {
-		gauge(ch, d.poolBestOffset, bestOffset.Offset.Seconds(), pool.Name)
+	gauge(ch, d.poolActive, float64(len(offsets)), pool.Name)
+	if len(offsets) > 0 {
+		gauge(ch, d.poolOffset, mathutil.Median(offsets), pool.Name)
 	}
 }
 

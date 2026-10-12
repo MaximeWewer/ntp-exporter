@@ -8,10 +8,9 @@ import (
 // metrics. Measurement metrics (offset, stratum, quality, kernel...) are
 // emitted at scrape time from the last probe cycle by the collector package.
 type NTPMetrics struct {
-	// Security counters
-	ServerSuspiciousTotal   *prometheus.CounterVec
-	KissOfDeathTotal        *prometheus.CounterVec
-	MalformedResponsesTotal *prometheus.CounterVec
+	// Response counters
+	KissOfDeathTotal      *prometheus.CounterVec
+	InvalidResponsesTotal *prometheus.CounterVec
 
 	// Exporter operational metrics
 	ExporterBuildInfo         *prometheus.GaugeVec
@@ -33,15 +32,6 @@ type NTPMetrics struct {
 // NewNTPMetricsWithConfig creates and initializes the exporter metrics with custom namespace and subsystem
 func NewNTPMetricsWithConfig(namespace, subsystem string) *NTPMetrics {
 	return &NTPMetrics{
-		ServerSuspiciousTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: namespace,
-				Subsystem: subsystem,
-				Name:      "server_suspicious_total",
-				Help:      "Total number of suspicious server detections",
-			},
-			[]string{"server", "reason"},
-		),
 		KissOfDeathTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
@@ -51,14 +41,14 @@ func NewNTPMetricsWithConfig(namespace, subsystem string) *NTPMetrics {
 			},
 			[]string{"server", "code"},
 		),
-		MalformedResponsesTotal: prometheus.NewCounterVec(
+		InvalidResponsesTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Subsystem: subsystem,
-				Name:      "malformed_responses_total",
-				Help:      "Total number of malformed NTP responses",
+				Name:      "invalid_responses_total",
+				Help:      "Total number of queries without a valid time measurement, by reason (kod, unsync, stratum, root_distance, stale_reference, invalid_time, other, timeout)",
 			},
-			[]string{"server"},
+			[]string{"server", "reason"},
 		),
 
 		ExporterBuildInfo: prometheus.NewGaugeVec(
@@ -173,9 +163,8 @@ func NewNTPMetrics() *NTPMetrics {
 // getAllMetrics returns all metric collectors
 func (m *NTPMetrics) getAllMetrics() []prometheus.Collector {
 	return []prometheus.Collector{
-		m.ServerSuspiciousTotal,
 		m.KissOfDeathTotal,
-		m.MalformedResponsesTotal,
+		m.InvalidResponsesTotal,
 
 		m.ExporterBuildInfo,
 		m.ExporterScrapeDuration,

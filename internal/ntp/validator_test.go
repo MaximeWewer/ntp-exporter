@@ -1,10 +1,12 @@
 package ntp
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	ntp "github.com/beevik/ntp"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -421,6 +423,27 @@ func TestResponse_ReferenceIDString(t *testing.T) {
 		r := &Response{Stratum: tt.stratum, ReferenceID: tt.refid}
 		if got := r.ReferenceIDString(); got != tt.want {
 			t.Errorf("stratum %d refid %08x: got %q, want %q", tt.stratum, tt.refid, got, tt.want)
+		}
+	}
+}
+
+func TestResponse_InvalidReason(t *testing.T) {
+	tests := []struct {
+		resp *Response
+		want string
+	}{
+		{&Response{Stratum: 2}, ""},
+		{&Response{Stratum: 0, KissCode: "DENY"}, ReasonKoD},
+		{&Response{Stratum: 2, LeapIndicator: 3}, ReasonUnsync},
+		{&Response{Stratum: 16}, ReasonStratum},
+		{&Response{Stratum: 2, ValidateError: ntp.ErrInvalidDispersion}, ReasonRootDistance},
+		{&Response{Stratum: 2, ValidateError: ntp.ErrServerClockFreshness}, ReasonStaleReference},
+		{&Response{Stratum: 2, ValidateError: ntp.ErrServerTickedBackwards}, ReasonInvalidTime},
+		{&Response{Stratum: 2, ValidateError: errors.New("boom")}, ReasonOther},
+	}
+	for _, tt := range tests {
+		if got := tt.resp.InvalidReason(); got != tt.want {
+			t.Errorf("%+v: got %q, want %q", tt.resp, got, tt.want)
 		}
 	}
 }

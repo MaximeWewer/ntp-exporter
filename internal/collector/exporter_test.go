@@ -116,6 +116,9 @@ func TestExporter_ValidResponseIsPublished(t *testing.T) {
 	h.absent("ntp_reference_timestamp_seconds", nil)
 	assert.Equal(t, 0.0, h.mustValue("ntp_packet_loss_ratio", srv(server)))
 	assert.Equal(t, 3.0, h.mustValue("ntp_samples_count", srv(server)))
+	assert.Equal(t, 1.0, h.mustValue("ntp_response_valid", srv(server)))
+	h.absent("ntp_server_trust_score", nil)
+	h.absent("ntp_invalid_responses_total", srv(server))
 	assert.InDelta(t, float64(time.Now().Unix()), h.mustValue("ntp_last_success_timestamp_seconds", srv(server)), 5)
 	assert.Equal(t, 1.0, h.mustValue("ntp_exporter_scrapes_total", map[string]string{"status": "success"}))
 }
@@ -152,6 +155,7 @@ func TestExporter_InvalidResponsesAreNotPublished(t *testing.T) {
 
 			assert.Equal(t, 1.0, h.mustValue("ntp_up", srv(server)), "server answered")
 			assert.Equal(t, 1.0, h.mustValue("ntp_packet_loss_ratio", srv(server)), "invalid samples count as lost")
+			assert.Equal(t, 0.0, h.mustValue("ntp_response_valid", srv(server)))
 			h.absent("ntp_offset_seconds", srv(server))
 			h.absent("ntp_stratum", srv(server))
 			h.absent("ntp_rtt_seconds", srv(server))
@@ -190,7 +194,8 @@ func TestExporter_Pool(t *testing.T) {
 	pool := map[string]string{"pool": member}
 	assert.Equal(t, 1.0, h.mustValue("ntp_pool_servers_total", pool))
 	assert.Equal(t, 1.0, h.mustValue("ntp_pool_servers_active", pool))
-	assert.InDelta(t, -0.003, h.mustValue("ntp_pool_best_offset_seconds", pool), 1e-9)
+	assert.InDelta(t, -0.003, h.mustValue("ntp_pool_offset_median_seconds", pool), 1e-9)
+	h.absent("ntp_pool_best_offset_seconds", nil)
 	assert.Equal(t, 1.0, h.mustValue("ntp_up", srv(member)))
 }
 
@@ -211,7 +216,7 @@ func TestExporter_RemovedTargetsDisappear(t *testing.T) {
 	h.absent("ntp_up", srv("192.0.2.1"))
 	h.absent("ntp_packet_loss_ratio", srv("192.0.2.1"))
 	h.absent("ntp_kiss_of_death_total", srv("192.0.2.1"))
-	h.absent("ntp_malformed_responses_total", srv("192.0.2.1"))
+	h.absent("ntp_invalid_responses_total", srv("192.0.2.1"))
 	assert.Equal(t, 1.0, h.mustValue("ntp_up", srv("192.0.2.2")))
 }
 
@@ -494,4 +499,18 @@ func TestExporter_ConsensusDisabled(t *testing.T) {
 	h.cfg.NTP.Consensus.Enabled = &enabled
 	h.cycle()
 	h.absent("ntp_consensus_offset_seconds", nil)
+}
+
+func TestExporter_InvalidResponseReasons(t *testing.T) {
+	h := newHarness(t, "kod.example.org", "lossy.example.org")
+	h.mock.SetupKoDServer("kod.example.org", "RATE")
+	h.mock.SetupSuccessfulServer("lossy.example.org", time.Millisecond, 2)
+	h.client = &partialMock{MockNTPClient: h.mock, answered: 1}
+
+	h.cycle()
+
+	assert.Equal(t, 1.0, h.mustValue("ntp_invalid_responses_total", map[string]string{"server": "kod.example.org", "reason": "kod"}))
+	assert.Equal(t, 2.0, h.mustValue("ntp_invalid_responses_total", map[string]string{"server": "kod.example.org", "reason": "timeout"}))
+	assert.Equal(t, 2.0, h.mustValue("ntp_invalid_responses_total", map[string]string{"server": "lossy.example.org", "reason": "timeout"}))
+	h.absent("ntp_invalid_responses_total", map[string]string{"server": "lossy.example.org", "reason": "kod"})
 }

@@ -34,8 +34,8 @@ type descs struct {
 	samples      *prometheus.Desc
 	packetLoss   *prometheus.Desc
 
-	// Security metrics
-	trustScore *prometheus.Desc
+	// Validity
+	responseValid *prometheus.Desc
 
 	// Consensus metrics
 	consensusOffset     *prometheus.Desc
@@ -45,10 +45,10 @@ type descs struct {
 	falseticker         *prometheus.Desc
 
 	// Pool metrics
-	poolActive     *prometheus.Desc
-	poolTotal      *prometheus.Desc
-	poolDNS        *prometheus.Desc
-	poolBestOffset *prometheus.Desc
+	poolActive *prometheus.Desc
+	poolTotal  *prometheus.Desc
+	poolDNS    *prometheus.Desc
+	poolOffset *prometheus.Desc
 
 	// Kernel metrics
 	kernelSyncStatus     *prometheus.Desc
@@ -95,7 +95,7 @@ func newDescs(namespace, subsystem string) *descs {
 		samples:      d(subsystem, "samples_count", "Number of valid samples used for calculation", server...),
 		packetLoss:   d(subsystem, "packet_loss_ratio", "Ratio of queries without valid response during the last cycle (0-1)", server...),
 
-		trustScore: d(subsystem, "server_trust_score", "Trust score for the NTP server (0-1)", server...),
+		responseValid: d(subsystem, "response_valid", "Whether the server returned at least one valid time measurement during the last cycle (1) or only invalid responses (0)", server...),
 
 		consensusOffset:     d(subsystem, "consensus_offset_seconds", "Offset of the local clock against the consensus of the servers (median of the truechimers) in seconds"),
 		consensusServers:    d(subsystem, "consensus_servers", "Number of valid servers taking part in the consensus"),
@@ -103,10 +103,10 @@ func newDescs(namespace, subsystem string) *descs {
 		offsetFromConsensus: d(subsystem, "offset_from_consensus_seconds", "Offset of the server against the consensus in seconds, independent of the local clock", server...),
 		falseticker:         d(subsystem, "falseticker", "Whether the server correctness interval misses the majority intersection (1) or not (0)", server...),
 
-		poolActive:     d("pool", "servers_active", "Number of pool servers with a valid response", pool...),
-		poolTotal:      d("pool", "servers_total", "Total number of servers returned by the pool resolution", pool...),
-		poolDNS:        d("pool", "dns_resolution_seconds", "DNS resolution duration for pool in seconds", pool...),
-		poolBestOffset: d("pool", "best_offset_seconds", "Best offset from pool servers in seconds", pool...),
+		poolActive: d("pool", "servers_active", "Number of pool servers with a valid response", pool...),
+		poolTotal:  d("pool", "servers_total", "Total number of servers returned by the pool resolution", pool...),
+		poolDNS:    d("pool", "dns_resolution_seconds", "DNS resolution duration for pool in seconds", pool...),
+		poolOffset: d("pool", "offset_median_seconds", "Median offset of the valid pool servers in seconds", pool...),
 
 		kernelSyncStatus: d(subsystem, "kernel_sync_status", "Whether the kernel clock is synchronized (1) or not (0, STA_UNSYNC set)", node...),
 		kernelState:      d(subsystem, "kernel_state", "Kernel clock state returned by adjtimex (value is always 1)", "node", "state"),
@@ -128,9 +128,9 @@ func (d *descs) all() []*prometheus.Desc {
 		d.offset, d.offsetMedian, d.offsetExceeded, d.rtt, d.stratum, d.referenceAge,
 		d.rootDelay, d.rootDispersion, d.rootDistance, d.precision, d.leapIndicator,
 		d.jitter, d.offsetStdDev, d.rttStdDev, d.samples, d.packetLoss,
-		d.trustScore,
+		d.responseValid,
 		d.consensusOffset, d.consensusServers, d.consensusChimers, d.offsetFromConsensus, d.falseticker,
-		d.poolActive, d.poolTotal, d.poolDNS, d.poolBestOffset,
+		d.poolActive, d.poolTotal, d.poolDNS, d.poolOffset,
 		d.kernelSyncStatus, d.kernelState, d.kernelOffset, d.kernelFrequency,
 		d.kernelMaxError, d.kernelEstError, d.kernelTAI, d.kernelBoundViolation,
 	}
