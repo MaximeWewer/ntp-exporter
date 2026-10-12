@@ -1,1333 +1,420 @@
 # NTP Prometheus Exporter
 
-A production-grade Prometheus exporter for monitoring Network Time Protocol (NTP) servers with advanced metrics, flexible deployment modes, and comprehensive observability.
+A Prometheus exporter that measures time synchronization: the health and
+accuracy of NTP servers, and the clock accuracy of the machines it runs on.
 
----
+> Upgrading from v1? Read the [migration guide](MIGRATION.md): metrics,
+> configuration options and deployment modes changed.
 
 ## Table of contents
 
-- [Overview](#overview)
-- [Features](#features)
-- [Quick start](#quick-start)
-  - [Binary](#binary)
-  - [Docker compose](#docker-compose)
-  - [Kubernetes with Helm](#kubernetes-with-helm)
+- [What it measures](#what-it-measures)
 - [Deployment modes](#deployment-modes)
-  - [Probe mode](#1-probe-mode-centralized-monitoring)
-  - [Agent mode](#2-agent-mode-per-hostnode-monitoring)
-  - [Hybrid mode](#3-hybrid-mode-ntp--kernel-correlation)
-  - [Mode comparison](#mode-comparison-table)
-- [Systemd deployment](#systemd-deployment)
-  - [Create systemd service](#create-systemd-service)
-  - [Service configuration options](#systemd-service-configuration-options)
-  - [Health monitoring](#health-monitoring-with-systemd)
-  - [Multi-Instance deployment](#multi-instance-deployment)
-- [Metrics reference](#metrics-reference)
-  - [Metrics by deployment mode](#metrics-by-deployment-mode)
-  - [NTP server metrics](#ntp-server-metrics)
-  - [Kernel metrics (Hybrid/Agent mode)](#kernel-metrics-hybridagent-mode-only)
-  - [Exporter internal metrics](#exporter-internal-metrics)
+- [Quick start](#quick-start)
+- [How a measurement works](#how-a-measurement-works)
 - [Configuration](#configuration)
-  - [Environment variables](#environment-variables)
-  - [Metrics namespace and subsystem](#metrics-namespace-and-subsystem)
-- [Prometheus integration](#prometheus-integration)
-  - [Alerting rules](#alerting-rules)
-  - [Example promQLqQueries](#example-promql-queries)
-- [Grafana Dashboard](#grafana-dashboard)
-- [Use cases and examples](#use-cases-and-examples)
-- [Kernel monitoring compatibility](#kernel-monitoring-compatibility)
+- [Metrics reference](#metrics-reference)
+- [Alerting](#alerting)
+- [Grafana dashboards](#grafana-dashboards)
+- [Kernel option](#kernel-option)
+- [Security](#security)
 - [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
+- [Development](#development)
 
----
+## What it measures
 
-## Overview
+- **Offset** of the local clock against each server, from the sample with the
+  lowest round-trip delay (RFC 5905 clock filter), plus the median offset.
+- **Server health**: reachability, stratum, leap indicator, reference ID,
+  root distance (upper bound of the server error), age of the server reference.
+- **Measurement quality**: RFC 5905 jitter, delay variability, packet loss.
+- **Consensus** of the servers (Marzullo intersection): which servers disagree
+  with the others (*falsetickers*), independently of the local clock.
+- **Kiss-o'-Death** handling: `RATE` slows the polling of a server down,
+  `DENY`/`RSTR` suspend it.
+- **Kernel clock state** (agent mode, Linux, optional): synchronization status,
+  error bounds announced by the time daemon, and whether the offset measured
+  from the outside violates those bounds.
 
-NTP Exporter is a production-ready Prometheus exporter that provides deep visibility into Network Time Protocol (NTP) server health and time synchronization quality. It supports three distinct deployment modes to meet different monitoring requirements, from centralized infrastructure monitoring to per-node clock drift detection.
+## Deployment modes
 
-**Key highlights:**
+Two questions, two modes:
 
-- **Multi-mode deployment**: Probe (centralized), Agent (per-node), or Hybrid (NTP + kernel correlation)
-- **Advanced metrics**: Jitter, stability, root distance, network asymmetry, and trust scores
-- **Production-ready**: Rate limiting, circuit breakers, health checks, and comprehensive error handling
-- **Flexible configuration**: Environment variables or YAML config with customizable metric namespaces
-- **Performance optimized**: Connection pooling, buffered channels, and efficient statistical calculations
+| Question | Mode | Deployment | Key metrics |
+|---|---|---|---|
+| Are my time servers reliable? | **probe** | Deployment, Docker, systemd on a monitoring host | `ntp_up`, `ntp_response_valid`, `ntp_falseticker`, `ntp_offset_from_consensus_seconds`, `ntp_root_distance_seconds`, `ntp_target_suspended` |
+| Is the clock of each machine right? | **agent** | DaemonSet, one container or service per host | `ntp_consensus_offset_seconds`, `ntp_offset_seconds`, and with the kernel option `ntp_kernel_sync_status`, `ntp_kernel_error_bound_violated` |
 
----
+The mode is only a deployment concern: the binary is the same. In agent mode,
+the pod shares the node clock, so the measured offset is the node offset.
+Neither mode needs privileges or host networking.
 
-## Features
-
-### Core capabilities
-
-- **Multiple Collection Modes**: Base metrics, quality metrics, security metrics, and kernel state
-- **Flexible Deployment**: Probe mode (centralized), Agent mode (DaemonSet), or Hybrid mode (kernel correlation)
-- **Advanced Statistics**: Jitter, stability, root distance, network asymmetry analysis
-- **Rate Limiting**: Global and per-server rate limiting to prevent server blacklisting
-- **Pool Support**: Dynamic NTP pool resolution with fallback strategies
-- **Context-Aware**: Proper context cancellation and timeout handling
-
-### Performance & reliability
-
-- **Buffered Channels**: Prevents goroutine leaks
-- **Connection Pooling**: Efficient NTP query handling
-- **Error Wrapping**: Full error chain preservation for debugging
-- **Health Checks**: Built-in health endpoint for monitoring
-- **Circuit Breakers**: Automatic protection against failing servers
-- **DNS Caching**: Reduces DNS lookup overhead
-
----
+In probe mode, `ntp_offset_seconds` mixes the error of the probe host clock and
+the error of the server: use `ntp_offset_from_consensus_seconds` and
+`ntp_falseticker` to judge the servers themselves (3 servers or more).
 
 ## Quick start
 
 ### Binary
 
-Ideal for VMs, bare-metal servers, or systemd deployments
-
-**1. Download and install the binary:**
-
 ```bash
-# Download the latest release for your platform
 curl -LO https://github.com/MaximeWewer/ntp-exporter/releases/latest/download/ntp-exporter-linux-amd64
 chmod +x ntp-exporter-linux-amd64
 sudo mv ntp-exporter-linux-amd64 /usr/local/bin/ntp-exporter
 
-# Verify installation
-ntp-exporter --version
+NTP_SERVERS=time.cloudflare.com,time.google.com,ptbtime1.ptb.de ntp-exporter
+curl -s localhost:9559/metrics | grep '^ntp_'
 ```
 
-**2. Create a configuration file:**
+### Docker
 
 ```bash
-# Create config directory
-sudo mkdir -p /etc/ntp-exporter
-
-# Download example config or create your own
-sudo curl -o /etc/ntp-exporter/config.yaml \
-  https://raw.githubusercontent.com/MaximeWewer/ntp-exporter/main/config.example.yaml
-
-# Or create a minimal config
-cat <<EOF | sudo tee /etc/ntp-exporter/config.yaml
-server:
-  address: "0.0.0.0"
-  port: 9559
-
-ntp:
-  servers:
-    - "pool.ntp.org"
-    - "time.google.com"
-  timeout: 5s
-  version: 4
-  samples_per_server: 3
-  scrape_interval: 30s
-  max_clock_offset: 100ms
-  enable_kernel: true
-
-logging:
-  level: "info"
-
-metrics:
-  namespace: "ntp"
-  subsystem: ""
-EOF
+docker run -d --name ntp-exporter -p 9559:9559 \
+  -e NTP_SERVERS=time.cloudflare.com,time.google.com,ptbtime1.ptb.de \
+  ghcr.io/maximewewer/ntp-exporter:latest
 ```
 
-**3. Run manually or create a systemd service:**
+Ready-made compose files are in [`deployments/docker/`](deployments/docker/):
+`docker-compose-probe.yml`, `docker-compose-agent.yml` (set
+`NTP_KERNEL_ENABLED=true` for the kernel option) and
+`docker-compose-with-yaml.yml`.
+
+### Kubernetes (Helm)
 
 ```bash
-# Run manually (foreground)
-ntp-exporter --config /etc/ntp-exporter/config.yaml
-
-# Or create systemd service (see Deployment > Systemd section below)
-```
-
-**4. Verify metrics:**
-
-```bash
-curl http://localhost:9559/metrics | grep ntp_offset_seconds
-```
-
-### Docker compose
-
-Get started in 3 steps:
-
-**1. Choose your deployment mode:**
-
-```bash
-# Probe Mode: Monitor external NTP servers from a central location
-cd deployments/docker
-docker compose -f docker-compose-probe.yml up -d
-
-# Agent Mode: Monitor time sync on each host/node
-docker compose -f docker-compose-agent.yml up -d
-
-# Hybrid Mode: Agent mode + kernel monitoring
-docker compose -f docker-compose-hybrid.yml up -d
-```
-
-**2. Verify the exporter is running:**
-
-```bash
-curl http://localhost:9559/health
-# Response: {"status":"healthy","service":"ntp-exporter"}
-```
-
-**3. View metrics:**
-
-```bash
-curl http://localhost:9559/metrics
-```
-
-### Kubernetes with Helm
-
-**1. Add the Helm repository :**
-
-```bash
+# Agent mode: one pod per node, with the kernel option
 helm install ntp-exporter oci://ghcr.io/maximewewer/charts/ntp-exporter \
-  --version 2025.11.1 -f values.yaml --namespace monitoring --create-namespace
-```
-
-**2. Install using pre-configured values:**
-
-```bash
-# Probe Mode: Centralized deployment
-helm install ntp-exporter oci://ghcr.io/maximewewer/charts/ntp-exporter \
-  -f deployments/kubernetes/helm/ntp-exporter/values-probe.yaml \
-  --namespace monitoring --create-namespace
-
-# Agent Mode: DaemonSet on every node
-helm install ntp-exporter oci://ghcr.io/maximewewer/charts/ntp-exporter \
+  --namespace monitoring --create-namespace \
   -f deployments/kubernetes/helm/ntp-exporter/values-agent.yaml \
-  --namespace monitoring --create-namespace
+  --set kernel.enabled=true \
+  --set serviceMonitor.enabled=true --set prometheusRule.enabled=true
 
-# Hybrid Mode: DaemonSet with kernel monitoring
-helm install ntp-exporter oci://ghcr.io/maximewewer/charts/ntp-exporter \
-  -f deployments/kubernetes/helm/ntp-exporter/values-hybrid.yaml \
-  --namespace monitoring --create-namespace
+# Probe mode: central monitoring of NTP servers
+helm install ntp-probe oci://ghcr.io/maximewewer/charts/ntp-exporter \
+  --namespace monitoring \
+  -f deployments/kubernetes/helm/ntp-exporter/values-probe.yaml
 ```
 
-**3. Verify deployment:**
+Every option of the chart is documented in
+[`values-with-all-options.yaml`](deployments/kubernetes/helm/ntp-exporter/values-with-all-options.yaml).
 
-```bash
-# Check pods
-kubectl get pods -n monitoring -l app.kubernetes.io/name=ntp-exporter
+### systemd
 
-# Check metrics endpoint
-kubectl port-forward -n monitoring svc/ntp-exporter 9559:9559
-curl http://localhost:9559/metrics
-```
-
----
-
-## Deployment modes
-
-The NTP exporter supports three deployment modes, each optimized for different use cases.
-
-### 1. Probe mode (Centralized monitoring)
-
-**Deployment type:** Kubernetes Deployment with 2+ replicas
-
-**When to use:**
-
-- Monitoring public NTP infrastructure (time.google.com, pool.ntp.org)
-- Centralized NTP server health monitoring
-- Infrastructure-level time service monitoring
-
-**Architecture:**
-
-```text
-┌─────────────────────────────────┐
-│         Prometheus Server       │
-│                                 │
-│   Scrapes: /metrics every 60s   │
-└──────────────┬──────────────────┘
-               │
-               v
-┌─────────────────────────────────┐
-│   NTP Exporter (Deployment)     │
-│   - 2+ replicas                 │
-│   - ClusterIP service           │
-│   - Pod anti-affinity           │
-└──────────────┬──────────────────┘
-               │
-               v
-┌─────────────────────────────────┐
-│   External NTP Servers          │
-│   - time.google.com             │
-│   - time.cloudflare.com         │
-│   - pool.ntp.org                │
-└─────────────────────────────────┘
-```
-
-**Configuration example:**
-
-```yaml
-# values-probe.yaml
-mode: probe
-replicaCount: 2
-config:
-  ntpServers:
-    - time.google.com
-    - time.cloudflare.com
-    - time.apple.com
-  enableKernel: false
-  metrics:
-    namespace: ntp
-    subsystem: probe  # Results in ntp_probe_* metrics
-```
-
-**Key features:**
-
-- High availability with multiple replicas
-- Cluster network (hostNetwork: false)
-- More samples per server (10+)
-- Rate limiting enabled
-
-### 2. Agent mode (Per-host/node monitoring)
-
-**Deployment type:**
-
-- **Kubernetes:** DaemonSet (one pod per node)
-- **Docker:** One container per VM/host
-- **Systemd:** One service per machine
-
-**When to use:**
-
-- Monitoring local time synchronization per host/node/VM
-- Detecting host-specific clock drift
-- Per-host NTP health monitoring
-- Validating chronyd/ntpd on every machine
-- Monitoring Docker hosts and VMs for time drift
-
-**Architecture:**
-
-```text
-┌──────────────────────────────────────┐
-│         Prometheus Server            │
-│                                      │
-│   Scrapes: /metrics every 30s        │
-└──────────────┬───────────────────────┘
-               │
-               v
-┌──────────────────────────────────────┐
-│   NTP Exporter (Agent per host)      │
-│   ┌────────┐ ┌────────┐ ┌────────┐   │
-│   │ Host 1 │ │ Host 2 │ │ VM 3   │   │
-│   │(K8s/VM)│ │(Docker)│ │(Docker)│   │
-│   └────┬───┘ └────┬───┘ └────┬───┘   │
-└────────┼──────────┼──────────┼───────┘
-         │          │          │
-         v          v          v
-    NTP Pools  NTP Pools  NTP Pools
-    (0-3.pool.ntp.org)
-```
-
-**Configuration example:**
-
-```yaml
-# values-agent.yaml
-mode: agent
-config:
-  ntpServers:
-    - 0.pool.ntp.org
-    - 1.pool.ntp.org
-    - 2.pool.ntp.org
-    - 3.pool.ntp.org
-  enableKernel: false  # Can be enabled
-  metrics:
-    namespace: ntp
-    subsystem: ""  # Results in ntp_* metrics (no subsystem)
-hostNetwork: false  # Optional: the pod shares the node clock
-tolerations:
-  - key: node-role.kubernetes.io/master
-    operator: Exists
-```
-
-**Key features:**
-
-- Runs on every Kubernetes node
-- Measures the node clock (pods share it), no host network or privilege required
-- Fewer samples per server (1-3)
-- Tolerates master/control-plane nodes
-
-### 3. Hybrid mode (NTP + Kernel correlation)
-
-**Deployment type:**
-
-- **Kubernetes:** DaemonSet with kernel monitoring enabled (no privilege required)
-- **Docker:** One container per Linux host (no extra capability required)
-- **Systemd:** One service per Linux machine
-
-**When to use:**
-
-- Advanced time synchronization monitoring
-- Detecting discrepancies between NTP daemon and kernel
-- Monitoring kernel PLL (Phase-Locked Loop) state
-- Validating chronyd/ntpd effectiveness
-- Forensic analysis of time synchronization issues
-
-**Architecture:**
-
-```text
-┌──────────────────────────────────────┐
-│         Prometheus Server            │
-│                                      │
-│   Scrapes: /metrics every 30s        │
-└──────────────┬───────────────────────┘
-               │
-               v
-┌──────────────────────────────────────┐
-│   NTP Exporter (DaemonSet)           │
-│   ┌──────────────────────────────┐   │
-│   │ Per Node:                    │   │
-│   │  - Query NTP servers         │   │
-│   │  - Read kernel timex state   │   │
-│   │  - Calculate divergence      │   │
-│   │  - Compute coherence score   │   │
-│   └──────────────────────────────┘   │
-└──────────────┬───────────────────────┘
-               │
-               v
-    ┌──────────┴──────────┐
-    │                     │
-    v                     v
-NTP Servers      Kernel (adjtimex)
-pool.ntp.org     - Offset
-                 - Frequency
-                 - Sync status
-```
-
-**Configuration example:**
-
-```yaml
-# values-hybrid.yaml
-mode: hybrid
-config:
-  ntpServers:
-    - 0.pool.ntp.org
-    - 1.pool.ntp.org
-  enableKernel: true  # CRITICAL
-  metrics:
-    namespace: ntp
-    subsystem: ""  # Results in ntp_* metrics
-# No privilege, root user, capability or host network is needed:
-# the kernel state is read with a read-only adjtimex call (modes=0)
-```
-
-**Key features:**
-
-- Correlates external NTP offset with kernel clock offset
-- Detects divergence between NTP and local system clock
-- Provides coherence score (0-1) for NTP/kernel agreement
-- Requires a Linux kernel; runs unprivileged (read-only `adjtimex`)
-- Exposes kernel synchronization status
-
-**Coherence score interpretation:**
-
-| Score | Quality | Divergence | Description |
-|-------|---------|------------|-------------|
-| 1.0 | Perfect | < 1ms | Perfect agreement |
-| 0.9-1.0 | Excellent | 1-5ms | Excellent sync |
-| 0.7-0.9 | Good | 5-10ms | Good sync |
-| 0.5-0.7 | Acceptable | 10-50ms | Acceptable |
-| < 0.5 | Poor | > 50ms | Investigation needed |
-
-### Mode comparison table
-
-| Feature | Probe Mode | Agent Mode | Hybrid Mode |
-|---------|------------|------------|-------------|
-| **Deployment Type** | Deployment | DaemonSet | DaemonSet |
-| **Replicas** | 2+ | 1 per node | 1 per node |
-| **Host Network** | No | Optional | Optional |
-| **Privileges** | None | None | None |
-| **Kernel Metrics** | No | Optional | Yes |
-| **NTP Servers** | External/Public | Local/Pools | Local/Pools |
-| **Scrape Interval** | 60s | 30s | 30s |
-| **Samples per Server** | 10+ | 1-3 | 3-5 |
-| **Use Case** | Infrastructure monitoring | Node-level monitoring | Advanced diagnostics |
-| **Metric Prefix** | `ntp_probe_*` | `ntp_*` | `ntp_*` |
-
----
-
-## Systemd deployment
-
-Deploy NTP Exporter as a systemd service for production-grade reliability on Linux VMs and bare-metal servers.
-
-### Create systemd service
-
-**1. Create the service file:**
-
-```bash
-sudo tee /etc/systemd/system/ntp-exporter.service > /dev/null <<'EOF'
+```ini
+# /etc/systemd/system/ntp-exporter.service
 [Unit]
 Description=NTP Prometheus Exporter
-Documentation=https://github.com/MaximeWewer/ntp-exporter
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
 User=ntp-exporter
-Group=ntp-exporter
-
-# Security hardening
+ExecStart=/usr/local/bin/ntp-exporter --config /etc/ntp-exporter/config.yaml
+Restart=on-failure
+# No capability is needed, even for the kernel option
+CapabilityBoundingSet=
 NoNewPrivileges=true
-PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/ntp-exporter
-
-# Kernel monitoring needs no capability: adjtimex is called read-only
-CapabilityBoundingSet=
-AmbientCapabilities=
-
-# Binary and config
-ExecStart=/usr/local/bin/ntp-exporter --config /etc/ntp-exporter/config.yaml
-
-# Restart configuration
-Restart=on-failure
-RestartSec=5s
-
-# Logging
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=ntp-exporter
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
-EOF
 ```
 
-**2. Create dedicated user:**
+## How a measurement works
 
-```bash
-# Create system user and group
-sudo useradd --system --no-create-home --shell /bin/false ntp-exporter
+Every `scrape_interval` (60 s by default), the exporter runs one **cycle**:
 
-# Create working directory
-sudo mkdir -p /var/lib/ntp-exporter
-sudo chown ntp-exporter:ntp-exporter /var/lib/ntp-exporter
+1. **Targets**: configured servers are resolved once per cycle (IPv4 preferred),
+   so that every sample of a burst reaches the same server even behind a
+   round-robin name such as `pool.ntp.org`. Pools are resolved through a DNS
+   cache and their members become targets.
+2. **Burst**: each target receives `samples_per_server` queries spaced by
+   `sample_spacing` (2 s: NTP servers rate-limit clients sending packets closer
+   than that). Up to `max_concurrency` targets are probed in parallel.
+3. **Filtering**: responses that are not valid time measurements (Kiss-o'-Death,
+   leap indicator 3, invalid stratum, failed RFC 5905 checks) are counted in
+   `ntp_invalid_responses_total` and never published as measurements. The
+   offset comes from the valid sample with the lowest delay.
+4. **Kiss-o'-Death**: `RATE` doubles the polling interval of the target (up to
+   `kod.max_backoff`), `DENY` and `RSTR` stop queries for `kod.suspend_duration`.
+5. **Consensus**: with 3 servers or more, correctness intervals
+   `[offset - root distance, offset + root distance]` are intersected (Marzullo);
+   servers outside the majority intersection are falsetickers.
+6. **Snapshot**: metrics are built from the last cycle at scrape time. A server
+   that stops answering exposes `ntp_up 0` and no stale offset; a pool member
+   gone from DNS disappears.
 
-# Set permissions on config
-sudo chown -R ntp-exporter:ntp-exporter /etc/ntp-exporter
-```
-
-**3. Enable and start the service:**
-
-```bash
-# Reload systemd
-sudo systemctl daemon-reload
-
-# Enable on boot
-sudo systemctl enable ntp-exporter
-
-# Start the service
-sudo systemctl start ntp-exporter
-
-# Check status
-sudo systemctl status ntp-exporter
-```
-
-**4. View logs:**
-
-```bash
-# Follow logs in real-time
-sudo journalctl -u ntp-exporter -f
-
-# View recent logs
-sudo journalctl -u ntp-exporter -n 100
-```
-
-### Systemd service configuration options
-
-**With environment variables override:**
-
-```ini
-[Service]
-Environment="NTP_SERVERS=pool.ntp.org,time.google.com"
-Environment="LOG_LEVEL=debug"
-Environment="NTP_ENABLE_KERNEL=true"
-ExecStart=/usr/local/bin/ntp-exporter --config /etc/ntp-exporter/config.yaml
-```
-
-### Health monitoring with systemd
-
-Add a health check watchdog:
-
-```ini
-[Service]
-# Enable watchdog (30 seconds)
-WatchdogSec=30s
-
-# Notify systemd when ready
-Type=notify
-NotifyAccess=main
-```
-
-### Multi-instance deployment
-
-Deploy multiple instances with different configs:
-
-```bash
-# Create instance-specific configs
-sudo cp /etc/ntp-exporter/config.yaml /etc/ntp-exporter/config-pool1.yaml
-sudo cp /etc/ntp-exporter/config.yaml /etc/ntp-exporter/config-pool2.yaml
-
-# Edit ports in each config (9559, 9560, etc.)
-
-# Create service instances
-sudo cp /etc/systemd/system/ntp-exporter.service \
-     /etc/systemd/system/ntp-exporter@.service
-
-# Modify ExecStart to use instance config
-# ExecStart=/usr/local/bin/ntp-exporter --config /etc/ntp-exporter/config-%i.yaml
-
-# Start instances
-sudo systemctl start ntp-exporter@pool1
-sudo systemctl start ntp-exporter@pool2
-```
-
----
-
-## Metrics reference
-
-### Metrics by Deployment Mode
-
-**IMPORTANT:** The metric naming convention differs by mode:
-
-| Mode | METRICS_NAMESPACE | METRICS_SUBSYSTEM | Metric Prefix | Kernel Metrics |
-|------|-------------------|-------------------|---------------|----------------|
-| **Probe** | `ntp` | `probe` | `ntp_probe_*` | No |
-| **Agent** | `ntp` | `""` (empty) | `ntp_*` | Optional |
-| **Hybrid** | `ntp` | `""` (empty) | `ntp_*` | Yes |
-
-**Examples:**
-
-```prometheus
-# Probe Mode (METRICS_SUBSYSTEM="probe")
-ntp_probe_offset_seconds{server="time.google.com"} -0.000328
-ntp_probe_rtt_seconds{server="time.google.com"} 0.015234
-ntp_probe_jitter_seconds{server="time.google.com"} 0.000086
-
-# Agent/Hybrid Mode (METRICS_SUBSYSTEM="")
-ntp_offset_seconds{server="pool.ntp.org"} -0.000328
-ntp_rtt_seconds{server="pool.ntp.org"} 0.015234
-ntp_kernel_offset_seconds{node="node1"} -0.000001  # Only in Hybrid/Agent with kernel enabled
-```
-
-### NTP server metrics
-
-Available in **all modes** (prefix varies by mode):
-
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `{prefix}_offset_seconds` | Gauge | server, stratum, version | Time offset between local clock and NTP server |
-| `{prefix}_clock_offset_exceeded` | Gauge | server | Whether the clock offset exceeds the configured threshold (1=exceeded, 0=within limits) |
-| `{prefix}_rtt_seconds` | Gauge | server | Round-trip time to NTP server |
-| `{prefix}_jitter_seconds` | Gauge | server | Jitter calculated from multiple samples |
-| `{prefix}_stability_seconds` | Gauge | server | Stability of time offset (standard deviation) |
-| `{prefix}_asymmetry_seconds` | Gauge | server | Network asymmetry detected |
-| `{prefix}_server_reachable` | Gauge | server | Whether the server is reachable (1=yes, 0=no) |
-| `{prefix}_stratum` | Gauge | server | NTP server stratum level (0-16) |
-| `{prefix}_leap_indicator` | Gauge | server | Leap second indicator (0-3) |
-| `{prefix}_root_delay_seconds` | Gauge | server | Root delay of the NTP server |
-| `{prefix}_root_dispersion_seconds` | Gauge | server | Root dispersion of the NTP server |
-| `{prefix}_root_distance_seconds` | Gauge | server | Calculated root distance (quality metric) |
-| `{prefix}_reference_timestamp_seconds` | Gauge | server | Reference timestamp of the NTP server |
-| `{prefix}_precision_seconds` | Gauge | server | Precision of the NTP server |
-| `{prefix}_packet_loss_ratio` | Gauge | server | Packet loss ratio during measurements (0-1) |
-| `{prefix}_samples_count` | Gauge | server | Number of samples used for calculation |
-| `{prefix}_server_trust_score` | Gauge | server | Trust score for the server (0-1) |
-
-> **Note:** Replace `{prefix}` with `ntp` for Agent/Hybrid mode or `ntp_probe` for Probe mode.
-
-### Kernel metrics (Hybrid/Agent Mode Only)
-
-Available **only when `NTP_ENABLE_KERNEL=true`** (Linux only):
-
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `ntp_kernel_offset_seconds` | Gauge | node | Kernel time offset (from adjtimex syscall) |
-| `ntp_kernel_frequency_ppm` | Gauge | node | Kernel frequency adjustment in PPM |
-| `ntp_kernel_max_error_seconds` | Gauge | node | Kernel maximum time error |
-| `ntp_kernel_est_error_seconds` | Gauge | node | Kernel estimated time error |
-| `ntp_kernel_sync_status` | Gauge | node | Kernel synchronization status (1=synced, 0=unsynced) |
-| `ntp_kernel_divergence_seconds` | Gauge | node | Absolute difference between NTP and kernel offsets |
-| `ntp_kernel_coherence_score` | Gauge | node | Coherence score (0-1, higher is better) |
-
-**Example:**
-
-```prometheus
-# Hybrid mode metrics
-ntp_offset_seconds{server="pool.ntp.org"} -0.000328
-ntp_kernel_offset_seconds{node="k8s-node-1"} -0.000001
-ntp_kernel_divergence_seconds{node="k8s-node-1"} 0.000327
-ntp_kernel_coherence_score{node="k8s-node-1"} 0.99
-```
-
-### Exporter internal metrics
-
-Available in **all modes**:
-
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `ntp_exporter_build_info` | Gauge | version, commit, go_version | Build information |
-| `ntp_exporter_servers_configured` | Gauge | - | Number of NTP servers configured |
-| `ntp_exporter_scrapes_total` | Counter | status | Total number of scrapes (success/failure) |
-| `ntp_exporter_scrape_duration_seconds` | Histogram | - | Duration of NTP scrape operations |
-| `ntp_exporter_collector_duration_seconds` | Histogram | collector | Collector execution duration |
-| `ntp_query_duration_seconds` | Histogram | server, status | NTP query duration distribution |
-| `ntp_exporter_memory_allocated_bytes` | Gauge | - | Memory allocated by Go runtime |
-| `ntp_exporter_memory_heap_bytes` | Gauge | - | Heap memory in use |
-| `ntp_exporter_goroutines_count` | Gauge | - | Number of active goroutines |
-
----
+A cycle is cut 10% (at most 1 s) before the next one
+(`ntp_exporter_cycle_overrun_total`).
 
 ## Configuration
 
-### Environment variables
-
-Complete list of environment variables (Docker/Docker Compose):
-
-#### Server configuration
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NTP_EXPORTER_ADDRESS` | HTTP server bind address | `0.0.0.0` |
-| `NTP_EXPORTER_PORT` | HTTP server port | `9559` |
-| `SERVER_READ_TIMEOUT` | HTTP read timeout | `10s` |
-| `SERVER_WRITE_TIMEOUT` | HTTP write timeout | `10s` |
-| `TLS_ENABLED` | Enable HTTPS/TLS | `false` |
-| `TLS_CERT_FILE` | Path to TLS certificate | `""` |
-| `TLS_KEY_FILE` | Path to TLS private key | `""` |
-| `ENABLE_CORS` | Enable CORS headers | `false` |
-| `ALLOWED_ORIGINS` | Allowed CORS origins (comma-separated) | `""` |
-
-#### NTP configuration
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NTP_SERVERS` | Comma-separated list of NTP servers | `""` |
-| `NTP_TIMEOUT` | NTP query timeout | `5s` |
-| `NTP_VERSION` | NTP protocol version (2, 3, 4) | `4` |
-| `NTP_SAMPLES` | Samples per server for statistics | `3` |
-| `NTP_MAX_CONCURRENCY` | Maximum concurrent queries | `10` |
-| `NTP_SCRAPE_INTERVAL` | Interval between NTP collections | `30s` |
-| `NTP_MAX_CLOCK_OFFSET` | Maximum acceptable clock offset threshold | `100ms` |
-| `NTP_ENABLE_KERNEL` | Enable kernel monitoring (Linux only) | `false` |
-
-#### Rate limiting
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `RATE_LIMIT_ENABLED` | Enable rate limiting | `false` |
-| `RATE_LIMIT_GLOBAL` | Global rate limit (req/s) | `1000` |
-| `RATE_LIMIT_PER_SERVER` | Per-server rate limit (req/s) | `60` |
-| `RATE_LIMIT_BURST_SIZE` | Burst size for rate limiter | `10` |
-| `RATE_LIMIT_BACKOFF_DURATION` | Backoff duration after rate limit | `1m` |
-
-#### Circuit breaker
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `CIRCUIT_BREAKER_ENABLED` | Enable circuit breaker | `true` |
-| `CIRCUIT_BREAKER_MAX_REQUESTS` | Max requests in half-open state | `3` |
-| `CIRCUIT_BREAKER_INTERVAL` | Interval to clear counters | `60s` |
-| `CIRCUIT_BREAKER_TIMEOUT` | Timeout in open state | `30s` |
-| `CIRCUIT_BREAKER_FAILURE_THRESHOLD` | Failure ratio threshold (0-1) | `0.6` |
-
-#### Adaptive sampling
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ADAPTIVE_SAMPLING_ENABLED` | Enable adaptive sampling | `false` |
-| `ADAPTIVE_SAMPLING_DEFAULT_SAMPLES` | Default number of samples | `3` |
-| `ADAPTIVE_SAMPLING_HIGH_DRIFT_SAMPLES` | Samples for high drift | `10` |
-| `ADAPTIVE_SAMPLING_DRIFT_THRESHOLD` | Drift threshold to increase samples | `50ms` |
-| `ADAPTIVE_SAMPLING_MAX_DURATION` | Max duration for sampling | `30s` |
-
-#### Worker pool
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `WORKER_POOL_ENABLED` | Enable worker pool | `false` |
-| `WORKER_POOL_SIZE` | Number of workers | `5` |
-
-#### DNS cache
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DNS_CACHE_ENABLED` | Enable DNS caching | `true` |
-| `DNS_CACHE_MIN_TTL` | Minimum DNS cache TTL | `5m` |
-| `DNS_CACHE_MAX_TTL` | Maximum DNS cache TTL | `60m` |
-| `DNS_CACHE_CLEANUP_WORKERS` | Number of cleanup workers | `1` |
-
-#### Logging
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LOG_LEVEL` | Log level (trace, debug, info, warn, error, fatal) | `info` |
-| `LOG_FORMAT` | Log format (json, console) | `json` |
-| `LOG_ENABLE_FILE` | Enable logging to file | `false` |
-| `LOG_FILE_PATH` | Path to log file | `""` |
-
-#### Metrics
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `METRICS_NAMESPACE` | Prometheus metrics namespace | `ntp` |
-| `METRICS_SUBSYSTEM` | Prometheus metrics subsystem | `""` |
-
-### Metrics namespace and subsystem
-
-The exporter allows customization of metric names through namespace and subsystem:
-
-**Formula:** `{namespace}_{subsystem}_{metric_name}`
-
-**Examples:**
-
-```bash
-# Default Agent/Hybrid mode
-METRICS_NAMESPACE=ntp
-METRICS_SUBSYSTEM=""
-# Result: ntp_offset_seconds, ntp_rtt_seconds
-
-# Default Probe mode
-METRICS_NAMESPACE=ntp
-METRICS_SUBSYSTEM=probe
-# Result: ntp_probe_offset_seconds, ntp_probe_rtt_seconds
-
-# Custom namespace
-METRICS_NAMESPACE=monitoring
-METRICS_SUBSYSTEM=timesync
-# Result: monitoring_timesync_offset_seconds
-```
-
-**Important:** Kernel metrics always use the `ntp_kernel_*` prefix regardless of subsystem configuration.
-
----
-
-## Prometheus integration
-
-### Alerting rules
-
-Example alerting rules for critical NTP issues:
-
-```yaml
-groups:
-  - name: ntp_critical
-    interval: 30s
-    rules:
-      # High Time Drift (>100ms)
-      - alert: NTPHighTimeDrift
-        expr: abs(ntp_offset_seconds) > 0.1
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Critical time drift detected on {{ $labels.server }}"
-          description: "Time offset is {{ $value }}s, exceeding 100ms threshold"
-
-      # Clock Offset Exceeded Configured Threshold
-      - alert: NTPClockOffsetExceeded
-        expr: ntp_clock_offset_exceeded == 1
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "NTP clock offset exceeded threshold on {{ $labels.server }}"
-          description: "The clock offset on {{ $labels.server }} has exceeded the configured max_clock_offset threshold"
-
-      # Server Unreachable
-      - alert: NTPServerUnreachable
-        expr: ntp_server_reachable == 0
-        for: 3m
-        labels:
-          severity: critical
-        annotations:
-          summary: "NTP server {{ $labels.server }} is unreachable"
-
-      # High Jitter (>50ms)
-      - alert: NTPHighJitter
-        expr: ntp_jitter_seconds > 0.050
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High jitter detected on {{ $labels.server }}: {{ $value }}s"
-
-      # Clock Unsynchronized
-      - alert: NTPClockUnsynchronized
-        expr: ntp_leap_indicator == 3
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "NTP server {{ $labels.server }} reports unsynchronized clock"
-
-      # Insufficient Redundancy
-      - alert: NTPInsufficientRedundancy
-        expr: sum(ntp_server_reachable) < 2
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Less than 2 NTP servers reachable"
-          description: "Only {{ $value }} server(s) reachable. Minimum 3 recommended."
-
-  - name: ntp_hybrid_mode
-    interval: 30s
-    rules:
-      # NTP/Kernel Divergence (Hybrid mode)
-      - alert: NTPKernelDivergence
-        expr: ntp_kernel_divergence_seconds > 0.010
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "NTP and kernel offsets diverging on {{ $labels.node }}"
-          description: "Divergence is {{ $value }}s (>10ms) between NTP and kernel"
-
-      # Low Coherence Score (Hybrid mode)
-      - alert: NTPKernelIncoherence
-        expr: ntp_kernel_coherence_score < 0.7
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Low coherence between NTP and kernel on {{ $labels.node }}"
-          description: "Coherence score is {{ $value }} (should be >0.7)"
-
-      # Kernel Not Synchronized
-      - alert: KernelNotSynchronized
-        expr: ntp_kernel_sync_status == 0
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Kernel clock not synchronized on {{ $labels.node }}"
-```
-
-### Example promQL queries
-
-**Basic time monitoring:**
-
-```promql
-# Current time offset for all servers
-ntp_offset_seconds
-
-# Average RTT by server (5m window)
-avg_over_time(ntp_rtt_seconds[5m])
-
-# Maximum jitter across all servers
-max(ntp_jitter_seconds)
-
-# Server availability percentage (last 1h)
-avg_over_time(ntp_server_reachable[1h]) * 100
-```
-
-**Advanced queries:**
-
-```promql
-# 95th percentile query duration
-histogram_quantile(0.95, rate(ntp_query_duration_seconds_bucket[5m]))
-
-# Servers with high packet loss
-ntp_packet_loss_ratio > 0.1
-
-# Root distance (quality metric)
-ntp_root_distance_seconds
-
-# Trust score threshold
-ntp_server_trust_score < 0.5
-
-# Memory usage rate
-rate(ntp_exporter_memory_allocated_bytes[5m])
-```
-
-**Hybrid mode queries:**
-
-```promql
-# Kernel offset vs NTP offset
-ntp_kernel_offset_seconds
-ntp_offset_seconds
-
-# Divergence between kernel and NTP
-ntp_kernel_divergence_seconds
-
-# Nodes with poor coherence
-ntp_kernel_coherence_score < 0.7
-
-# Kernel frequency adjustment (drift rate)
-ntp_kernel_frequency_ppm
-```
-
-**Probe mode queries (note the `ntp_probe_` prefix):**
-
-```promql
-# Probe mode offset
-ntp_probe_offset_seconds
-
-# Probe mode RTT
-ntp_probe_rtt_seconds
-
-# Probe mode server reachability
-ntp_probe_server_reachable
-```
-
----
-
-## Grafana dashboard
-
-Import the following dashboard JSON or create panels manually:
-
-**Key panels:**
-
-1. **Time Offset Trends**: Line graph of `ntp_offset_seconds` by server
-2. **Round-Trip Time Distribution**: Line graph of `ntp_rtt_seconds`
-3. **Jitter Analysis**: Line graph of `ntp_jitter_seconds`
-4. **Server Reachability Heatmap**: Heatmap of `ntp_server_reachable`
-5. **Stratum Distribution**: Bar chart of `ntp_stratum`
-6. **Query Duration Histograms**: Histogram of `ntp_query_duration_seconds`
-7. **Memory Usage Trends**: Line graph of `ntp_exporter_memory_*`
-8. **Kernel Metrics (Hybrid)**: Graphs for `ntp_kernel_*` metrics
-
-**Example panel queries:**
-
-```promql
-# Panel: Current Time Offset
-ntp_offset_seconds
-
-# Panel: Server Availability (1h)
-avg_over_time(ntp_server_reachable[1h]) * 100
-
-# Panel: Network RTT
-ntp_rtt_seconds
-
-# Panel: Kernel Divergence (Hybrid mode)
-ntp_kernel_divergence_seconds
-
-# Panel: Coherence Score (Hybrid mode)
-ntp_kernel_coherence_score
-```
-
----
-
-## Use cases and examples
-
-### Use case 1: Monitoring public NTP infrastructure
-
-**Scenario:** You want to monitor the health and availability of public NTP servers used by your organization.
-
-**Solution:** Deploy in **Probe mode**
-
-```bash
-# Docker Compose
-cd deployments/docker
-docker-compose -f docker-compose-probe.yml up -d
-
-# Kubernetes
-helm install ntp-exporter ./deployments/kubernetes/helm/ntp-exporter \
-  -f deployments/kubernetes/helm/ntp-exporter/values-probe.yaml
-```
-
-**Configuration:**
-
-```yaml
-config:
-  ntpServers:
-    - time.google.com
-    - time.cloudflare.com
-    - time.apple.com
-    - pool.ntp.org
-  metrics:
-    subsystem: probe  # Metrics: ntp_probe_*
-```
-
-### Use case 2: Per-Node clock drift detection
-
-**Scenario:** You need to detect clock drift on individual Kubernetes nodes.
-
-**Solution:** Deploy in **Agent mode**
-
-```bash
-helm install ntp-exporter ./deployments/kubernetes/helm/ntp-exporter \
-  -f deployments/kubernetes/helm/ntp-exporter/values-agent.yaml
-```
-
-**Configuration:**
-
-```yaml
-mode: agent
-config:
-  ntpServers:
-    - 0.pool.ntp.org
-    - 1.pool.ntp.org
-    - 2.pool.ntp.org
-  metrics:
-    subsystem: ""  # Metrics: ntp_*
-```
-
-**Alert:**
-
-```yaml
-- alert: NodeClockDrift
-  expr: abs(ntp_offset_seconds{node=~".*"}) > 0.050
-  for: 5m
-  annotations:
-    summary: "Clock drift >50ms on node {{ $labels.node }}"
-```
-
-### Use case 3: Validating chronyd effectiveness
-
-**Scenario:** You want to validate that chronyd is properly synchronizing the kernel clock.
-
-**Solution:** Deploy in **Hybrid mode**
-
-```bash
-helm install ntp-exporter ./deployments/kubernetes/helm/ntp-exporter \
-  -f deployments/kubernetes/helm/ntp-exporter/values-hybrid.yaml
-```
-
-**Configuration:**
-
-```yaml
-mode: hybrid
-config:
-  ntpServers:
-    - 0.pool.ntp.org
-    - 1.pool.ntp.org
-  enableKernel: true
-  metrics:
-    subsystem: ""  # Metrics: ntp_* and ntp_kernel_*
-```
-
-**Validation query:**
-
-```promql
-# Low divergence = chronyd is working
-ntp_kernel_divergence_seconds < 0.001
-
-# High coherence = good sync
-ntp_kernel_coherence_score > 0.9
-```
-
----
-
-## Kernel monitoring compatibility
-
-The hybrid mode (`NTP_ENABLE_KERNEL=true`) reads kernel NTP state via the `adjtimex` syscall on Linux. However, compatibility varies by NTP daemon implementation.
-
-### Chrony
-
-**Version < 1.31** (Debian Jessie):
-
-- The `STA_UNSYNC` flag may not be properly maintained
-- **Impact**: `ntp_kernel_sync_status` may be inaccurate
-- **Workaround**: Monitor `ntp_kernel_divergence_seconds` instead:
-
-```promql
-# Daemon is working if divergence is low
-ntp_kernel_divergence_seconds < 0.001  # < 1ms
-```
-
-**Modern versions (≥ 1.31)**:
-
-- Full support
-- Ensure `rtcsync` option is enabled in `/etc/chrony/chrony.conf`
-- Verify with: `chronyc tracking`
-
-### systemd-timesyncd
-
-- **Full support** for all versions
-- Monitor both metrics as recommended by Prometheus node_exporter:
-
-```promql
-ntp_kernel_sync_status == 1 AND
-abs(ntp_kernel_offset_seconds) < 0.050  # < 50ms
-```
-
-### OpenNTPD
-
-**Version < 5.9p1**:
-
-- Does not update kernel flags
-- **Impact**: Kernel metrics will be stale or incorrect
-- **Workaround**: Disable kernel monitoring:
+The exporter reads, by increasing priority: defaults, a YAML file
+(`--config`), environment variables, then command-line flags. Any invalid
+value or unknown YAML key stops the startup with an explicit error.
+
+A fully commented file is available in
+[`deployments/docker/config-example.yaml`](deployments/docker/config-example.yaml).
+Minimal example:
 
 ```yaml
 ntp:
-  enableKernel: false  # Rely on NTP metrics only
+  servers: [time.cloudflare.com, time.google.com, ptbtime1.ptb.de]
+  pools:
+    - name: europe.pool.ntp.org
+      strategy: best_n   # best_n, all or round_robin
+      max_servers: 4
+  scrape_interval: 60s
+  samples_per_server: 4
+  kernel:
+    enabled: false
 ```
 
-**Version ≥ 5.9p1**:
+### Flags
 
-- Full support
+| Flag | Description |
+|---|---|
+| `--config` | YAML configuration file |
+| `--web.config.file` | [Prometheus web configuration](https://prometheus.io/docs/prometheus/latest/configuration/https/) (TLS, basic auth) |
+| `--web.listen-address` | Listen address, e.g. `:9559` (overrides `server.address` and `server.port`) |
+| `--healthcheck` | Query the local `/healthz` endpoint and exit 0/1 (container health checks) |
+| `--version` | Print version, commit and build date |
 
-### ntpd (Classic)
+### Environment variables
 
-- **Full support** for all modern versions
-- Kernel state is updated regularly via `ntp_adjtime()`
+| Variable | Default | Description |
+|---|---|---|
+| `NTP_SERVERS` | `pool.ntp.org,time.google.com` (when no pool) | Comma-separated servers (`host` or `host:port`) |
+| `NTP_POOLS` | | Comma-separated pools, `name[:strategy[:max_servers]]` |
+| `NTP_SCRAPE_INTERVAL` | `60s` | Interval between two cycles (5 s to 1 h) |
+| `NTP_SAMPLES` | `4` | Queries per server and per cycle (1 to 20) |
+| `NTP_SAMPLE_SPACING` | `2s` | Delay between two queries to the same server |
+| `NTP_TIMEOUT` | `5s` | Timeout of one query |
+| `NTP_VERSION` | `4` | NTP protocol version (2 to 4) |
+| `NTP_MAX_CONCURRENCY` | `10` | Servers probed in parallel |
+| `NTP_MAX_CLOCK_OFFSET` | `100ms` | Threshold of `ntp_clock_offset_exceeded` |
+| `NTP_CONSENSUS_ENABLED` | enabled with 3+ servers or pools | Consensus and falseticker detection |
+| `NTP_KOD_MAX_BACKOFF` | `1024s` | Longest polling interval after repeated `RATE` |
+| `NTP_KOD_SUSPEND_DURATION` | `1h` | Suspension after `DENY` or `RSTR` |
+| `NTP_KERNEL_ENABLED` | `false` | Kernel option (agent mode, Linux) |
+| `NTP_KERNEL_VIOLATION_ONLY` | `false` | Only expose the bound violation and sync status |
+| `ADAPTIVE_SAMPLING_ENABLED` | `false` | Take more samples when the burst is noisy |
+| `ADAPTIVE_SAMPLING_DEFAULT_SAMPLES` | `4` | Initial burst size |
+| `ADAPTIVE_SAMPLING_MAX_SAMPLES` | `8` | Total samples for a noisy server |
+| `ADAPTIVE_SAMPLING_DISPERSION_THRESHOLD` | `10ms` | Offset standard deviation that triggers more samples |
+| `ADAPTIVE_SAMPLING_MAX_DURATION` | `30s` | Time budget of the sampling of one server |
+| `DNS_CACHE_MIN_TTL` / `DNS_CACHE_MAX_TTL` | `5m` / `60m` | Cache of pool DNS answers |
+| `NTP_EXPORTER_ADDRESS` / `NTP_EXPORTER_PORT` | `0.0.0.0` / `9559` | Listen address |
+| `SERVER_READ_TIMEOUT` / `SERVER_WRITE_TIMEOUT` | `10s` | HTTP timeouts |
+| `WEB_CONFIG_FILE` | | Prometheus web configuration file |
+| `LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn`, `error` |
+| `LOG_FORMAT` | `json` | `json` or `console` |
+| `LOG_ENABLE_FILE` / `LOG_FILE_PATH` | `false` | Also log to a file |
+| `METRICS_NAMESPACE` / `METRICS_SUBSYSTEM` | `ntp` / | Metric name prefix |
+| `METRICS_LABELS` | | Constant labels, `key=value,...` |
 
-### Detection queries
+Deprecated but still accepted: `NTP_ENABLE_KERNEL`, `TLS_ENABLED`,
+`TLS_CERT_FILE`, `TLS_KEY_FILE` (a warning is logged at startup).
 
-Detect if your NTP daemon is not updating the kernel properly:
+When querying the **public NTP pool**, keep `scrape_interval` at 60 s or more:
+the exporter logs a warning otherwise.
 
-```promql
-# NTP measurements show sync, but kernel diverges
-(abs(ntp_offset_seconds) < 0.001) AND
-(ntp_kernel_divergence_seconds > 0.010)
-```
+## Metrics reference
 
-Alert on low coherence (daemon not working):
+Names below use the default `ntp` namespace and no subsystem.
 
-```promql
-# Coherence score < 0.7 = problem
-ntp_kernel_coherence_score < 0.7
-```
+### Per server (`server` label)
 
-### Why hybrid mode?
+| Metric | Description |
+|---|---|
+| `ntp_up` | 1 when the server answered during the last cycle |
+| `ntp_response_valid` | 1 when at least one response was a valid time measurement |
+| `ntp_last_success_timestamp_seconds` | Unix time of the last cycle with a valid response |
+| `ntp_server_info{address,pool,refid,stratum,leap,version}` | Identity of the server (value 1). `refid` is an ASCII code (`GPS`, `PPS`...) for stratum 1, the upstream IPv4 address otherwise |
+| `ntp_offset_seconds` | Offset of the local clock, from the sample with the lowest delay |
+| `ntp_offset_median_seconds` | Median offset of the valid samples |
+| `ntp_clock_offset_exceeded` | 1 when `abs(offset)` exceeds `max_clock_offset` |
+| `ntp_rtt_seconds` | Round-trip delay of the selected sample |
+| `ntp_stratum`, `ntp_leap_indicator`, `ntp_precision_seconds` | Fields of the server response |
+| `ntp_root_delay_seconds`, `ntp_root_dispersion_seconds` | Delay and dispersion to the stratum 1 source |
+| `ntp_root_distance_seconds` | Synchronization distance: `(root delay + rtt) / 2 + root dispersion`, an upper bound of the error of the server time |
+| `ntp_reference_age_seconds` | Time since the server clock was last set or corrected |
+| `ntp_jitter_seconds` | RFC 5905 jitter: `sqrt(Σ(θ₀ − θᵢ)² / (n − 1))`, θ₀ being the offset of the lowest-delay sample |
+| `ntp_offset_stddev_seconds`, `ntp_rtt_stddev_seconds` | Standard deviations of the offsets and delays of the burst |
+| `ntp_samples_count` | Valid samples in the last burst |
+| `ntp_packet_loss_ratio` | Queries without valid response / queries sent |
+| `ntp_target_suspended{code}` | 1 while the server is not queried after `DENY` or `RSTR` |
+| `ntp_kiss_of_death_total{code}` | Kiss-o'-Death packets received |
+| `ntp_invalid_responses_total{reason}` | Queries without valid measurement: `kod`, `unsync`, `stratum`, `root_distance`, `stale_reference`, `invalid_time`, `other`, `timeout` |
 
-The hybrid mode provides superior monitoring compared to kernel-only approaches (like Prometheus `node_exporter` timex collector) because:
+### Consensus (3 valid servers or more)
 
-1. **Direct NTP measurements** bypass daemon issues
-2. **Divergence detection** catches misconfigured daemons
-3. **Coherence score** quantifies NTP/kernel agreement
-4. **Works with all daemons** (even those with kernel bugs)
+| Metric | Description |
+|---|---|
+| `ntp_consensus_offset_seconds` | Offset of the local clock against the consensus (median of the truechimers) |
+| `ntp_consensus_servers` / `ntp_consensus_truechimers` | Servers taking part / agreeing with the consensus |
+| `ntp_offset_from_consensus_seconds{server}` | Offset of a server against the consensus, independent of the local clock |
+| `ntp_falseticker{server}` | 1 when the server interval misses the majority intersection |
 
-**Reference:** Prometheus node_exporter [timex collector documentation](https://github.com/prometheus/node_exporter/blob/master/docs/TIME.md#timex-collector) acknowledges similar daemon compatibility issues.
+### Pools (`pool` label)
 
----
+| Metric | Description |
+|---|---|
+| `ntp_pool_servers_total` | Addresses returned by the last resolution |
+| `ntp_pool_servers_active` | Members with a valid response |
+| `ntp_pool_offset_median_seconds` | Median offset of the valid members |
+| `ntp_pool_dns_resolution_seconds` | Duration of the last real (non cached) resolution |
+
+### Kernel option (`node` label)
+
+| Metric | Description |
+|---|---|
+| `ntp_kernel_sync_status` | 1 when the kernel clock is synchronized (`STA_UNSYNC` not set) |
+| `ntp_kernel_error_bound_violated{server,bound}` | 1 when `abs(offset) − root distance` exceeds the `maxerror` or `esterror` bound announced by the kernel |
+| `ntp_kernel_state{state}` | Clock state returned by `adjtimex` (`synchronized`, `leap_insert_pending`...) |
+| `ntp_kernel_max_error_seconds`, `ntp_kernel_est_error_seconds` | Error bounds maintained by the time daemon |
+| `ntp_kernel_frequency_ppm`, `ntp_kernel_offset_seconds`, `ntp_kernel_tai_offset_seconds` | Frequency correction, residual PLL offset, TAI−UTC |
+
+### Exporter
+
+| Metric | Description |
+|---|---|
+| `ntp_exporter_build_info{version,commit,go_version}` | Build information |
+| `ntp_exporter_cycle_duration_seconds`, `ntp_exporter_scrape_duration_seconds` | Duration of the last cycle / histogram of cycle durations |
+| `ntp_exporter_cycle_overrun_total` | Cycles cut at their deadline |
+| `ntp_exporter_scrapes_total{status}` | Cycles with at least one answering server (`success`) or none (`failure`) |
+| `ntp_exporter_servers_configured` | Servers and pools configured |
+
+Go runtime and process metrics (`go_*`, `process_*`) are also exposed.
+
+### Endpoints
+
+| Path | Description |
+|---|---|
+| `/metrics` | Prometheus metrics |
+| `/healthz` | Liveness (`/health` is kept as an alias) |
+| `/readyz` | 503 until a cycle completed, or when the last cycle is older than 3 intervals |
+
+## Alerting
+
+Recommended rules are provided:
+
+- plain Prometheus: [`deployments/prometheus/ntp-alerts.yml`](deployments/prometheus/ntp-alerts.yml) (`rule_files`)
+- Prometheus Operator: `prometheusRule.enabled=true` in the Helm chart
+
+| Alert | Fires when |
+|---|---|
+| `NTPServerDown` | A server does not answer for 5 minutes |
+| `NTPServerNoValidResponse` | A server answers but only with invalid responses for 10 minutes |
+| `NTPServerUnsynchronized` | A server reports leap indicator 3 |
+| `NTPOffsetTooHigh` | `abs(ntp_offset_seconds)` exceeds 100 ms for 5 minutes |
+| `NTPHighPacketLoss` | More than half of the queries fail over 15 minutes |
+| `NTPKissOfDeathSuspended` | A server sent `DENY` or `RSTR` |
+| `NTPFalseticker` | A server disagrees with the consensus for 10 minutes |
+| `NTPKernelUnsynchronized` | The kernel clock of a node is unsynchronized for 10 minutes |
+| `NTPKernelErrorBoundViolated` | The measured offset exceeds the kernel `maxerror` for 10 minutes |
+| `NTPExporterCycleOverrun` | Cycles hit their deadline |
+
+## Grafana dashboards
+
+Import the dashboards from [`grafana/`](grafana/):
+
+- `ntp-probe-mode.json`: server health, consensus and falsetickers, quality
+- `ntp-agent-mode.json`: clock offset per node, kernel state and error bounds,
+  server health
+
+Both dashboards use a Prometheus data source variable and `server` (and
+`node`) filters.
+
+## Kernel option
+
+With `kernel.enabled`, the exporter also reads the kernel clock state with a
+read-only `adjtimex` call (Linux only). **No privilege is required**: any
+process may call `adjtimex` without modifying the clock, and the real-time
+clock is not namespaced, so a regular container sees the node clock.
+
+The key signal is `ntp_kernel_error_bound_violated`: the time daemon (chrony,
+ntpd, systemd-timesyncd) announces a maximum error (`maxerror`) and an
+estimated error (`esterror`) through the kernel. When the offset measured from
+the outside, minus the measurement uncertainty (root distance), exceeds that
+bound, the daemon underestimates its error: it may be locked on a wrong source.
+Alert on `maxerror` (guaranteed bound, few false positives) and keep `esterror`
+for dashboards (earlier detection, noisier).
+
+The other kernel metrics are equivalent to the `timex` collector of
+node_exporter (`node_timex_*`). If node_exporter already runs on your nodes,
+set `kernel.violation_only` to only expose `ntp_kernel_error_bound_violated`
+and `ntp_kernel_sync_status`.
+
+Notes per daemon:
+
+- **chrony** does not use the kernel PLL: `ntp_kernel_offset_seconds` stays
+  close to 0, which is expected. Old versions (< 1.31) do not maintain
+  `STA_UNSYNC` reliably.
+- **ntpd** and **systemd-timesyncd** maintain the kernel state.
+- **OpenNTPD** < 5.9p1 does not update the kernel flags.
+
+## Security
+
+- Containers run as non-root on a distroless image, with all capabilities
+  dropped, a read-only root filesystem and no host network, in both modes.
+- TLS and basic authentication use the standard
+  [Prometheus web configuration file](https://prometheus.io/docs/prometheus/latest/configuration/https/)
+  (`--web.config.file`, Helm `webConfig.existingSecret`).
+- The exporter only sends NTP client requests (UDP 123) and honors
+  Kiss-o'-Death codes.
 
 ## Troubleshooting
 
-### Exporter not starting
+**The exporter does not start.** The error names the faulty key, variable or
+flag. Unknown YAML keys are rejected: compare with
+[`config-example.yaml`](deployments/docker/config-example.yaml) and the
+[migration guide](MIGRATION.md).
+
+**`ntp_up` is 1 but no offset is exposed.** The server answers with invalid
+responses: check `ntp_invalid_responses_total` by `reason` (for instance
+`kod`, or `unsync` for a server that lost its source).
+
+**`ntp_packet_loss_ratio` is high on a public server.** Check that
+`sample_spacing` is at least 2 s and that `ntp_kiss_of_death_total` stays at 0.
+
+**`ntp_exporter_cycle_overrun_total` increases.** Unreachable servers consume
+`samples_per_server × timeout`. Lower the timeout or the samples, raise
+`max_concurrency` or `scrape_interval`.
+
+**No kernel metrics.** The kernel option is Linux only and must be enabled
+(`NTP_KERNEL_ENABLED=true`, Helm `kernel.enabled=true`); check the logs for
+`adjtimex` errors.
+
+**`/readyz` returns 503.** No cycle completed yet (the first one takes
+`(samples − 1) × sample_spacing` plus the network delays), or the collection
+loop is stuck.
+
+## Development
 
 ```bash
-# Check logs
-docker logs ntp-exporter
-
-# Common issues:
-# - Port 9559 already in use → Change NTP_EXPORTER_PORT
-# - Invalid server address → Check NTP_SERVERS format
-# - Config file not found → Verify mount path
+go test -race ./...                 # unit tests, no network access needed
+golangci-lint run ./...             # lint (.golangci.yml, golangci-lint v2)
+helm lint deployments/kubernetes/helm/ntp-exporter
+docker build -t ntp-exporter:dev .
 ```
 
-### No metrics for a server
+Package layout:
 
-```bash
-# Check if server is reachable
-ntp_server_reachable{server="pool.ntp.org"}
+| Package | Role |
+|---|---|
+| `cmd/ntp-exporter` | Entry point, flags, collection loop |
+| `internal/config` | Loading (YAML, environment), defaults, validation |
+| `internal/probe` | Cycle: target resolution, parallel bursts, Kiss-o'-Death backoff, consensus |
+| `internal/ntp` | NTP client, response validation, statistics, pools and DNS cache, kernel reader |
+| `internal/collector` | `prometheus.Collector` exposing the snapshot of the last cycle |
+| `internal/server` | HTTP server, health endpoints, web configuration |
+| `pkg/metrics`, `pkg/logger` | Exporter counters and registry, logging |
 
-# Check query duration (should be < timeout)
-ntp_query_duration_seconds_bucket
+Contributions are welcome: open an issue or a pull request with tests.
 
-# Verify NTP port (UDP 123) is open
-nc -u -v -z pool.ntp.org 123
-
-# Check DNS resolution
-nslookup pool.ntp.org
-```
-
-### Metrics have wrong prefix
-
-**Problem:** Expected `ntp_offset_seconds` but seeing `ntp_probe_offset_seconds`
-
-**Solution:** Check `METRICS_SUBSYSTEM` environment variable:
-
-```bash
-# Agent/Hybrid mode should use empty subsystem
-METRICS_SUBSYSTEM=""
-
-# Probe mode uses "probe" subsystem
-METRICS_SUBSYSTEM="probe"
-```
-
-### Kernel metrics not appearing
-
-**Problem:** `ntp_kernel_*` metrics are missing in Hybrid/Agent mode
-
-**Checklist:**
-
-1. Verify `NTP_ENABLE_KERNEL=true` is set
-2. Check that you're running on Linux (not supported on Windows/macOS)
-3. Check logs for kernel access errors:
-
-```bash
-kubectl logs -n monitoring ntp-exporter-xxx | grep kernel
-```
-
-### High memory usage
-
-```bash
-# Check memory metrics
-ntp_exporter_memory_allocated_bytes
-ntp_exporter_goroutines_count
-
-# Reduce concurrent queries
-NTP_MAX_CONCURRENCY=5
-
-# Reduce samples per server
-NTP_SAMPLES=1
-
-# Disable adaptive sampling
-ADAPTIVE_SAMPLING_ENABLED=false
-```
-
-### Rate limiting issues
-
-**Symptom:** Frequent "rate limit exceeded" errors
-
-**Solution:**
-
-```bash
-# Increase rate limits
-RATE_LIMIT_GLOBAL=2000
-RATE_LIMIT_PER_SERVER=120
-
-# Or disable (not recommended for production)
-RATE_LIMIT_ENABLED=false
-```
-
-### Circuit breaker opening frequently
-
-**Symptom:** Servers marked as unavailable even though they're reachable
-
-**Solution:**
-
-```bash
-# Increase failure threshold
-CIRCUIT_BREAKER_FAILURE_THRESHOLD=0.8
-
-# Increase timeout
-CIRCUIT_BREAKER_TIMEOUT=60s
-
-# Or disable
-CIRCUIT_BREAKER_ENABLED=false
-```
-
----
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-**Development Guidelines:**
-
-- Write tests for new features
-- Follow Go best practices and conventions
-- Update documentation
-- Add Godoc comments for public APIs
-- Run `go fmt`, `go vet`, and `golangci-lint`
-
----
-
-## Acknowledgments
-
-- Built with [beevik/ntp](https://github.com/beevik/ntp) for NTP protocol implementation
-- Uses [Prometheus client_golang](https://github.com/prometheus/client_golang) for metrics
+Built with [beevik/ntp](https://github.com/beevik/ntp),
+[client_golang](https://github.com/prometheus/client_golang) and
+[exporter-toolkit](https://github.com/prometheus/exporter-toolkit).

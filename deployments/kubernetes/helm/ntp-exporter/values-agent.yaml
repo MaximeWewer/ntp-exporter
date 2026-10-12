@@ -74,8 +74,8 @@ config:
   - 2.pool.ntp.org
   - 3.pool.ntp.org
   metricsPort: 9559
-  scrapeInterval: 30s
-  ntpTimeout: 10s
+  scrapeInterval: 60s
+  ntpTimeout: 5s
   maxClockOffset: 50ms
   logging:
     level: info

@@ -190,6 +190,19 @@ service:
   labels: {}
 
 # ServiceMonitor for Prometheus Operator
+# PrometheusRule with the recommended alerts (Prometheus Operator).
+# The rules assume the default "ntp" metrics namespace and no subsystem.
+prometheusRule:
+  enabled: false
+  namespace: ""
+  additionalLabels: {}
+  # Offset above which NTPOffsetTooHigh fires
+  offsetThresholdSeconds: 0.1
+  # Duration before NTPServerDown fires
+  serverDownFor: 5m
+  # Extra rules appended to the group
+  additionalRules: []
+
 serviceMonitor:
   enabled: false
   namespace: ""

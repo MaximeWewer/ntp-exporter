@@ -42,7 +42,7 @@ services:
       # Request configuration
       NTP_TIMEOUT: "${NTP_TIMEOUT:-10s}"
       NTP_VERSION: "${NTP_VERSION:-4}"
-      NTP_SAMPLES: "${NTP_SAMPLES:-10}"
+      NTP_SAMPLES: "${NTP_SAMPLES:-4}"
       NTP_MAX_CONCURRENCY: "${NTP_MAX_CONCURRENCY:-20}"
 
       # Kernel sync (disabled in probe mode)

@@ -27,7 +27,7 @@ fullnameOverride: ""
 # You can customize this with the full YAML configuration structure
 configYaml:
   enabled: true
-  # Full YAML configuration (matches config.example.yaml structure)
+  # Full YAML configuration (matches deployments/docker/config-example.yaml)
   content: |
     # ============================================================================
     # NTP Exporter Configuration File
@@ -169,6 +169,19 @@ service:
   labels: {}
 
 # ServiceMonitor for Prometheus Operator
+# PrometheusRule with the recommended alerts (Prometheus Operator).
+# The rules assume the default "ntp" metrics namespace and no subsystem.
+prometheusRule:
+  enabled: false
+  namespace: ""
+  additionalLabels: {}
+  # Offset above which NTPOffsetTooHigh fires
+  offsetThresholdSeconds: 0.1
+  # Duration before NTPServerDown fires
+  serverDownFor: 5m
+  # Extra rules appended to the group
+  additionalRules: []
+
 serviceMonitor:
   enabled: true
   namespace: ""
@@ -297,11 +310,7 @@ terminationGracePeriodSeconds: 30
 # 1. Edit the 'configYaml.content' section above
 # 2. Deploy with: helm install ntp-exporter . -f values-with-yaml-config.yaml
 #
-# The ConfigMap allows you to use advanced features not available via env vars:
-# - NTP pools with selection strategies (best_n, round_robin, all)
-# - Adaptive sampling configuration
-# - Worker pool settings
-# - DNS cache customization
-# - TLS/HTTPS configuration
+# A full YAML file keeps every option (pools, Kiss-o'-Death handling, adaptive
+# sampling, DNS cache, kernel option...) in a single reviewed place.
 #
 # Environment variables can still override YAML values if needed
