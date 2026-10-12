@@ -188,15 +188,25 @@ env: []
 # Additional environment variables from ConfigMaps or Secrets
 envFrom: []
 
-# Liveness probe configuration
+# Liveness probe: the process answers
 livenessProbe:
   httpGet:
-    path: /metrics
+    path: /healthz
     port: 9559
-  initialDelaySeconds: 30
+  initialDelaySeconds: 10
   periodSeconds: 10
   timeoutSeconds: 5
   successThreshold: 1
+  failureThreshold: 3
+
+# Readiness probe: a collection cycle completed recently
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 9559
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
   failureThreshold: 3
 
 # Update strategy for DaemonSet

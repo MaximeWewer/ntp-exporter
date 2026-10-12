@@ -11,42 +11,43 @@ import (
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
 	"github.com/maximewewer/ntp-exporter/pkg/logger"
-	"github.com/maximewewer/ntp-exporter/pkg/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Server represents the HTTP server
 type Server struct {
-	config   *config.Config
-	registry *prometheus.Registry
-	metrics  *metrics.NTPMetrics
-	server   *http.Server
+	config    *config.Config
+	registry  *prometheus.Registry
+	readiness ReadinessFunc
+	server    *http.Server
 }
 
 // New creates a new HTTP server
-func New(cfg *config.Config, registry *prometheus.Registry, m *metrics.NTPMetrics) *Server {
+func New(cfg *config.Config, registry *prometheus.Registry, readiness ReadinessFunc) *Server {
 	return &Server{
-		config:   cfg,
-		registry: registry,
-		metrics:  m,
+		config:    cfg,
+		registry:  registry,
+		readiness: readiness,
 	}
+}
+
+// Handler returns the HTTP handler with every route and middleware
+func (s *Server) Handler() http.Handler {
+	handlers := NewHandlers(s.config, s.registry, s.readiness)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/metrics", handlers.MetricsHandler)
+	mux.HandleFunc("/healthz", handlers.LivenessHandler)
+	mux.HandleFunc("/health", handlers.LivenessHandler) // kept for compatibility
+	mux.HandleFunc("/readyz", handlers.ReadinessHandler)
+	mux.HandleFunc("/", handlers.IndexHandler)
+
+	return withMiddleware(mux)
 }
 
 // Start starts the HTTP server
 func (s *Server) Start(ctx context.Context) error {
-	// Create router
-	mux := http.NewServeMux()
-
-	// Register handlers
-	handlers := NewHandlers(s.config, s.registry)
-
-	mux.HandleFunc("/metrics", handlers.MetricsHandler)
-	mux.HandleFunc("/health", handlers.HealthHandler)
-	mux.HandleFunc("/", handlers.IndexHandler)
-
-	// Apply middleware
-	middleware := NewMiddleware(s.config, s.metrics)
-	handler := middleware.Apply(mux)
+	handler := s.Handler()
 
 	// Configure server
 	addr := s.config.Server.Address + ":" + strconv.Itoa(s.config.Server.Port)

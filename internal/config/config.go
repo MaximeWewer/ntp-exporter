@@ -18,7 +18,6 @@
 //	  - NTP_EXPORTER_ADDRESS, NTP_EXPORTER_PORT
 //	  - SERVER_READ_TIMEOUT, SERVER_WRITE_TIMEOUT
 //	  - TLS_ENABLED, TLS_CERT_FILE, TLS_KEY_FILE
-//	  - ENABLE_CORS, ALLOWED_ORIGINS (comma-separated)
 //
 //	NTP:
 //	  - NTP_SERVERS (comma-separated), NTP_TIMEOUT, NTP_VERSION
@@ -71,15 +70,13 @@ type Config struct {
 
 // ServerConfig contains HTTP server configuration
 type ServerConfig struct {
-	Address        string        `yaml:"address"`
-	Port           int           `yaml:"port"`
-	ReadTimeout    time.Duration `yaml:"read_timeout"`
-	WriteTimeout   time.Duration `yaml:"write_timeout"`
-	EnableCORS     bool          `yaml:"enable_cors"`
-	AllowedOrigins []string      `yaml:"allowed_origins"`
-	TLSEnabled     bool          `yaml:"tls_enabled"`
-	TLSCertFile    string        `yaml:"tls_cert_file"`
-	TLSKeyFile     string        `yaml:"tls_key_file"`
+	Address      string        `yaml:"address"`
+	Port         int           `yaml:"port"`
+	ReadTimeout  time.Duration `yaml:"read_timeout"`
+	WriteTimeout time.Duration `yaml:"write_timeout"`
+	TLSEnabled   bool          `yaml:"tls_enabled"`
+	TLSCertFile  string        `yaml:"tls_cert_file"`
+	TLSKeyFile   string        `yaml:"tls_key_file"`
 }
 
 // NTPConfig contains NTP client configuration
@@ -377,8 +374,6 @@ func applyEnvOverrides(cfg *Config) error {
 	e.bool("TLS_ENABLED", &cfg.Server.TLSEnabled)
 	e.string("TLS_CERT_FILE", &cfg.Server.TLSCertFile)
 	e.string("TLS_KEY_FILE", &cfg.Server.TLSKeyFile)
-	e.bool("ENABLE_CORS", &cfg.Server.EnableCORS)
-	e.list("ALLOWED_ORIGINS", &cfg.Server.AllowedOrigins)
 
 	// NTP
 	e.list("NTP_SERVERS", &cfg.NTP.Servers)

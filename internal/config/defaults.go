@@ -17,10 +17,6 @@ func ApplyDefaults(cfg *Config) {
 	if cfg.Server.WriteTimeout == 0 {
 		cfg.Server.WriteTimeout = 10 * time.Second
 	}
-	// Default CORS origins (empty = no CORS)
-	if cfg.Server.AllowedOrigins == nil {
-		cfg.Server.AllowedOrigins = []string{}
-	}
 
 	// NTP defaults
 	if len(cfg.NTP.Servers) == 0 && len(cfg.NTP.Pools) == 0 {

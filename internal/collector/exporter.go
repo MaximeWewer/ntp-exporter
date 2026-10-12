@@ -8,6 +8,8 @@
 package collector
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"sync"
@@ -38,6 +40,7 @@ type Exporter struct {
 	nodeName     string
 
 	mu          sync.RWMutex
+	updatedAt   time.Time
 	last        *probe.CycleResult
 	consensus   *probe.Consensus
 	kernelState *ntp.KernelTimex
@@ -127,9 +130,24 @@ func (e *Exporter) Update(result *probe.CycleResult) {
 		}
 	}
 
+	e.updatedAt = time.Now()
 	e.last = result
 	e.consensus = consensus
 	e.kernelState = kernelState
+}
+
+// Ready returns nil when a cycle has completed recently (within 3 intervals)
+func (e *Exporter) Ready() error {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if e.last == nil {
+		return errors.New("no collection cycle completed yet")
+	}
+	if age := time.Since(e.updatedAt); age > 3*e.cfg.NTP.ScrapeInterval {
+		return fmt.Errorf("last collection cycle is %s old", age.Round(time.Second))
+	}
+	return nil
 }
 
 // updateCounters increments cumulative counters and exporter metrics

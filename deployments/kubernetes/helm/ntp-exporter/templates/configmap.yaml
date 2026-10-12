@@ -24,17 +24,6 @@ data:
       tls_key_file: {{ .Values.config.tls.keyFile | default "" }}
       {{- end }}
       {{- end }}
-      {{- if .Values.config.cors }}
-      {{- if .Values.config.cors.enabled }}
-      enable_cors: {{ .Values.config.cors.enabled }}
-      {{- if .Values.config.cors.allowedOrigins }}
-      allowed_origins:
-      {{- range .Values.config.cors.allowedOrigins }}
-      - {{ . }}
-      {{- end }}
-      {{- end }}
-      {{- end }}
-      {{- end }}
 
     ntp:
       servers:

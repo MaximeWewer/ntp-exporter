@@ -32,9 +32,6 @@ services:
       TLS_CERT_FILE: "${TLS_CERT_FILE:-}"
       TLS_KEY_FILE: "${TLS_KEY_FILE:-}"
 
-      # CORS
-      ENABLE_CORS: "${ENABLE_CORS:-false}"
-      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
 
       # -----------------------------------------------------------------------
       # NTP - NTP client configuration
@@ -85,7 +82,7 @@ services:
 
     # Health check
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:9559/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9559/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

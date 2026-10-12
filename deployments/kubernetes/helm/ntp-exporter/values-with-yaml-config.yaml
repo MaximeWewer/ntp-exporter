@@ -41,8 +41,6 @@ configYaml:
       port: 9559
       read_timeout: 10s
       write_timeout: 10s
-      enable_cors: false
-      allowed_origins: []
       tls_enabled: false
       tls_cert_file: ""
       tls_key_file: ""
@@ -295,6 +293,5 @@ terminationGracePeriodSeconds: 30
 # - Worker pool settings
 # - DNS cache customization
 # - TLS/HTTPS configuration
-# - CORS settings
 #
 # Environment variables can still override YAML values if needed

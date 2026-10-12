@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -72,4 +73,14 @@ func TestRegistry_ConstLabels(t *testing.T) {
 		isRuntime := strings.HasPrefix(mf.GetName(), "go_") || strings.HasPrefix(mf.GetName(), "process_")
 		assert.Equal(t, !isRuntime, hasSite, mf.GetName())
 	}
+}
+
+func TestNTPMetrics_Lint(t *testing.T) {
+	m := NewNTPMetricsWithConfig("ntp", "")
+	m.ExporterScrapesTotal.WithLabelValues("success").Inc()
+	m.KissOfDeathTotal.WithLabelValues("time.example.org", "RATE").Inc()
+	m.InvalidResponsesTotal.WithLabelValues("time.example.org", "kod").Inc()
+	problems, err := testutil.CollectAndLint(m)
+	require.NoError(t, err)
+	assert.Empty(t, problems)
 }

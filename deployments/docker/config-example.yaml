@@ -26,16 +26,6 @@ server:
   # Default: 10s
   write_timeout: 10s
 
-  # Enable CORS (Cross-Origin Resource Sharing) support
-  # Values: true, false
-  # Default: false
-  enable_cors: false
-
-  # List of allowed origins for CORS (if enable_cors: true)
-  # Values: list of full URLs (e.g., ["https://grafana.example.com"])
-  # Default: []
-  allowed_origins: []
-
   # Enable TLS/HTTPS
   # Values: true, false
   # Default: false

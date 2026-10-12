@@ -92,7 +92,7 @@ func main() {
 	defer cancel()
 
 	// Start HTTP server
-	srv := server.New(cfg, registry.GetRegistry(), m)
+	srv := server.New(cfg, registry.GetRegistry(), exporter.Ready)
 	serverErrChan := make(chan error, 1)
 	go func() {
 		serverErrChan <- srv.Start(ctx)

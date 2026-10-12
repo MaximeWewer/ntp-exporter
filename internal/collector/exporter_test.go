@@ -515,3 +515,16 @@ func TestExporter_InvalidResponseReasons(t *testing.T) {
 	assert.Equal(t, 2.0, h.mustValue("ntp_invalid_responses_total", map[string]string{"server": "lossy.example.org", "reason": "timeout"}))
 	h.absent("ntp_invalid_responses_total", map[string]string{"server": "lossy.example.org", "reason": "kod"})
 }
+
+func TestExporter_Ready(t *testing.T) {
+	h := newHarness(t, "a.example.org")
+	h.mock.SetupSuccessfulServer("a.example.org", time.Millisecond, 2)
+
+	assert.ErrorContains(t, h.exporter.Ready(), "no collection cycle")
+
+	h.cycle()
+	assert.NoError(t, h.exporter.Ready())
+
+	h.exporter.updatedAt = time.Now().Add(-4 * h.cfg.NTP.ScrapeInterval)
+	assert.ErrorContains(t, h.exporter.Ready(), "old")
+}
