@@ -411,9 +411,10 @@ Recommended rules are provided:
 
 Import the dashboards from [`grafana/`](grafana/):
 
-- `ntp-probe-mode.json`: server health, consensus and falsetickers, quality
+- `ntp-probe-mode.json`: server health, consensus and falsetickers, quality,
+  NTS key exchange and certificate expiry, `/probe` targets
 - `ntp-agent-mode.json`: clock offset per node, kernel state and error bounds,
-  server health
+  chronyd tracking report against the measured offset, server health, NTS
 
 Both dashboards use a Prometheus data source variable and `server` (and
 `node`) filters.

@@ -1,7 +1,7 @@
 {
   "uid": "ntp-exporter-agent",
   "title": "NTP exporter - Agent",
-  "description": "Clock accuracy of every node, with the optional kernel clock state.",
+  "description": "Clock accuracy of every node, with the optional kernel clock state and chronyd report.",
   "tags": [
     "ntp",
     "time"
@@ -35,10 +35,10 @@
           "uid": "${datasource}"
         },
         "query": {
-          "query": "label_values(ntp_kernel_sync_status, node)",
+          "query": "label_values({__name__=~\"ntp_kernel_sync_status|ntp_chrony_up\"}, node)",
           "refId": "node"
         },
-        "definition": "label_values(ntp_kernel_sync_status, node)",
+        "definition": "label_values({__name__=~\"ntp_kernel_sync_status|ntp_chrony_up\"}, node)",
         "includeAll": true,
         "multi": true,
         "allValue": ".*",
@@ -746,7 +746,7 @@
     },
     {
       "type": "row",
-      "title": "Servers",
+      "title": "chrony (chrony option)",
       "id": 13,
       "collapsed": false,
       "gridPos": {
@@ -754,6 +754,464 @@
         "w": 24,
         "x": 0,
         "y": 29
+      },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "chronyd tracking",
+      "description": "Source selected by chronyd on each node (like chronyc tracking).",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (node) (ntp_chrony_up{node=~\"$node\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (node, refid, source) (ntp_chrony_tracking_info{node=~\"$node\"})",
+          "legendFormat": "",
+          "refId": "B",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (node) (ntp_chrony_stratum{node=~\"$node\"})",
+          "legendFormat": "",
+          "refId": "C",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (node) (ntp_chrony_leap_status{node=~\"$node\"})",
+          "legendFormat": "",
+          "refId": "D",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (node) (ntp_chrony_system_time_offset_seconds{node=~\"$node\"})",
+          "legendFormat": "",
+          "refId": "E",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (node) (ntp_chrony_skew_ppm{node=~\"$node\"})",
+          "legendFormat": "",
+          "refId": "F",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "time() - max by (node) (ntp_chrony_reference_timestamp_seconds{node=~\"$node\"})",
+          "legendFormat": "",
+          "refId": "G",
+          "format": "table",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value #B": true
+            },
+            "renameByName": {
+              "Value #A": "up",
+              "Value #C": "stratum",
+              "Value #D": "leap",
+              "Value #E": "system time offset",
+              "Value #F": "skew",
+              "Value #G": "last update"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "system time offset"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "skew"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ppm"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "last update"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "node",
+            "desc": false
+          }
+        ]
+      },
+      "id": 14,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "chronyd offset vs measured offset",
+      "description": "What chronyd believes against what the exporter measures from the outside. The measured offset is negated to share the sign convention of chronyd.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "ntp_chrony_system_time_offset_seconds{node=~\"$node\"}",
+          "legendFormat": "{{node}} chronyd (positive: slow)",
+          "refId": "A",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "ntp_chrony_last_offset_seconds{node=~\"$node\"}",
+          "legendFormat": "{{node}} chronyd last offset",
+          "refId": "B",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "-ntp_consensus_offset_seconds",
+          "legendFormat": "{{instance}} measured (consensus)",
+          "refId": "C",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 15,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 38
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "chronyd frequency and skew",
+      "description": "",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "ntp_chrony_frequency_ppm{node=~\"$node\"}",
+          "legendFormat": "{{node}} frequency",
+          "refId": "A",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "ntp_chrony_skew_ppm{node=~\"$node\"}",
+          "legendFormat": "{{node}} skew",
+          "refId": "B",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ppm",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 16,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 38
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "chronyd root distance",
+      "description": "Root delay / 2 + root dispersion: error bound of the local clock announced by chronyd.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "ntp_chrony_root_delay_seconds{node=~\"$node\"} / 2 + ntp_chrony_root_dispersion_seconds{node=~\"$node\"}",
+          "legendFormat": "{{node}}",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 17,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 46
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "chronyd update interval",
+      "description": "",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "ntp_chrony_update_interval_seconds{node=~\"$node\"}",
+          "legendFormat": "{{node}}",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 18,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 46
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Servers",
+      "id": 19,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 53
       },
       "panels": []
     },
@@ -949,12 +1407,12 @@
           }
         ]
       },
-      "id": 14,
+      "id": 20,
       "gridPos": {
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 54
       },
       "datasource": {
         "type": "prometheus",
@@ -964,13 +1422,13 @@
     {
       "type": "row",
       "title": "Quality",
-      "id": 15,
+      "id": 21,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 63
       },
       "panels": []
     },
@@ -1021,12 +1479,12 @@
           "sort": "desc"
         }
       },
-      "id": 16,
+      "id": 22,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 40
+        "y": 64
       },
       "datasource": {
         "type": "prometheus",
@@ -1080,12 +1538,12 @@
           "sort": "desc"
         }
       },
-      "id": 17,
+      "id": 23,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 40
+        "y": 64
       },
       "datasource": {
         "type": "prometheus",
@@ -1140,12 +1598,12 @@
           "sort": "desc"
         }
       },
-      "id": 18,
+      "id": 24,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 40
+        "y": 64
       },
       "datasource": {
         "type": "prometheus",
@@ -1199,12 +1657,12 @@
           "sort": "desc"
         }
       },
-      "id": 19,
+      "id": 25,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 48
+        "y": 72
       },
       "datasource": {
         "type": "prometheus",
@@ -1258,12 +1716,12 @@
           "sort": "desc"
         }
       },
-      "id": 20,
+      "id": 26,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 48
+        "y": 72
       },
       "datasource": {
         "type": "prometheus",
@@ -1318,12 +1776,246 @@
           "sort": "desc"
         }
       },
-      "id": 21,
+      "id": 27,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 48
+        "y": 72
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Network Time Security (nts:// servers)",
+      "id": 28,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 80
+      },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "NTS key exchange",
+      "description": "Result of the last NTS-KE (TLS, port 4460), expiry of its certificate and NTP server negotiated by the key exchange. The key exchange runs again every hour.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (server) (ntp_nts_ke_success{server=~\"$server\",server=~\"nts://.*\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (server) (ntp_nts_cert_expiry_timestamp_seconds{server=~\"$server\",server=~\"nts://.*\"}) * 1000",
+          "legendFormat": "",
+          "refId": "B",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (server) (ntp_nts_cert_expiry_timestamp_seconds{server=~\"$server\",server=~\"nts://.*\"}) - time()",
+          "legendFormat": "",
+          "refId": "C",
+          "format": "table",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (server, address) (ntp_server_info{server=~\"$server\",server=~\"nts://.*\"})",
+          "legendFormat": "",
+          "refId": "D",
+          "format": "table",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value #D": true
+            },
+            "renameByName": {
+              "Value #A": "key exchange",
+              "Value #B": "certificate expiry",
+              "Value #C": "expires in",
+              "address": "NTP server"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "certificate expiry"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "expires in"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "key exchange"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "failed",
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "ok",
+                        "color": "green"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "server",
+            "desc": false
+          }
+        ]
+      },
+      "id": 29,
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 81
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Key exchange success",
+      "description": "",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "ntp_nts_ke_success{server=~\"$server\",server=~\"nts://.*\"}",
+          "legendFormat": "{{server}}",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bool",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 30,
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 81
       },
       "datasource": {
         "type": "prometheus",
@@ -1333,13 +2025,13 @@
     {
       "type": "row",
       "title": "Exporter",
-      "id": 22,
+      "id": 31,
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 89
       },
       "panels": []
     },
@@ -1390,12 +2082,12 @@
           "sort": "desc"
         }
       },
-      "id": 23,
+      "id": 32,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 57
+        "y": 90
       },
       "datasource": {
         "type": "prometheus",
@@ -1460,12 +2152,12 @@
           "sort": "desc"
         }
       },
-      "id": 24,
+      "id": 33,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 57
+        "y": 90
       },
       "datasource": {
         "type": "prometheus",
