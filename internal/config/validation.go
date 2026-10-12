@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -77,6 +78,20 @@ func validateNTP(cfg *NTPConfig) error {
 
 	if cfg.ScrapeInterval < MinScrapeInterval || cfg.ScrapeInterval > MaxScrapeInterval {
 		return errors.New("scrape_interval must be between " + MinScrapeInterval.String() + " and " + MaxScrapeInterval.String() + ", got " + cfg.ScrapeInterval.String())
+	}
+
+	if cfg.SampleSpacing < 0 {
+		return errors.New("sample_spacing must not be negative, got " + cfg.SampleSpacing.String())
+	}
+
+	// A burst must fit in a cycle
+	samples := cfg.SamplesPerServer
+	if cfg.AdaptiveSampling.Enabled && cfg.AdaptiveSampling.HighDriftSamples > samples {
+		samples = cfg.AdaptiveSampling.HighDriftSamples
+	}
+	if time.Duration(samples)*cfg.SampleSpacing >= cfg.ScrapeInterval {
+		return errors.New("samples (" + strconv.Itoa(samples) + ") x sample_spacing (" + cfg.SampleSpacing.String() +
+			") must be shorter than scrape_interval (" + cfg.ScrapeInterval.String() + ")")
 	}
 
 	if cfg.MaxClockOffset <= 0 {
@@ -161,4 +176,32 @@ func validateMetrics(cfg *MetricsConfig) error {
 	}
 
 	return nil
+}
+
+// PublicPoolMinInterval is the minimum average polling interval recommended
+// by the NTP Pool Project for a client (64s, the default NTP minpoll)
+const PublicPoolMinInterval = 64 * time.Second
+
+// Warnings returns non-fatal configuration issues, such as polling the
+// public NTP pool more often than its usage policy allows
+func Warnings(cfg *Config) []string {
+	if cfg.NTP.ScrapeInterval >= PublicPoolMinInterval {
+		return nil
+	}
+
+	var warnings []string
+	check := func(host string) {
+		h := strings.ToLower(strings.TrimSuffix(host, "."))
+		if h == "pool.ntp.org" || strings.HasSuffix(h, ".pool.ntp.org") {
+			warnings = append(warnings, host+" is part of the public NTP pool: scrape_interval "+
+				cfg.NTP.ScrapeInterval.String()+" is below the recommended "+PublicPoolMinInterval.String())
+		}
+	}
+	for _, server := range cfg.NTP.Servers {
+		check(server)
+	}
+	for _, pool := range cfg.NTP.Pools {
+		check(pool.Name)
+	}
+	return warnings
 }

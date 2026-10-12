@@ -4,8 +4,9 @@ import "time"
 
 // Query behavior constants
 const (
-	// DelayBetweenSamples is the delay between consecutive NTP samples
-	DelayBetweenSamples = 100 * time.Millisecond
+	// DelayBetweenSamples is the default delay between consecutive NTP samples
+	// sent to the same server (ntpd rejects packets closer than 2s with "limited")
+	DelayBetweenSamples = 2 * time.Second
 
 	// DefaultTimeout is the default timeout for NTP queries
 	DefaultTimeout = 5 * time.Second

@@ -681,3 +681,47 @@ func TestValidate_MaxClockOffsetPositive(t *testing.T) {
 		t.Error("negative max_clock_offset should be rejected")
 	}
 }
+
+func TestValidate_BurstMustFitInInterval(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.NTP.ScrapeInterval = 10 * time.Second
+	cfg.NTP.SamplesPerServer = 5
+	cfg.NTP.SampleSpacing = 2 * time.Second
+	if err := Validate(cfg); err == nil {
+		t.Error("5 samples x 2s must not fit in a 10s interval")
+	}
+
+	cfg.NTP.SamplesPerServer = 4
+	if err := Validate(cfg); err != nil {
+		t.Errorf("4 samples x 2s fit in a 10s interval: %v", err)
+	}
+
+	cfg.NTP.AdaptiveSampling.Enabled = true
+	cfg.NTP.AdaptiveSampling.HighDriftSamples = 10
+	if err := Validate(cfg); err == nil {
+		t.Error("adaptive high drift samples must fit in the interval too")
+	}
+
+	cfg = DefaultConfig()
+	cfg.NTP.SampleSpacing = -time.Second
+	if err := Validate(cfg); err == nil {
+		t.Error("negative sample_spacing must be rejected")
+	}
+}
+
+func TestWarnings_PublicPoolEtiquette(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.NTP.Servers = []string{"0.europe.pool.ntp.org", "time.google.com"}
+	cfg.NTP.Pools = []PoolConfig{{Name: "pool.ntp.org"}}
+	cfg.NTP.ScrapeInterval = 30 * time.Second
+
+	warnings := Warnings(cfg)
+	if len(warnings) != 2 {
+		t.Fatalf("expected 2 warnings, got %v", warnings)
+	}
+
+	cfg.NTP.ScrapeInterval = 64 * time.Second
+	if w := Warnings(cfg); len(w) != 0 {
+		t.Errorf("no warning expected at 64s, got %v", w)
+	}
+}

@@ -44,13 +44,16 @@ func ApplyDefaults(cfg *Config) {
 		cfg.NTP.Version = 4
 	}
 	if cfg.NTP.SamplesPerServer == 0 {
-		cfg.NTP.SamplesPerServer = 3
+		cfg.NTP.SamplesPerServer = 4
+	}
+	if cfg.NTP.SampleSpacing == 0 {
+		cfg.NTP.SampleSpacing = 2 * time.Second
 	}
 	if cfg.NTP.MaxConcurrency == 0 {
 		cfg.NTP.MaxConcurrency = 10
 	}
 	if cfg.NTP.ScrapeInterval == 0 {
-		cfg.NTP.ScrapeInterval = 30 * time.Second
+		cfg.NTP.ScrapeInterval = 60 * time.Second
 	}
 	if cfg.NTP.MaxClockOffset == 0 {
 		cfg.NTP.MaxClockOffset = 100 * time.Millisecond

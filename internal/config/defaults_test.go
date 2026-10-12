@@ -24,7 +24,9 @@ func TestApplyDefaults_EmptyConfig(t *testing.T) {
 	assert.Contains(t, cfg.NTP.Servers, "time.google.com")
 	assert.Equal(t, 5*time.Second, cfg.NTP.Timeout)
 	assert.Equal(t, 4, cfg.NTP.Version)
-	assert.Equal(t, 3, cfg.NTP.SamplesPerServer)
+	assert.Equal(t, 4, cfg.NTP.SamplesPerServer)
+	assert.Equal(t, 2*time.Second, cfg.NTP.SampleSpacing)
+	assert.Equal(t, 60*time.Second, cfg.NTP.ScrapeInterval)
 	assert.Equal(t, 10, cfg.NTP.MaxConcurrency)
 
 	// Rate limiting defaults
@@ -67,7 +69,7 @@ func TestApplyDefaults_PartialConfig(t *testing.T) {
 	assert.Equal(t, 10*time.Second, cfg.Server.ReadTimeout)
 	assert.Equal(t, 10*time.Second, cfg.Server.WriteTimeout)
 	assert.Equal(t, 4, cfg.NTP.Version)
-	assert.Equal(t, 3, cfg.NTP.SamplesPerServer)
+	assert.Equal(t, 4, cfg.NTP.SamplesPerServer)
 	assert.Equal(t, "info", cfg.Logging.Level)
 }
 
@@ -136,7 +138,7 @@ func TestApplyDefaults_ZeroCounters(t *testing.T) {
 	ApplyDefaults(cfg)
 
 	assert.Equal(t, 4, cfg.NTP.Version)
-	assert.Equal(t, 3, cfg.NTP.SamplesPerServer)
+	assert.Equal(t, 4, cfg.NTP.SamplesPerServer)
 	assert.Equal(t, 10, cfg.NTP.MaxConcurrency)
 }
 

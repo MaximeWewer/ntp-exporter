@@ -234,60 +234,77 @@ func TestNTPClient_ContextCancellation(t *testing.T) {
 	assert.Nil(t, resp)
 }
 
-func TestRealNTPClient_Query(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping real NTP test in short mode")
-	}
+func TestClient_QueryLocalServer(t *testing.T) {
+	server := startFakeServer(t, "")
+	client := NewClient(2*time.Second, 4)
 
-	client := NewClient(5*time.Second, 4)
-	ctx := context.Background()
+	resp, err := client.Query(context.Background(), server.addr())
 
-	resp, err := client.Query(ctx, "pool.ntp.org")
+	require.NoError(t, err)
+	assert.True(t, resp.IsValid(), "reason: %s, err: %v", resp.InvalidReason(), resp.ValidateError)
+	assert.Equal(t, uint8(2), resp.Stratum)
+	assert.Less(t, resp.Offset.Abs(), 100*time.Millisecond)
+}
 
-	// May fail due to network issues, but shouldn't panic
-	if err != nil {
-		t.Logf("Real NTP query failed (expected in some environments): %v", err)
-		return
-	}
+func TestClient_QueryLocalServer_KissOfDeath(t *testing.T) {
+	server := startFakeServer(t, "RATE")
+	client := NewClient(2*time.Second, 4)
 
-	assert.NotNil(t, resp)
-	assert.Greater(t, resp.Stratum, uint8(0))
-	assert.Less(t, resp.Stratum, uint8(16))
+	resp, err := client.Query(context.Background(), server.addr())
+
+	require.NoError(t, err, "a KoD is a response, not a transport error")
+	assert.Equal(t, "RATE", resp.KissCode)
+	assert.False(t, resp.IsValid())
+	assert.Equal(t, "kod", resp.InvalidReason())
 }
 
 func TestClient_QueryMultiple(t *testing.T) {
 	client := NewClient(2*time.Second, 4)
 
-	t.Run("successful_multiple_queries", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("Skipping network test in short mode")
+	t.Run("samples_are_spaced", func(t *testing.T) {
+		server := startFakeServer(t, "")
+		client := NewClient(2*time.Second, 4)
+		client.SetSampleSpacing(150 * time.Millisecond)
+
+		responses, err := client.QueryMultiple(context.Background(), server.addr(), 3)
+
+		require.NoError(t, err)
+		assert.Len(t, responses, 3)
+		received := server.requests()
+		require.Len(t, received, 3)
+		for i := 1; i < len(received); i++ {
+			assert.GreaterOrEqual(t, received[i].Sub(received[i-1]), 140*time.Millisecond)
 		}
+	})
 
-		ctx := context.Background()
-		responses, err := client.QueryMultiple(ctx, "pool.ntp.org", 3)
+	t.Run("spacing_honors_context", func(t *testing.T) {
+		server := startFakeServer(t, "")
+		client := NewClient(2*time.Second, 4)
+		client.SetSampleSpacing(time.Hour)
 
-		if err != nil {
-			t.Logf("QueryMultiple failed (may happen in network-restricted environments): %v", err)
-			return
-		}
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		start := time.Now()
+		responses, err := client.QueryMultiple(ctx, server.addr(), 3)
 
-		assert.NotNil(t, responses)
-		assert.Greater(t, len(responses), 0, "Should have at least one successful response")
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.Len(t, responses, 1, "samples received before cancellation are kept")
+		assert.Less(t, time.Since(start), time.Second)
 	})
 
 	t.Run("context_cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		responses, err := client.QueryMultiple(ctx, "pool.ntp.org", 5)
+		responses, err := client.QueryMultiple(ctx, "192.0.2.1", 5)
 
 		assert.Error(t, err)
 		assert.LessOrEqual(t, len(responses), 5)
 	})
 
 	t.Run("unreachable_server", func(t *testing.T) {
-		ctx := context.Background()
-		responses, err := client.QueryMultiple(ctx, "192.0.2.1", 2)
+		client := NewClient(200*time.Millisecond, 4)
+		responses, err := client.QueryMultiple(context.Background(), "192.0.2.1", 2)
 
 		// Should fail with all queries failing
 		assert.Error(t, err)

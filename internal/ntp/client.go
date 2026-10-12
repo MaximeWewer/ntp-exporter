@@ -15,6 +15,8 @@ type Client struct {
 	timeout     time.Duration
 	version     int
 	rateLimiter *RateLimiter
+	// spacing is the delay between two queries of a burst to the same server
+	spacing time.Duration
 }
 
 // Response represents an NTP query response with additional metadata
@@ -43,7 +45,13 @@ func NewClient(timeout time.Duration, version int) *Client {
 		timeout:     timeout,
 		version:     version,
 		rateLimiter: nil,
+		spacing:     DelayBetweenSamples,
 	}
+}
+
+// SetSampleSpacing sets the delay between two queries of a burst
+func (c *Client) SetSampleSpacing(spacing time.Duration) {
+	c.spacing = spacing
 }
 
 // NewClientWithRateLimit creates a new NTP client with rate limiting enabled
@@ -57,6 +65,7 @@ func NewClientWithRateLimit(timeout time.Duration, version int, globalRate, perS
 		timeout:     timeout,
 		version:     version,
 		rateLimiter: limiter,
+		spacing:     DelayBetweenSamples,
 	}
 }
 
@@ -175,9 +184,18 @@ func (c *Client) QueryMultiple(ctx context.Context, server string, count int) ([
 
 		responses = append(responses, resp)
 
-		// Small delay between queries to avoid rate limiting
-		if i < count-1 {
-			time.Sleep(100 * time.Millisecond)
+		// Space queries out: NTP servers rate-limit clients sending packets
+		// closer than 2s (ntpd "discard minimum", chrony "ratelimit")
+		if i < count-1 && c.spacing > 0 {
+			timer := time.NewTimer(c.spacing)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				result := make([]*Response, len(responses))
+				copy(result, responses)
+				return result, ctx.Err()
+			case <-timer.C:
+			}
 		}
 	}
 

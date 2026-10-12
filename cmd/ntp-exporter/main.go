@@ -62,6 +62,10 @@ func main() {
 		"config":     cfg,
 	})
 
+	for _, warning := range config.Warnings(cfg) {
+		logger.Warn("config", warning)
+	}
+
 	// Create metrics registry with custom namespace and subsystem from config
 	registry := metrics.NewRegistryWithConfig(cfg.Metrics.Namespace, cfg.Metrics.Subsystem)
 	if err := registry.Register(); err != nil {
