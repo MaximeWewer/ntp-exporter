@@ -407,6 +407,10 @@ Notes per daemon:
   (`--web.config.file`, Helm `webConfig.existingSecret`).
 - The exporter only sends NTP client requests (UDP 123) and honors
   Kiss-o'-Death codes.
+- `govulncheck` runs in CI on every change. It may report
+  [GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932) at module level:
+  `golang.org/x/crypto` is required (bcrypt, for basic auth) but its
+  deprecated `openpgp` package is not imported nor compiled in the binary.
 - `/probe` sends NTP requests to any host given by the caller, at most
   `max_concurrency` bursts at a time. Restrict who can reach it (network
   policy, basic auth) or disable it with `PROBE_ENDPOINT_ENABLED=false`.

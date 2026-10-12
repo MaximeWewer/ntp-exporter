@@ -46,24 +46,28 @@ jobs:
           IMAGE_NAME_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
           OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
 
-          echo "image_name_lower=${IMAGE_NAME_LOWER}" >> $GITHUB_OUTPUT
-          echo "repository_owner_lower=${OWNER_LOWER}" >> $GITHUB_OUTPUT
+          echo "image_name_lower=${IMAGE_NAME_LOWER}" >> "$GITHUB_OUTPUT"
+          echo "repository_owner_lower=${OWNER_LOWER}" >> "$GITHUB_OUTPUT"
 
           echo "Image name (lowercase): ${IMAGE_NAME_LOWER}"
           echo "Repository owner (lowercase): ${OWNER_LOWER}"
 
       - name: Generate version
         id: get_version
+        env:
+          # Inputs go through the environment, never interpolated in the script
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_VERSION: ${{ github.event.inputs.force_version }}
         run: |
           # If triggered by a tag push, use the tag
-          if [ "${{ github.event_name }}" == "push" ]; then
+          if [ "$EVENT_NAME" == "push" ]; then
             VERSION=${GITHUB_REF#refs/tags/}
             # Remove 'v' prefix if present (for backward compatibility with old tags)
             VERSION="${VERSION#v}"
             echo "Using tag: $VERSION"
           # If force_version is provided in workflow_dispatch, use it
-          elif [ -n "${{ github.event.inputs.force_version }}" ]; then
-            VERSION="${{ github.event.inputs.force_version }}"
+          elif [ -n "$FORCE_VERSION" ]; then
+            VERSION="$FORCE_VERSION"
             # Remove 'v' prefix if present
             VERSION="${VERSION#v}"
             echo "Using forced version: $VERSION"
@@ -84,20 +88,26 @@ jobs:
               VERSION="${YEAR_MONTH}.1"
             else
               # Extract patch version and increment
-              PATCH_VERSION=$(echo "$LATEST_TAG" | sed 's/^.*\.//')
+              PATCH_VERSION="${LATEST_TAG##*.}"
               NEW_PATCH=$((PATCH_VERSION + 1))
               VERSION="${YEAR_MONTH}.${NEW_PATCH}"
             fi
             echo "Auto-generated version: $VERSION"
           fi
 
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          # The version is interpolated in later steps: only accept a plain version
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "Invalid version: $VERSION" >&2
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
           # Check if this is a pre-release (contains -, alpha, beta, rc)
           if [[ "$VERSION" =~ - ]]; then
-            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
           else
-            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
           echo "Release version: ${VERSION}"
@@ -168,7 +178,7 @@ jobs:
             -o "${BINARY_NAME}" \
             ./cmd/ntp-exporter
 
-          echo "BINARY_NAME=${BINARY_NAME}" >> $GITHUB_ENV
+          echo "BINARY_NAME=${BINARY_NAME}" >> "$GITHUB_ENV"
 
       - name: Generate checksums
         run: |
@@ -222,7 +232,7 @@ jobs:
 
       - name: Extract platform architecture
         run: |
-          echo "PLATFORM_ARCH=${platform##*/}" >> $GITHUB_ENV
+          echo "PLATFORM_ARCH=${platform##*/}" >> "$GITHUB_ENV"
         env:
           platform: ${{ matrix.platform }}
 
@@ -306,8 +316,9 @@ jobs:
       - name: Create multiarch manifest and push
         id: manifest-annotate
         run: |
+          mapfile -t tag_args < <(jq -r '.tags[] | "-t", .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
           docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            "${tag_args[@]}" \
             --annotation='index:org.opencontainers.image.description=Modern NTP monitoring exporter for Prometheus' \
             --annotation='index:org.opencontainers.image.source=https://github.com/${{ github.repository }}' \
             --annotation='index:org.opencontainers.image.licenses=Apache-2.0' \
@@ -483,7 +494,7 @@ jobs:
         id: release_notes
         run: |
           # Get previous tag
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ needs.prepare.outputs.version }}^ 2>/dev/null || echo "")
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${{ needs.prepare.outputs.version }}^" 2>/dev/null || echo "")
 
           # Generate changelog
           cat << EOF > release_notes.md
@@ -494,11 +505,13 @@ jobs:
           EOF
 
           if [ -n "$PREVIOUS_TAG" ]; then
-            echo "Changes since ${PREVIOUS_TAG}:" >> release_notes.md
-            echo "" >> release_notes.md
-            git log ${PREVIOUS_TAG}..${{ needs.prepare.outputs.version }} \
-              --pretty=format:"* %s (%h)" \
-              --no-merges >> release_notes.md
+            {
+              echo "Changes since ${PREVIOUS_TAG}:"
+              echo ""
+              git log "${PREVIOUS_TAG}..${{ needs.prepare.outputs.version }}" \
+                --pretty=format:"* %s (%h)" \
+                --no-merges
+            } >> release_notes.md
           else
             echo "Initial release" >> release_notes.md
           fi
@@ -572,7 +585,7 @@ jobs:
 
       - name: Generate release summary
         run: |
-          cat << EOF >> $GITHUB_STEP_SUMMARY
+          cat << EOF >> "$GITHUB_STEP_SUMMARY"
           ## Release ${{ needs.prepare.outputs.version }} Created Successfully
 
           ### Artifacts Published
@@ -625,8 +638,10 @@ jobs:
 
       - name: Verification summary
         run: |
-          echo "## Release Verification Completed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "All artifacts have been successfully verified:" >> $GITHUB_STEP_SUMMARY
-          echo "- Docker image is pullable and inspectable" >> $GITHUB_STEP_SUMMARY
-          echo "- Helm chart is available in OCI registry" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Release Verification Completed"
+            echo ""
+            echo "All artifacts have been successfully verified:"
+            echo "- Docker image is pullable and inspectable"
+            echo "- Helm chart is available in OCI registry"
+          } >> "$GITHUB_STEP_SUMMARY"
