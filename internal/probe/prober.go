@@ -156,10 +156,22 @@ func (p *Prober) resolve(ctx context.Context, server string) (string, error) {
 		return "", fmt.Errorf("no address found for %s", host)
 	}
 
+	address := preferIPv4(addrs)
 	if port != "" {
-		return net.JoinHostPort(addrs[0], port), nil
+		return net.JoinHostPort(address, port), nil
 	}
-	return addrs[0], nil
+	return address, nil
+}
+
+// preferIPv4 returns the first IPv4 address, or the first address when the
+// host only has IPv6 ones: IPv4 connectivity is the most common baseline
+func preferIPv4(addrs []string) string {
+	for _, a := range addrs {
+		if ip := net.ParseIP(a); ip != nil && ip.To4() != nil {
+			return a
+		}
+	}
+	return addrs[0]
 }
 
 // probe measures a target unless the Kiss-o'-Death backoff forbids it

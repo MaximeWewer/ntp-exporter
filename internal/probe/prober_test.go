@@ -266,3 +266,8 @@ func TestMeasurement_BestIgnoresInvalidSamples(t *testing.T) {
 
 	assert.Equal(t, 7*time.Millisecond, m.Best().Offset)
 }
+
+func TestPreferIPv4(t *testing.T) {
+	assert.Equal(t, "192.0.2.1", preferIPv4([]string{"2001:db8::1", "192.0.2.1"}))
+	assert.Equal(t, "2001:db8::1", preferIPv4([]string{"2001:db8::1"}))
+}
