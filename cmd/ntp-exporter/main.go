@@ -17,10 +17,11 @@ import (
 
 	"github.com/maximewewer/ntp-exporter/internal/collector"
 	"github.com/maximewewer/ntp-exporter/internal/config"
+	"github.com/maximewewer/ntp-exporter/internal/logger"
+	"github.com/maximewewer/ntp-exporter/internal/metrics"
+	"github.com/maximewewer/ntp-exporter/internal/ntp"
 	"github.com/maximewewer/ntp-exporter/internal/probe"
 	"github.com/maximewewer/ntp-exporter/internal/server"
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
-	"github.com/maximewewer/ntp-exporter/pkg/metrics"
 	"github.com/prometheus/exporter-toolkit/web"
 )
 
@@ -99,7 +100,9 @@ func main() {
 
 	// A single prober queries every target once per cycle; the exporter
 	// exposes the measurements of the last cycle at scrape time
-	prober := probe.New(cfg, probe.NewClient(cfg))
+	client := ntp.NewClient(cfg.NTP.Timeout, cfg.NTP.Version)
+	client.SetSampleSpacing(cfg.NTP.SampleSpacing)
+	prober := probe.New(cfg, client)
 	exporter := collector.NewExporter(cfg, m)
 	if err := registry.RegisterCollector(exporter); err != nil {
 		logger.Fatal("main", "Failed to register NTP collector", err)

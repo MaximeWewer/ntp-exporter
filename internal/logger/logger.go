@@ -144,13 +144,6 @@ func Warn(pkg, message string) {
 		Msg(message)
 }
 
-// Warnf logs a formatted warning message
-func Warnf(pkg, format string, args ...interface{}) {
-	Logger.Warn().
-		Str("package", pkg).
-		Msgf(format, args...)
-}
-
 // Error logs an error message
 func Error(pkg, message string, err error) {
 	Logger.Error().

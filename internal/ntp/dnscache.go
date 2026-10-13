@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"github.com/maximewewer/ntp-exporter/internal/logger"
 )
 
 // DNSCacheEntry represents a cached DNS resolution

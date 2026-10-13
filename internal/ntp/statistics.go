@@ -43,7 +43,7 @@ func CalculateStatistics(responses []*Response, totalSamples int) *Statistics {
 	}
 
 	// Calculate median offset
-	stats.MedianOffset = time.Duration(median(offsets) * float64(time.Second))
+	stats.MedianOffset = time.Duration(Median(offsets) * float64(time.Second))
 
 	// Calculate mean offset
 	stats.MeanOffset = time.Duration(mean(offsets) * float64(time.Second))
@@ -74,7 +74,8 @@ func calculatePacketLoss(received, total int) float64 {
 // median calculates the median value of a slice of float64 values.
 // For even-length slices, returns the average of the two middle values.
 // Returns 0 if the slice is empty.
-func median(values []float64) float64 {
+// Median returns the median of values, 0 when empty
+func Median(values []float64) float64 {
 	if len(values) == 0 {
 		return 0
 	}

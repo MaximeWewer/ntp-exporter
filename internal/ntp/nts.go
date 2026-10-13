@@ -12,7 +12,7 @@ import (
 
 	"github.com/beevik/ntp"
 	"github.com/beevik/nts"
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"github.com/maximewewer/ntp-exporter/internal/logger"
 )
 
 // NTSScheme prefixes the servers queried with Network Time Security (RFC 8915)
@@ -198,7 +198,7 @@ func (c *NTSClient) Burst(ctx context.Context, host string, count int) NTSResult
 	var lastErr error
 	for i := 0; i < count; i++ {
 		if i > 0 {
-			if err := wait(ctx, c.spacing); err != nil {
+			if err := Wait(ctx, c.spacing); err != nil {
 				lastErr = err
 				break
 			}
@@ -307,8 +307,8 @@ func (c *NTSClient) query(ctx context.Context, session ntsSession) (*ntp.Respons
 	}
 }
 
-// wait waits for d unless the context ends first
-func wait(ctx context.Context, d time.Duration) error {
+// Wait waits for d unless the context ends first
+func Wait(ctx context.Context, d time.Duration) error {
 	if d <= 0 {
 		return nil
 	}

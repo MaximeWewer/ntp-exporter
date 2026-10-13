@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/maximewewer/ntp-exporter/internal/ntp"
+)
 
 // ApplyDefaults sets default values for unspecified configuration fields
 func ApplyDefaults(cfg *Config) {
@@ -48,7 +52,7 @@ func ApplyDefaults(cfg *Config) {
 		cfg.NTP.SamplesPerServer = 4
 	}
 	if cfg.NTP.Chrony.Address == "" {
-		cfg.NTP.Chrony.Address = "udp://127.0.0.1:323"
+		cfg.NTP.Chrony.Address = ntp.DefaultChronyAddress
 	}
 	if cfg.NTP.IPFamily == "" {
 		cfg.NTP.IPFamily = IPFamilyAuto

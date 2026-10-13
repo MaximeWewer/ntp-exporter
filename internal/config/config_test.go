@@ -41,7 +41,7 @@ metrics:
 	err := os.WriteFile(configFile, []byte(configContent), 0644)
 	require.NoError(t, err)
 
-	cfg, err := LoadFromYamlFile(configFile)
+	cfg, err := LoadFromYamlWithEnvOverrides(configFile)
 
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
@@ -54,7 +54,7 @@ metrics:
 }
 
 func TestLoadFromYamlFile_FileNotFound(t *testing.T) {
-	cfg, err := LoadFromYamlFile("/nonexistent/config.yaml")
+	cfg, err := LoadFromYamlWithEnvOverrides("/nonexistent/config.yaml")
 
 	assert.Error(t, err)
 	assert.Nil(t, cfg)
@@ -69,7 +69,7 @@ func TestLoadFromYamlFile_InvalidYAML(t *testing.T) {
 	err := os.WriteFile(configFile, []byte("server:\n  port: [\n    invalid"), 0644)
 	require.NoError(t, err)
 
-	cfg, err := LoadFromYamlFile(configFile)
+	cfg, err := LoadFromYamlWithEnvOverrides(configFile)
 
 	assert.Error(t, err)
 	assert.Nil(t, cfg)
@@ -91,7 +91,7 @@ server:
 	err := os.WriteFile(configFile, []byte(configContent), 0644)
 	require.NoError(t, err)
 
-	cfg, err := LoadFromYamlFile(configFile)
+	cfg, err := LoadFromYamlWithEnvOverrides(configFile)
 
 	assert.Error(t, err)
 	assert.Nil(t, cfg)
@@ -274,7 +274,7 @@ metrics:
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = LoadFromYamlFile(configFile)
+		_, _ = LoadFromYamlWithEnvOverrides(configFile)
 	}
 }
 
@@ -307,7 +307,7 @@ func TestLoadFromYamlFile_UnknownKeyRejected(t *testing.T) {
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte("ntp:\n  servers: [time.google.com]\n  scrape_intervall: 30s\n"), 0o644))
 
-	cfg, err := LoadFromYamlFile(configFile)
+	cfg, err := LoadFromYamlWithEnvOverrides(configFile)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "scrape_intervall")
 	assert.Nil(t, cfg)
@@ -345,7 +345,7 @@ func TestLoadFromYamlFile_PoolDefaults(t *testing.T) {
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte("ntp:\n  pools:\n    - name: pool.ntp.org\n"), 0o644))
 
-	cfg, err := LoadFromYamlFile(configFile)
+	cfg, err := LoadFromYamlWithEnvOverrides(configFile)
 	require.NoError(t, err)
 	assert.Equal(t, 4, cfg.NTP.Pools[0].MaxServers)
 	assert.Equal(t, "best_n", cfg.NTP.Pools[0].Strategy)

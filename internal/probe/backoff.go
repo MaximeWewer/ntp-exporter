@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"github.com/maximewewer/ntp-exporter/internal/logger"
 )
 
 // Kiss-o'-Death codes handled by the backoff (RFC 5905 §7.4)

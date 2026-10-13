@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
+	"github.com/maximewewer/ntp-exporter/internal/ntp"
 	"github.com/maximewewer/ntp-exporter/internal/ntp/ntptest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -171,7 +172,7 @@ func TestProber_CancelledDuringSpacing(t *testing.T) {
 	m := p.Run(ctx).Measurements[0]
 	require.Len(t, m.Responses, 1, "the first answer is kept")
 	assert.Equal(t, 1, mock.GetCallCount(v4))
-	assert.True(t, errors.Is(sleep(ctx, time.Hour), context.DeadlineExceeded))
+	assert.True(t, errors.Is(ntp.Wait(ctx, time.Hour), context.DeadlineExceeded))
 }
 
 func TestProber_PoolMembersFilteredByFamily(t *testing.T) {

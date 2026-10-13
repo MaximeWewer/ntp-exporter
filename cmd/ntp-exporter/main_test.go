@@ -15,9 +15,9 @@ import (
 
 	"github.com/maximewewer/ntp-exporter/internal/collector"
 	"github.com/maximewewer/ntp-exporter/internal/config"
+	"github.com/maximewewer/ntp-exporter/internal/metrics"
 	"github.com/maximewewer/ntp-exporter/internal/ntp/ntptest"
 	"github.com/maximewewer/ntp-exporter/internal/probe"
-	"github.com/maximewewer/ntp-exporter/pkg/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -101,7 +101,7 @@ func TestMedian(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := median(tt.values)
+			result := Median(tt.values)
 			assert.InDelta(t, tt.expected, result, 0.01)
 		})
 	}
@@ -204,7 +204,7 @@ func BenchmarkMedian(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = median(values)
+		_ = Median(values)
 	}
 }
 

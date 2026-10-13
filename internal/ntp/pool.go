@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"github.com/maximewewer/ntp-exporter/internal/logger"
 )
 
 // Pool is an NTP pool: a DNS name resolving to several servers

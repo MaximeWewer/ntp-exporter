@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"github.com/maximewewer/ntp-exporter/internal/logger"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -109,7 +109,7 @@ func quote(s string) string {
 	return string(append(out, '"'))
 }
 
-// loggerAdapter adapts pkg/logger to the promhttp logger interface
+// loggerAdapter adapts internal/logger to the promhttp logger interface
 type loggerAdapter struct{}
 
 func (l *loggerAdapter) Println(v ...interface{}) {

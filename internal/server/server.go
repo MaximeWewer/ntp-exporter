@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"github.com/maximewewer/ntp-exporter/internal/logger"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/exporter-toolkit/web"
 )

@@ -17,11 +17,10 @@ import (
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
+	"github.com/maximewewer/ntp-exporter/internal/logger"
+	"github.com/maximewewer/ntp-exporter/internal/metrics"
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
 	"github.com/maximewewer/ntp-exporter/internal/probe"
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
-	"github.com/maximewewer/ntp-exporter/pkg/mathutil"
-	"github.com/maximewewer/ntp-exporter/pkg/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -477,7 +476,7 @@ func (e *Exporter) collectPool(ch chan<- prometheus.Metric, pool probe.PoolResul
 
 	gauge(ch, d.poolActive, float64(len(offsets)), pool.Name)
 	if len(offsets) > 0 {
-		gauge(ch, d.poolOffset, mathutil.Median(offsets), pool.Name)
+		gauge(ch, d.poolOffset, ntp.Median(offsets), pool.Name)
 	}
 }
 

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"github.com/maximewewer/ntp-exporter/internal/logger"
 )
 
 // withMiddleware wraps the handler with request logging and panic recovery

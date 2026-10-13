@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/beevik/ntp"
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"github.com/maximewewer/ntp-exporter/internal/logger"
 )
 
 // NTPQuerier is an interface for querying NTP servers
@@ -205,13 +205,9 @@ func (c *Client) QueryMultiple(ctx context.Context, server string, count int) ([
 
 		// Space queries out: NTP servers rate-limit clients sending packets
 		// closer than 2s (ntpd "discard minimum", chrony "ratelimit")
-		if i < count-1 && c.spacing > 0 {
-			timer := time.NewTimer(c.spacing)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return responses, sent, ctx.Err()
-			case <-timer.C:
+		if i < count-1 {
+			if err := Wait(ctx, c.spacing); err != nil {
+				return responses, sent, err
 			}
 		}
 	}

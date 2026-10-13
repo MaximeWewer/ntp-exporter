@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
+	"github.com/maximewewer/ntp-exporter/internal/logger"
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -346,7 +346,7 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 	var err error
 	if samples > 0 {
 		if len(m.Responses) > 0 {
-			err = sleep(ctx, p.cfg.NTP.SampleSpacing)
+			err = ntp.Wait(ctx, p.cfg.NTP.SampleSpacing)
 		}
 		if err == nil {
 			var responses []*ntp.Response
@@ -457,19 +457,4 @@ func (p *Prober) lookup(ctx context.Context, hostPort string) ([]string, error) 
 		return nil, fmt.Errorf("failed to resolve %s: %w", host, err)
 	}
 	return addrs, nil
-}
-
-// sleep waits for d unless the context ends first
-func sleep(ctx context.Context, d time.Duration) error {
-	if d <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
 }

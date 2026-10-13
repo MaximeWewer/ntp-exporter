@@ -5,7 +5,6 @@
 //	LoadFromEnvVarsOnly()                     - Environment variables ONLY
 //	                                            Use: Docker, Kubernetes (no ConfigMap)
 //
-//	LoadFromYamlFile(path)                    - YAML file ONLY (no env overrides)
 //	                                            Use: Local development, testing
 //
 //	LoadFromYamlWithEnvOverrides(path)        - YAML base + Environment overrides
@@ -203,23 +202,6 @@ type MetricsConfig struct {
 	Subsystem string `yaml:"subsystem"`
 	// Labels are constant labels added to every exporter metric
 	Labels map[string]string `yaml:"labels"`
-}
-
-// LoadFromYamlFile reads configuration from a YAML file only (no env var overrides)
-// Use case: Local development, testing
-func LoadFromYamlFile(path string) (*Config, error) {
-	cfg, err := readYamlFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	ApplyDefaults(cfg)
-
-	if err := Validate(cfg); err != nil {
-		return nil, fmt.Errorf("configuration validation failed for %s: %w", path, err)
-	}
-
-	return cfg, nil
 }
 
 // LoadFromYamlWithEnvOverrides loads base config from YAML, then overrides with environment variables

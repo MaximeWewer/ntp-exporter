@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/maximewewer/ntp-exporter/internal/ntp"
 )
 
 // DefaultMaxRootDistance is the MAXDIST of ntpd: a server whose root distance
@@ -81,7 +83,7 @@ func validateServer(cfg *ServerConfig) error {
 
 // validateServerName accepts host, host:port and nts://host[:port]
 func validateServerName(server string) error {
-	host := strings.TrimPrefix(server, NTSScheme)
+	host := strings.TrimPrefix(server, ntp.NTSScheme)
 	if host == "" || strings.ContainsAny(host, "/ ") {
 		return errors.New("invalid server " + strconv.Quote(server) + ": expected host, host:port or nts://host[:port]")
 	}
@@ -92,7 +94,7 @@ func validateServerName(server string) error {
 // insensitive and the default port (123, or 4460 for NTS) is implied
 func serverKey(server string) string {
 	key := strings.ToLower(server)
-	if strings.HasPrefix(key, NTSScheme) {
+	if strings.HasPrefix(key, ntp.NTSScheme) {
 		return strings.TrimSuffix(key, ":4460")
 	}
 	if host, port, err := net.SplitHostPort(key); err == nil && port == "123" {
@@ -100,9 +102,6 @@ func serverKey(server string) string {
 	}
 	return key
 }
-
-// NTSScheme prefixes the servers queried with Network Time Security
-const NTSScheme = "nts://"
 
 // validateChronyAddress accepts udp://host:port and unix:///path
 func validateChronyAddress(address string) error {

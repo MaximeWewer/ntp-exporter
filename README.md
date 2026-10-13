@@ -598,7 +598,7 @@ Package layout:
 | `internal/ntp` | NTP and NTS clients, response validation, statistics, pools and DNS cache, kernel reader, chronyd client |
 | `internal/collector` | `prometheus.Collector` exposing the snapshot of the last cycle, `/probe` handler |
 | `internal/server` | HTTP server, health endpoints, web configuration |
-| `pkg/metrics`, `pkg/logger` | Exporter counters and registry, logging |
+| `internal/metrics`, `internal/logger` | Exporter counters and registry, logging |
 
 Releases follow `YEAR.MONTH_INDEX.RELEASE_INDEX` (for instance `2026.6.3`,
 tag `v2026.6.3`, no leading zero): push a `v*.*.*` tag, or run the *Build and

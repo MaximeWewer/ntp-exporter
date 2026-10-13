@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
+	"github.com/maximewewer/ntp-exporter/internal/metrics"
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
 	"github.com/maximewewer/ntp-exporter/internal/ntp/ntptest"
 	"github.com/maximewewer/ntp-exporter/internal/probe"
-	"github.com/maximewewer/ntp-exporter/pkg/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"

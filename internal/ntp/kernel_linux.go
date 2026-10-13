@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/maximewewer/ntp-exporter/pkg/logger"
+	"github.com/maximewewer/ntp-exporter/internal/logger"
 	"golang.org/x/sys/unix"
 )
 

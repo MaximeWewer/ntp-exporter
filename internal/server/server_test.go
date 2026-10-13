@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
-	"github.com/maximewewer/ntp-exporter/pkg/metrics"
+	"github.com/maximewewer/ntp-exporter/internal/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
