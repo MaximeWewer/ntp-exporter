@@ -56,8 +56,7 @@ groups:
       severity: critical
     annotations:
       summary: NTP server {{ $labels.server }} disagrees with the other servers
-      description: Its correctness interval misses the intersection of the majority of servers (offset from consensus {{ with printf "ntp_offset_from_consensus_seconds{server='%s'}" $labels.server | query
-        }}{{ . | first | value | humanizeDuration }}{{ end }}).
+      description: Its correctness interval misses the intersection of the majority of servers (offset from consensus {{ with printf "ntp_offset_from_consensus_seconds{server='%s'}" $labels.server | query }}{{ . | first | value | humanizeDuration }}{{ end }}).
   - alert: NTPNTSKeyExchangeFailed
     expr: ntp_nts_ke_success == 0
     for: 15m

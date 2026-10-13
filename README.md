@@ -577,12 +577,16 @@ loop is stuck.
 go test -race ./...                 # unit tests, no network access needed
 golangci-lint run ./...             # lint (.golangci.yml, golangci-lint v2)
 govulncheck ./...                   # known vulnerabilities
-helm lint deployments/kubernetes/helm/ntp-exporter
+.github/scripts/check-deployments.sh   # Helm + kubeconform, promtool, compose
 docker build -t ntp-exporter:dev .
 act -W .github/workflows/quality-assurance.yml   # run the CI locally (nektos/act)
 ```
 
-Under act, steps uploading artifacts and SARIF reports are skipped.
+Under act, steps uploading artifacts and SARIF reports are skipped. The
+alerting rules in `deployments/prometheus/ntp-alerts.yml` are generated from
+the Helm template: after changing it, run
+`.github/scripts/check-deployments.sh --update-rules`. A Go test checks that
+the dashboards and the rules only query metrics the exporter exposes.
 
 Package layout:
 
