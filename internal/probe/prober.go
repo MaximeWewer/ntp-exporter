@@ -120,11 +120,15 @@ func (p *Prober) Run(ctx context.Context) *CycleResult {
 	return result
 }
 
-// resolveTargets builds the list of targets: configured servers then pool members
+// resolveTargets builds the list of targets: configured servers then pool
+// members. A pool member already listed as a server or returned by another
+// pool is skipped: it is queried once per cycle and its series stay unique.
 func (p *Prober) resolveTargets(ctx context.Context, result *CycleResult) []Target {
 	targets := make([]Target, 0, len(p.cfg.NTP.Servers))
+	seen := make(map[string]bool, len(p.cfg.NTP.Servers))
 	for _, server := range p.cfg.NTP.Servers {
 		targets = append(targets, Target{Server: server})
+		seen[server] = true
 	}
 
 	for _, pool := range p.pools {
@@ -144,6 +148,14 @@ func (p *Prober) resolveTargets(ctx context.Context, result *CycleResult) []Targ
 			continue
 		}
 		for _, member := range p.families.filter(members) {
+			if seen[member] {
+				logger.SafeDebug("probe", "Pool member already probed, skipped", map[string]interface{}{
+					"pool":   pool.Name(),
+					"member": member,
+				})
+				continue
+			}
+			seen[member] = true
 			targets = append(targets, Target{Server: member, Pool: pool.Name(), Address: member})
 		}
 	}

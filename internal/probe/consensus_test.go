@@ -70,3 +70,25 @@ func TestComputeConsensus_NeedsThreeValidServers(t *testing.T) {
 		kod,
 	}))
 }
+
+func TestComputeConsensus_SameAddressVotesOnce(t *testing.T) {
+	ms := time.Millisecond
+	alias := serverMeasurement("ntp.example.org", 300*ms, 10*ms)
+	alias.Target.Address = "192.0.2.9"
+	member := serverMeasurement("192.0.2.9", 300*ms, 10*ms)
+	member.Target.Address = "192.0.2.9"
+
+	// Counted twice, the server reached under two names would tie with the
+	// two others and prevent the majority
+	c := ComputeConsensus([]*Measurement{
+		serverMeasurement("a", 0, 10*ms),
+		serverMeasurement("b", ms, 10*ms),
+		alias,
+		member,
+	})
+
+	require.NotNil(t, c)
+	assert.Equal(t, 3, c.Servers)
+	assert.True(t, c.Majority)
+	assert.Equal(t, map[string]bool{"ntp.example.org": true}, c.Falsetickers)
+}

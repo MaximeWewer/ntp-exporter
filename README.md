@@ -140,7 +140,8 @@ Every `scrape_interval` (60 s by default), the exporter runs one **cycle**:
    members become targets. With `ip_family: auto`, address families without a
    route on the host are skipped, and a dual-stack server is queried over the
    family that answered last: when it does not answer, the other family is
-   tried in the same cycle.
+   tried in the same cycle. A pool member already listed as a server, or
+   returned by another pool, is probed once, under its first name.
 2. **Burst**: each target receives `samples_per_server` queries spaced by
    `sample_spacing` (2 s: NTP servers rate-limit clients sending packets closer
    than that). Up to `max_concurrency` targets are probed in parallel.
@@ -504,7 +505,8 @@ For the full chronyd state (every source, server statistics), run
 ## Troubleshooting
 
 **The exporter does not start.** The error names the faulty key, variable or
-flag. Unknown YAML keys are rejected: compare with
+flag. A server or pool listed twice is rejected (host names are case
+insensitive, `:123` and NTS `:4460` are implied). Unknown YAML keys are rejected: compare with
 [`config-example.yaml`](deployments/docker/config-example.yaml).
 
 **`ntp_up` is 1 but no offset is exposed.** The server answers with invalid

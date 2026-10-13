@@ -716,3 +716,37 @@ func TestValidate_ServerNames(t *testing.T) {
 	cfg.NTP.Pools = []PoolConfig{{Name: "nts://pool.example.org", MaxServers: 4}}
 	assert.ErrorContains(t, Validate(cfg), "NTS is only supported for servers")
 }
+
+func TestValidateNTP_DuplicateTargets(t *testing.T) {
+	tests := []struct {
+		name    string
+		servers []string
+		pools   []string
+		wantErr string
+	}{
+		{"same server twice", []string{"a.example.org", "a.example.org"}, nil, `server "a.example.org" is listed twice`},
+		{"host names are case insensitive", []string{"a.example.org", "A.example.org"}, nil, "listed twice"},
+		{"default NTP port", []string{"a.example.org", "a.example.org:123"}, nil, "listed twice"},
+		{"default NTS port", []string{"nts://a.example.org", "nts://a.example.org:4460"}, nil, "listed twice"},
+		{"same pool twice", nil, []string{"pool.ntp.org", "pool.ntp.org"}, `pool "pool.ntp.org" is listed twice`},
+		{"other port", []string{"a.example.org", "a.example.org:1123"}, nil, ""},
+		{"NTP and NTS", []string{"a.example.org", "nts://a.example.org"}, nil, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.NTP.Servers = tt.servers
+			for _, p := range tt.pools {
+				cfg.NTP.Pools = append(cfg.NTP.Pools, PoolConfig{Name: p, Strategy: "all", MaxServers: 4})
+			}
+
+			err := Validate(cfg)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorContains(t, err, tt.wantErr)
+			}
+		})
+	}
+}

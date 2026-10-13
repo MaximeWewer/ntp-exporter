@@ -37,13 +37,22 @@ type interval struct {
 // ComputeConsensus applies Marzullo's intersection algorithm (the basis of
 // the RFC 5905 selection algorithm) to the correctness intervals
 // [offset - root distance, offset + root distance] of the valid servers.
-// It returns nil with fewer than MinConsensusServers valid servers.
+// It returns nil with fewer than MinConsensusServers valid servers. A server
+// reached through several names (a host name and a pool member resolving to
+// the same address) votes once.
 func ComputeConsensus(measurements []*Measurement) *Consensus {
 	var intervals []interval
+	voted := make(map[string]bool, len(measurements))
 	for _, m := range measurements {
 		best := m.Best()
 		if best == nil || m.SuspendCode != "" {
 			continue
+		}
+		if addr := m.Target.Address; addr != "" {
+			if voted[addr] {
+				continue
+			}
+			voted[addr] = true
 		}
 		distance := best.RootDistance
 		if distance < 0 {

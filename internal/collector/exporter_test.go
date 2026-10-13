@@ -200,6 +200,20 @@ func TestExporter_Pool(t *testing.T) {
 	assert.Equal(t, 1.0, h.mustValue("ntp_up", srv(member)))
 }
 
+func TestExporter_PoolMemberAlsoConfiguredIsProbedOnce(t *testing.T) {
+	const addr = "192.0.2.50"
+	h := newHarness(t, addr)
+	h.cfg.NTP.Pools = []config.PoolConfig{{Name: addr, Strategy: "all", MaxServers: 4}}
+	h.mock.SetupSuccessfulServer(addr, time.Millisecond, 2)
+
+	h.cycle()
+
+	// value() fails on any Gather error, such as duplicate series
+	assert.Equal(t, 1.0, h.mustValue("ntp_up", srv(addr)))
+	assert.Equal(t, 3, h.mock.GetCallCount(addr), "one burst per cycle")
+	assert.Equal(t, 1.0, h.mustValue("ntp_pool_servers_total", map[string]string{"pool": addr}))
+}
+
 func TestExporter_RemovedTargetsDisappear(t *testing.T) {
 	h := newHarness(t)
 	h.mock.SetupKoDServer("192.0.2.1", "RATE")

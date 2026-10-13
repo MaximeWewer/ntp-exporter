@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -79,6 +80,19 @@ func validateServerName(server string) error {
 		return errors.New("invalid server " + strconv.Quote(server) + ": expected host, host:port or nts://host[:port]")
 	}
 	return nil
+}
+
+// serverKey normalizes a server for duplicate detection: host names are case
+// insensitive and the default port (123, or 4460 for NTS) is implied
+func serverKey(server string) string {
+	key := strings.ToLower(server)
+	if strings.HasPrefix(key, NTSScheme) {
+		return strings.TrimSuffix(key, ":4460")
+	}
+	if host, port, err := net.SplitHostPort(key); err == nil && port == "123" {
+		return host
+	}
+	return key
 }
 
 // NTSScheme prefixes the servers queried with Network Time Security
@@ -172,17 +186,31 @@ func validateNTP(cfg *NTPConfig, probeOnly bool) error {
 		return errors.New("max_concurrency must be between 1 and 100, got " + strconv.Itoa(cfg.MaxConcurrency))
 	}
 
+	// Each server and pool is listed once: duplicates would expose the same
+	// series twice and query the server twice per cycle
+	servers := make(map[string]bool, len(cfg.Servers))
 	for _, server := range cfg.Servers {
 		if err := validateServerName(server); err != nil {
 			return err
 		}
+		key := serverKey(server)
+		if servers[key] {
+			return errors.New("server " + strconv.Quote(server) + " is listed twice")
+		}
+		servers[key] = true
 	}
 
 	// Validate pools
+	pools := make(map[string]bool, len(cfg.Pools))
 	for i, pool := range cfg.Pools {
 		if pool.Name == "" {
 			return errors.New("pool[" + strconv.Itoa(i) + "]: name is required")
 		}
+		key := strings.ToLower(pool.Name)
+		if pools[key] {
+			return errors.New("pool " + strconv.Quote(pool.Name) + " is listed twice")
+		}
+		pools[key] = true
 		if strings.Contains(pool.Name, "://") {
 			return errors.New("pool[" + strconv.Itoa(i) + "]: name must be a DNS name (NTS is only supported for servers)")
 		}
