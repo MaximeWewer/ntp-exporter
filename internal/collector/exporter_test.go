@@ -119,7 +119,9 @@ func TestExporter_ValidResponseIsPublished(t *testing.T) {
 	assert.Equal(t, 3.0, h.mustValue("ntp_samples_count", srv(server)))
 	assert.Equal(t, 1.0, h.mustValue("ntp_response_valid", srv(server)))
 	h.absent("ntp_server_trust_score", nil)
-	h.absent("ntp_invalid_responses_total", srv(server))
+	assert.Equal(t, 0.0, h.mustValue("ntp_invalid_responses_total", map[string]string{"server": server, "reason": "unsync"}),
+		"created at 0 for the unsynchronized server alert")
+	h.absent("ntp_invalid_responses_total", map[string]string{"server": server, "reason": "kod"})
 	assert.InDelta(t, float64(time.Now().Unix()), h.mustValue("ntp_last_success_timestamp_seconds", srv(server)), 5)
 	assert.Equal(t, 1.0, h.mustValue("ntp_exporter_cycles_total", map[string]string{"status": "success"}))
 }

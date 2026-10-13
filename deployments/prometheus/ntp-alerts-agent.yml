@@ -1,0 +1,88 @@
+# NTP exporter alerting rules for plain Prometheus (rule_files), agent mode.
+# Generated from the Helm PrometheusRule template (deployments/kubernetes/helm/ntp-exporter/templates/prometheusrule.yaml):
+# .github/scripts/check-deployments.sh --update-rules
+groups:
+# Rules shared by both modes: the exporter itself
+- name: ntp-exporter
+  rules:
+  - alert: NTPExporterDown
+    expr: up{job=~".*ntp.*"} == 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: NTP exporter {{ $labels.instance }} cannot be scraped
+      description: Prometheus fails to scrape {{ $labels.instance }} ({{ $labels.job }}) for 5 minutes.
+  - alert: NTPExporterAbsent
+    expr: absent(up{job=~".*ntp.*"})
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: No NTP exporter is scraped
+      description: "No scrape target matches job=~\".*ntp.*\", so time synchronization is not monitored."
+  - alert: NTPExporterCycleOverrun
+    expr: increase(ntp_exporter_cycle_overrun_total[15m]) > 0
+    labels:
+      severity: info
+    annotations:
+      summary: NTP exporter {{ $labels.instance }} cycles hit their deadline
+      description: Some targets did not answer before the end of the cycle. Lower samples_per_server or the timeout, or raise collection_interval.
+# Agent mode: the clock of each node, one alert per node
+- name: ntp-exporter-agent
+  rules:
+  - alert: NTPNodeClockOffset
+    expr: min by (node) (abs(ntp_offset_seconds) - ntp_root_distance_seconds) > 0.1
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Clock of {{ $labels.node }} is off by more than 0.1s
+      description: Even against its best reference server, beyond the measurement uncertainty, the clock of {{ $labels.node }} is off by {{ $value | humanizeDuration }}.
+  - alert: NTPReferenceServerDown
+    expr: count by (server) (ntp_up == 0) > 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: Reference server {{ $labels.server }} does not answer
+      description: Nodes getting no answer from their reference server {{ $labels.server }} for a while ({{ $value }} node(s)).
+  - alert: NTPKernelUnsynchronized
+    expr: ntp_kernel_sync_status == 0
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Kernel clock of {{ $labels.node }} is not synchronized
+      description: The time daemon of the node does not discipline the kernel clock (STA_UNSYNC).
+  - alert: NTPKernelErrorBoundViolated
+    expr: min_over_time(ntp_kernel_error_bound_violated[10m]) == 1
+    labels:
+      severity: critical
+    annotations:
+      summary: Time daemon of {{ $labels.node }} underestimates its error
+      description: The offset measured against the reference server, beyond its root distance, exceeds the maximum error announced by the kernel for 10 minutes.
+  - alert: NTPChronyDown
+    expr: ntp_chrony_up == 0
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: chronyd of {{ $labels.node }} cannot be read
+      description: The tracking report of chronyd is not available (chronyd stopped, socket or command port not reachable).
+  - alert: NTPChronyUnsynchronized
+    expr: ntp_chrony_leap_status == 3
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: chronyd of {{ $labels.node }} is not synchronized
+      description: chronyd has no selected source (leap status 3).
+  - alert: NTPChronyStale
+    expr: time() - ntp_chrony_reference_timestamp_seconds > 3600
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: chronyd of {{ $labels.node }} did not update the clock for a long time
+      description: The last clock update of chronyd is {{ $value | humanizeDuration }} old.

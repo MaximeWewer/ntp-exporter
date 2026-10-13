@@ -1,0 +1,134 @@
+# NTP exporter alerting rules for plain Prometheus (rule_files), probe mode.
+# Generated from the Helm PrometheusRule template (deployments/kubernetes/helm/ntp-exporter/templates/prometheusrule.yaml):
+# .github/scripts/check-deployments.sh --update-rules
+groups:
+# Rules shared by both modes: the exporter itself
+- name: ntp-exporter
+  rules:
+  - alert: NTPExporterDown
+    expr: up{job=~".*ntp.*"} == 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: NTP exporter {{ $labels.instance }} cannot be scraped
+      description: Prometheus fails to scrape {{ $labels.instance }} ({{ $labels.job }}) for 5 minutes.
+  - alert: NTPExporterAbsent
+    expr: absent(up{job=~".*ntp.*"})
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: No NTP exporter is scraped
+      description: "No scrape target matches job=~\".*ntp.*\", so time synchronization is not monitored."
+  - alert: NTPExporterCycleOverrun
+    expr: increase(ntp_exporter_cycle_overrun_total[15m]) > 0
+    labels:
+      severity: info
+    annotations:
+      summary: NTP exporter {{ $labels.instance }} cycles hit their deadline
+      description: Some targets did not answer before the end of the cycle. Lower samples_per_server or the timeout, or raise collection_interval.
+# Probe mode: health of the NTP servers, one alert per server whatever the
+# number of replicas
+- name: ntp-exporter-probe
+  rules:
+  - alert: NTPServerDown
+    expr: max by (server) (ntp_up) == 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: NTP server {{ $labels.server }} does not answer
+      description: No response from {{ $labels.server }} during the last collection cycles.
+  - alert: NTPServerNoValidResponse
+    expr: max by (server) (ntp_response_valid) == 0
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: NTP server {{ $labels.server }} only returns invalid responses
+      description: The server answers but its responses cannot be used (Kiss-o'-Death, unsynchronized, invalid stratum...). See ntp_invalid_responses_total for the reason.
+  - alert: NTPServerUnsynchronized
+    expr: sum by (server) (increase(ntp_invalid_responses_total{reason="unsync"}[10m])) > 0
+    labels:
+      severity: warning
+    annotations:
+      summary: NTP server {{ $labels.server }} reports it is not synchronized
+      description: The server announced leap indicator 3 (alarm condition).
+  - alert: NTPHighPacketLoss
+    expr: max by (server) (avg_over_time(ntp_packet_loss_ratio[15m])) > 0.5 and on (server) max by (server) (ntp_up) == 1
+    labels:
+      severity: info
+    annotations:
+      summary: High packet loss towards {{ $labels.server }}
+      description: More than half of the queries to {{ $labels.server }} went unanswered over 15 minutes, while it still answers.
+  - alert: NTPKissOfDeathSuspended
+    expr: max by (server, code) (ntp_target_suspended) == 1
+    labels:
+      severity: warning
+    annotations:
+      summary: NTP server {{ $labels.server }} refused access ({{ $labels.code }})
+      description: The server sent a {{ $labels.code }} Kiss-o'-Death code; the exporter stopped querying it for a while.
+  - alert: NTPFalseticker
+    expr: max by (server) (ntp_falseticker) == 1
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: NTP server {{ $labels.server }} disagrees with the other servers
+      description: Its offset lies outside the intersection of the majority of servers.
+  - alert: NTPNoConsensusMajority
+    expr: max by (job) (ntp_consensus_majority) == 0
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: The NTP servers do not agree
+      description: No majority of the servers agrees on the time, so no falseticker can be identified. Add servers or check them.
+  - alert: NTPRootDistanceHigh
+    expr: min by (server) (ntp_root_distance_seconds) > 1
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: NTP server {{ $labels.server }} is far from its reference
+      description: Its root distance ({{ $value | humanizeDuration }}), the upper bound of its error, exceeds 1s.
+  - alert: NTPReferenceStale
+    expr: min by (server) (ntp_reference_age_seconds) > 3600
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: NTP server {{ $labels.server }} did not update its clock for a long time
+      description: The last update of its clock is {{ $value | humanizeDuration }} old, it may run on its own oscillator (holdover).
+  - alert: NTPPoolDegraded
+    expr: max by (pool) (ntp_pool_servers_active) < 2
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: Fewer than 2 valid servers in pool {{ $labels.pool }}
+      description: Only {{ $value }} member(s) of {{ $labels.pool }} returned a valid time.
+  - alert: NTPNTSKeyExchangeFailed
+    expr: max by (server) (ntp_nts_ke_success) == 0
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: NTS key exchange with {{ $labels.server }} fails
+      description: The NTS-KE server (TLS, port 4460) does not deliver keys; authenticated time is not available from {{ $labels.server }}.
+  - alert: NTPNTSCertificateExpiringSoon
+    expr: min by (server) (ntp_nts_cert_expiry_timestamp_seconds) - time() < 14 * 86400
+    labels:
+      severity: warning
+    annotations:
+      summary: NTS certificate of {{ $labels.server }} expires soon
+      description: The certificate of the NTS key exchange server expires in {{ $value | humanizeDuration }}.
+  - alert: NTPProbeFailed
+    expr: ntp_probe_success == 0
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: /probe of {{ $labels.instance }} fails
+      description: The NTP target scraped through /probe gives no valid time for 10 minutes.

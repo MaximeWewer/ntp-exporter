@@ -226,6 +226,8 @@ func (e *Exporter) updateCounters(result *probe.CycleResult) {
 			continue
 		}
 		server := meas.Target.Server
+		// Created at 0 so that increase() sees the first unsynchronized answer
+		m.InvalidResponsesTotal.WithLabelValues(server, ntp.ReasonUnsync)
 		for _, resp := range meas.Responses {
 			if resp.IsKissOfDeath() {
 				m.KissOfDeathTotal.WithLabelValues(server, resp.KissCode).Inc()

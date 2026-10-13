@@ -430,25 +430,42 @@ Go runtime and process metrics (`go_*`, `process_*`) are also exposed.
 
 ## Alerting
 
-Recommended rules are provided:
+Recommended rules are provided for each mode, aggregated so that one cause
+fires one alert (a server down is one alert, whatever the number of replicas
+or nodes):
 
-- plain Prometheus: [`deployments/prometheus/ntp-alerts.yml`](deployments/prometheus/ntp-alerts.yml) (`rule_files`)
-- Prometheus Operator: `prometheusRule.enabled=true` in the Helm chart
+- plain Prometheus (`rule_files`):
+  [`ntp-alerts-probe.yml`](deployments/prometheus/ntp-alerts-probe.yml) or
+  [`ntp-alerts-agent.yml`](deployments/prometheus/ntp-alerts-agent.yml)
+- Prometheus Operator: `prometheusRule.enabled=true` in the Helm chart, which
+  creates the rules of the mode of the release
 
-| Alert | Fires when |
-|---|---|
-| `NTPServerDown` | A server does not answer for 5 minutes |
-| `NTPServerNoValidResponse` | A server answers but only with invalid responses for 10 minutes |
-| `NTPServerUnsynchronized` | A server reports leap indicator 3 |
-| `NTPOffsetTooHigh` | `abs(ntp_offset_seconds)` exceeds 100 ms for 5 minutes |
-| `NTPHighPacketLoss` | More than half of the queries fail over 15 minutes |
-| `NTPKissOfDeathSuspended` | A server sent `DENY` or `RSTR` |
-| `NTPFalseticker` | A server disagrees with the consensus for 10 minutes |
-| `NTPNTSKeyExchangeFailed` | The NTS key exchange of a server fails for 15 minutes |
-| `NTPNTSCertificateExpiringSoon` | The NTS key exchange certificate expires within 14 days |
-| `NTPKernelUnsynchronized` | The kernel clock of a node is unsynchronized for 10 minutes |
-| `NTPKernelErrorBoundViolated` | The offset against the reference server exceeds the kernel maximum error for 10 minutes |
-| `NTPExporterCycleOverrun` | Cycles hit their deadline |
+| Alert | Mode | Fires when |
+|---|---|---|
+| `NTPExporterDown` / `NTPExporterAbsent` | both | The exporter cannot be scraped / no exporter is scraped (`prometheusRule.jobSelector`) |
+| `NTPExporterCycleOverrun` | both | Cycles hit their deadline |
+| `NTPServerDown` | probe | A server does not answer for 5 minutes |
+| `NTPServerNoValidResponse` | probe | A server answers but only with invalid responses for 10 minutes |
+| `NTPServerUnsynchronized` | probe | A server reports leap indicator 3 |
+| `NTPHighPacketLoss` | probe | More than half of the queries to an answering server are lost over 15 minutes |
+| `NTPKissOfDeathSuspended` | probe | A server sent `DENY` or `RSTR` |
+| `NTPFalseticker` | probe | A server disagrees with the majority for 10 minutes |
+| `NTPNoConsensusMajority` | probe | No majority of the servers agrees for 15 minutes |
+| `NTPRootDistanceHigh` | probe | The root distance of a server exceeds 1 s for 15 minutes |
+| `NTPReferenceStale` | probe | A server did not update its clock for 1 hour (holdover) |
+| `NTPPoolDegraded` | probe | Fewer than 2 valid members in a pool for 15 minutes |
+| `NTPNTSKeyExchangeFailed` | probe | The NTS key exchange of a server fails for 15 minutes |
+| `NTPNTSCertificateExpiringSoon` | probe | The NTS key exchange certificate expires within 14 days |
+| `NTPProbeFailed` | probe | A `/probe` target gives no valid time for 10 minutes |
+| `NTPNodeClockOffset` | agent | Against its best reference server, beyond the root distance, a node is off by more than 100 ms for 10 minutes |
+| `NTPReferenceServerDown` | agent | A reference server does not answer (one alert per server, with the number of nodes) |
+| `NTPKernelUnsynchronized` | agent | The kernel clock of a node is unsynchronized for 10 minutes |
+| `NTPKernelErrorBoundViolated` | agent | The offset against the reference server exceeds the kernel maximum error for 10 minutes |
+| `NTPChronyDown` / `NTPChronyUnsynchronized` | agent | chronyd cannot be read / has no selected source for 10 minutes |
+| `NTPChronyStale` | agent | chronyd did not update the clock for 1 hour |
+
+Thresholds are Helm values (`prometheusRule.*`); the plain files use the
+defaults.
 
 ## Grafana dashboards
 
@@ -590,7 +607,7 @@ act -W .github/workflows/quality-assurance.yml   # run the CI locally (nektos/ac
 ```
 
 Under act, steps uploading artifacts and SARIF reports are skipped. The
-alerting rules in `deployments/prometheus/ntp-alerts.yml` are generated from
+alerting rules in `deployments/prometheus/ntp-alerts-*.yml` are generated from
 the Helm template: after changing it, run
 `.github/scripts/check-deployments.sh --update-rules`. A Go test checks that
 the dashboards and the rules only query metrics the exporter exposes.

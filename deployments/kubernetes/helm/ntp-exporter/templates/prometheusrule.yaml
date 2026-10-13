@@ -1,28 +1,58 @@
 {{- if .Values.prometheusRule.enabled }}
+{{- $r := .Values.prometheusRule }}
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: {{ include "ntp-exporter.fullname" . }}
-  namespace: {{ .Values.prometheusRule.namespace | default .Release.Namespace }}
+  namespace: {{ $r.namespace | default .Release.Namespace }}
   labels:
     {{- include "ntp-exporter.labels" . | nindent 4 }}
-    {{- with .Values.prometheusRule.additionalLabels }}
+    {{- with $r.additionalLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   groups:
+  # Rules shared by both modes: the exporter itself
   - name: ntp-exporter
     rules:
+    - alert: NTPExporterDown
+      expr: up{ {{- $r.jobSelector -}} } == 0
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: NTP exporter {{`{{ $labels.instance }}`}} cannot be scraped
+        description: Prometheus fails to scrape {{`{{ $labels.instance }}`}} ({{`{{ $labels.job }}`}}) for 5 minutes.
+    - alert: NTPExporterAbsent
+      expr: absent(up{ {{- $r.jobSelector -}} })
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: No NTP exporter is scraped
+        description: {{ printf "No scrape target matches %s, so time synchronization is not monitored." $r.jobSelector | quote }}
+    - alert: NTPExporterCycleOverrun
+      expr: increase(ntp_exporter_cycle_overrun_total[15m]) > 0
+      labels:
+        severity: info
+      annotations:
+        summary: NTP exporter {{`{{ $labels.instance }}`}} cycles hit their deadline
+        description: Some targets did not answer before the end of the cycle. Lower samples_per_server or the timeout, or raise collection_interval.
+{{- if eq (include "ntp-exporter.mode" .) "probe" }}
+  # Probe mode: health of the NTP servers, one alert per server whatever the
+  # number of replicas
+  - name: ntp-exporter-probe
+    rules:
     - alert: NTPServerDown
-      expr: ntp_up == 0
-      for: {{ .Values.prometheusRule.serverDownFor }}
+      expr: max by (server) (ntp_up) == 0
+      for: {{ $r.serverDownFor }}
       labels:
         severity: warning
       annotations:
         summary: NTP server {{`{{ $labels.server }}`}} does not answer
         description: No response from {{`{{ $labels.server }}`}} during the last collection cycles.
     - alert: NTPServerNoValidResponse
-      expr: ntp_response_valid == 0
+      expr: max by (server) (ntp_response_valid) == 0
       for: 10m
       labels:
         severity: warning
@@ -30,44 +60,68 @@ spec:
         summary: NTP server {{`{{ $labels.server }}`}} only returns invalid responses
         description: The server answers but its responses cannot be used (Kiss-o'-Death, unsynchronized, invalid stratum...). See ntp_invalid_responses_total for the reason.
     - alert: NTPServerUnsynchronized
-      expr: increase(ntp_invalid_responses_total{reason="unsync"}[10m]) > 0
+      expr: sum by (server) (increase(ntp_invalid_responses_total{reason="unsync"}[10m])) > 0
       labels:
         severity: warning
       annotations:
         summary: NTP server {{`{{ $labels.server }}`}} reports it is not synchronized
         description: The server announced leap indicator 3 (alarm condition).
-    - alert: NTPOffsetTooHigh
-      expr: abs(ntp_offset_seconds) > {{ .Values.prometheusRule.offsetThresholdSeconds }}
-      for: 5m
-      labels:
-        severity: warning
-      annotations:
-        summary: Clock offset of {{`{{ $value | humanizeDuration }}`}} against {{`{{ $labels.server }}`}}
-        description: The local clock and {{`{{ $labels.server }}`}} disagree by more than {{ .Values.prometheusRule.offsetThresholdSeconds }}s.
     - alert: NTPHighPacketLoss
-      expr: avg_over_time(ntp_packet_loss_ratio[15m]) > 0.5
+      expr: max by (server) (avg_over_time(ntp_packet_loss_ratio[15m])) > 0.5 and on (server) max by (server) (ntp_up) == 1
       labels:
         severity: info
       annotations:
         summary: High packet loss towards {{`{{ $labels.server }}`}}
-        description: More than half of the queries to {{`{{ $labels.server }}`}} went without a valid answer over 15 minutes.
+        description: More than half of the queries to {{`{{ $labels.server }}`}} went unanswered over 15 minutes, while it still answers.
     - alert: NTPKissOfDeathSuspended
-      expr: ntp_target_suspended == 1
+      expr: max by (server, code) (ntp_target_suspended) == 1
       labels:
         severity: warning
       annotations:
         summary: NTP server {{`{{ $labels.server }}`}} refused access ({{`{{ $labels.code }}`}})
         description: The server sent a {{`{{ $labels.code }}`}} Kiss-o'-Death code; the exporter stopped querying it for a while.
     - alert: NTPFalseticker
-      expr: ntp_falseticker == 1
+      expr: max by (server) (ntp_falseticker) == 1
       for: 10m
       labels:
-        severity: critical
+        severity: warning
       annotations:
         summary: NTP server {{`{{ $labels.server }}`}} disagrees with the other servers
-        description: Its correctness interval misses the intersection of the majority of servers (offset from consensus {{`{{ with printf "ntp_offset_from_consensus_seconds{server='%s'}" $labels.server | query }}{{ . | first | value | humanizeDuration }}{{ end }}`}}).
+        description: Its offset lies outside the intersection of the majority of servers.
+    - alert: NTPNoConsensusMajority
+      expr: max by (job) (ntp_consensus_majority) == 0
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: The NTP servers do not agree
+        description: No majority of the servers agrees on the time, so no falseticker can be identified. Add servers or check them.
+    - alert: NTPRootDistanceHigh
+      expr: min by (server) (ntp_root_distance_seconds) > {{ $r.rootDistanceThresholdSeconds }}
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: NTP server {{`{{ $labels.server }}`}} is far from its reference
+        description: Its root distance ({{`{{ $value | humanizeDuration }}`}}), the upper bound of its error, exceeds {{ $r.rootDistanceThresholdSeconds }}s.
+    - alert: NTPReferenceStale
+      expr: min by (server) (ntp_reference_age_seconds) > {{ $r.referenceStaleSeconds }}
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: NTP server {{`{{ $labels.server }}`}} did not update its clock for a long time
+        description: The last update of its clock is {{`{{ $value | humanizeDuration }}`}} old, it may run on its own oscillator (holdover).
+    - alert: NTPPoolDegraded
+      expr: max by (pool) (ntp_pool_servers_active) < 2
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: Fewer than 2 valid servers in pool {{`{{ $labels.pool }}`}}
+        description: Only {{`{{ $value }}`}} member(s) of {{`{{ $labels.pool }}`}} returned a valid time.
     - alert: NTPNTSKeyExchangeFailed
-      expr: ntp_nts_ke_success == 0
+      expr: max by (server) (ntp_nts_ke_success) == 0
       for: 15m
       labels:
         severity: warning
@@ -75,12 +129,40 @@ spec:
         summary: NTS key exchange with {{`{{ $labels.server }}`}} fails
         description: The NTS-KE server (TLS, port 4460) does not deliver keys; authenticated time is not available from {{`{{ $labels.server }}`}}.
     - alert: NTPNTSCertificateExpiringSoon
-      expr: ntp_nts_cert_expiry_timestamp_seconds - time() < {{ .Values.prometheusRule.ntsCertExpiryDays | default 14 }} * 86400
+      expr: min by (server) (ntp_nts_cert_expiry_timestamp_seconds) - time() < {{ $r.ntsCertExpiryDays }} * 86400
       labels:
         severity: warning
       annotations:
         summary: NTS certificate of {{`{{ $labels.server }}`}} expires soon
         description: The certificate of the NTS key exchange server expires in {{`{{ $value | humanizeDuration }}`}}.
+    - alert: NTPProbeFailed
+      expr: ntp_probe_success == 0
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: /probe of {{`{{ $labels.instance }}`}} fails
+        description: The NTP target scraped through /probe gives no valid time for 10 minutes.
+{{- else }}
+  # Agent mode: the clock of each node, one alert per node
+  - name: ntp-exporter-agent
+    rules:
+    - alert: NTPNodeClockOffset
+      expr: min by (node) (abs(ntp_offset_seconds) - ntp_root_distance_seconds) > {{ $r.offsetThresholdSeconds }}
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: Clock of {{`{{ $labels.node }}`}} is off by more than {{ $r.offsetThresholdSeconds }}s
+        description: Even against its best reference server, beyond the measurement uncertainty, the clock of {{`{{ $labels.node }}`}} is off by {{`{{ $value | humanizeDuration }}`}}.
+    - alert: NTPReferenceServerDown
+      expr: count by (server) (ntp_up == 0) > 0
+      for: {{ $r.serverDownFor }}
+      labels:
+        severity: warning
+      annotations:
+        summary: Reference server {{`{{ $labels.server }}`}} does not answer
+        description: Nodes getting no answer from their reference server {{`{{ $labels.server }}`}} for a while ({{`{{ $value }}`}} node(s)).
     - alert: NTPKernelUnsynchronized
       expr: ntp_kernel_sync_status == 0
       for: 10m
@@ -96,14 +178,32 @@ spec:
       annotations:
         summary: Time daemon of {{`{{ $labels.node }}`}} underestimates its error
         description: The offset measured against the reference server, beyond its root distance, exceeds the maximum error announced by the kernel for 10 minutes.
-    - alert: NTPExporterCycleOverrun
-      expr: increase(ntp_exporter_cycle_overrun_total[15m]) > 0
+    - alert: NTPChronyDown
+      expr: ntp_chrony_up == 0
+      for: 10m
       labels:
-        severity: info
+        severity: warning
       annotations:
-        summary: NTP exporter collection cycles hit their deadline
-        description: Some targets did not answer before the end of the cycle. Lower samples_per_server or the timeout, or raise scrape_interval.
-    {{- with .Values.prometheusRule.additionalRules }}
+        summary: chronyd of {{`{{ $labels.node }}`}} cannot be read
+        description: The tracking report of chronyd is not available (chronyd stopped, socket or command port not reachable).
+    - alert: NTPChronyUnsynchronized
+      expr: ntp_chrony_leap_status == 3
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: chronyd of {{`{{ $labels.node }}`}} is not synchronized
+        description: chronyd has no selected source (leap status 3).
+    - alert: NTPChronyStale
+      expr: time() - ntp_chrony_reference_timestamp_seconds > {{ $r.chronyStaleSeconds }}
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: chronyd of {{`{{ $labels.node }}`}} did not update the clock for a long time
+        description: The last clock update of chronyd is {{`{{ $value | humanizeDuration }}`}} old.
+{{- end }}
+    {{- with $r.additionalRules }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 {{- end }}

@@ -163,16 +163,25 @@ service:
 
 # ServiceMonitor for Prometheus Operator
 # PrometheusRule with the recommended alerts (Prometheus Operator).
-# The rules assume the default "ntp" metrics namespace and no subsystem.
+# One rule group for the mode of the release, plus the exporter rules.
 prometheusRule:
   enabled: false
   namespace: ""
   additionalLabels: {}
-  # Offset above which NTPOffsetTooHigh fires
+  # Selector of the exporter scrape jobs (NTPExporterDown, NTPExporterAbsent)
+  jobSelector: 'job=~".*ntp.*"'
+  # Agent: offset of a node beyond the measurement uncertainty (NTPNodeClockOffset)
   offsetThresholdSeconds: 0.1
-  # Duration before NTPServerDown fires
+  # Duration before NTPServerDown / NTPReferenceServerDown fire
   serverDownFor: 5m
-  # Extra rules appended to the group
+  # Probe: root distance above which a server is flagged (NTPRootDistanceHigh)
+  rootDistanceThresholdSeconds: 1
+  # Probe: age of the server reference above which it is flagged (NTPReferenceStale)
+  referenceStaleSeconds: 3600
+  # Agent: age of the last chronyd clock update (NTPChronyStale)
+  chronyStaleSeconds: 3600
+  # Days before the NTS certificate expiry when NTPNTSCertificateExpiringSoon fires
+  ntsCertExpiryDays: 14
   additionalRules: []
 
 serviceMonitor:

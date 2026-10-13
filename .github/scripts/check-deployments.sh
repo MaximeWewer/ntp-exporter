@@ -9,7 +9,6 @@ update_rules=false
 [ "${1:-}" = "--update-rules" ] && update_rules=true
 
 chart=deployments/kubernetes/helm/ntp-exporter
-rules=deployments/prometheus/ntp-alerts.yml
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
@@ -31,28 +30,36 @@ for values in "$chart"/values*.yaml; do
 done
 
 echo "== Alerting rules"
-
-# The plain rules file is the spec of the PrometheusRule rendered with the
-# default values
 # Also check that a chart without mode refuses to render
 if helm template ci "$chart" >/dev/null 2>&1; then
   echo "the chart must require a mode" >&2
   exit 1
 fi
-helm template ci "$chart" --set mode=probe --set probeEndpoint.enabled=true --set prometheusRule.enabled=true -s templates/prometheusrule.yaml |
-  sed -n '/^spec:/,$p' | tail -n +2 | sed 's/^  //' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' >"$work/from-helm.yml"
-if $update_rules; then
-  { sed -n '1,/^groups:/p' "$rules" | sed '$d'; cat "$work/from-helm.yml"; } >"$work/rules.yml"
-  mv "$work/rules.yml" "$rules"
-fi
-sed -n '/^groups:/,$p' "$rules" >"$work/from-file.yml"
-if ! diff -u "$work/from-file.yml" "$work/from-helm.yml"; then
-  echo "$rules differs from the PrometheusRule template, regenerate it:" >&2
-  echo "  .github/scripts/check-deployments.sh --update-rules" >&2
-  exit 1
-fi
 
-promtool check rules --lint=all "$rules"
+# The plain rules files are the spec of the PrometheusRule rendered for each
+# mode with the default values
+mkdir -p deployments/prometheus
+for mode in probe agent; do
+  rules="deployments/prometheus/ntp-alerts-$mode.yml"
+  helm template ci "$chart" --set mode="$mode" --set probeEndpoint.enabled=true --set prometheusRule.enabled=true \
+    -s templates/prometheusrule.yaml |
+    sed -n '/^spec:/,$p' | tail -n +2 | sed 's/^  //' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' >"$work/from-helm.yml"
+  if $update_rules; then
+    {
+      echo "# NTP exporter alerting rules for plain Prometheus (rule_files), $mode mode."
+      echo "# Generated from the Helm PrometheusRule template (deployments/kubernetes/helm/ntp-exporter/templates/prometheusrule.yaml):"
+      echo "# .github/scripts/check-deployments.sh --update-rules"
+      cat "$work/from-helm.yml"
+    } >"$rules"
+  fi
+  sed -n '/^groups:/,$p' "$rules" >"$work/from-file.yml"
+  if ! diff -u "$work/from-file.yml" "$work/from-helm.yml"; then
+    echo "$rules differs from the PrometheusRule template, regenerate it:" >&2
+    echo "  .github/scripts/check-deployments.sh --update-rules" >&2
+    exit 1
+  fi
+  promtool check rules --lint=all "$rules"
+done
 
 echo "== Compose files"
 for compose in deployments/docker/docker-compose-*.yml; do
