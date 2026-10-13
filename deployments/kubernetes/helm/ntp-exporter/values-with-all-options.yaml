@@ -159,21 +159,20 @@ config:
 # https://prometheus.io/docs/prometheus/latest/configuration/https/
 # The secret must contain the web configuration file under `key`, plus the
 # certificate files it references (paths relative to /etc/ntp-exporter/web).
-# When TLS or basic auth is enabled, adapt the probes (scheme: HTTPS) and the
-# ServiceMonitor endpoint accordingly.
 webConfig:
   existingSecret: ""
   key: web.yml
+  # Set to https when the web configuration enables TLS: probes and the
+  # ServiceMonitor use HTTPS
+  scheme: http
+  # Set when the web configuration enables basic auth: probes then only check
+  # the port, the kubelet having no password
+  basicAuth: false
 
 serviceAccount:
   create: true
   annotations: {}
   name: ""
-
-# RBAC
-rbac:
-  create: true
-  annotations: {}
 
 # Pod Annotations
 podAnnotations:
@@ -230,6 +229,10 @@ serviceMonitor:
   additionalLabels: {}
   interval: 30s
   scrapeTimeout: 10s
+  # Scheme (defaults to webConfig.scheme), TLS and basic auth of the scrape
+  scheme: ""
+  tlsConfig: {}
+  basicAuth: {}
   honorLabels: true
   relabelings: []
   metricRelabelings: []
@@ -283,8 +286,8 @@ volumes: []
 # Additional volume mounts
 volumeMounts: []
 # Example:
-# - name: config
-#   mountPath: /etc/ntp-exporter
+# - name: extra-ca
+#   mountPath: /etc/ssl/extra
 #   readOnly: true
 
 # Additional environment variables
@@ -305,7 +308,7 @@ envFrom: []
 livenessProbe:
   httpGet:
     path: /healthz
-    port: 9559
+    port: metrics
   initialDelaySeconds: 10
   periodSeconds: 10
   timeoutSeconds: 5
@@ -316,7 +319,7 @@ livenessProbe:
 readinessProbe:
   httpGet:
     path: /readyz
-    port: 9559
+    port: metrics
   initialDelaySeconds: 5
   periodSeconds: 10
   timeoutSeconds: 5

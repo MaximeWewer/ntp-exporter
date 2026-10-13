@@ -19,7 +19,9 @@ Helm chart for deploying the NTP Exporter to Kubernetes. The NTP Exporter is a P
 | `config.ntpServers` | `pool.ntp.org`, `time.google.com`, `time.cloudflare.com` | Servers to query |
 | `config.scrapeInterval` | `60s` | Interval between two collection cycles |
 | `configYaml.enabled` / `configYaml.content` | `false` | Provide the full exporter YAML configuration |
-| `webConfig.existingSecret` | | Secret with a Prometheus web configuration (TLS, basic auth) |
+| `webConfig.existingSecret` | | Secret with a Prometheus web configuration (TLS, basic auth), mounted in `/etc/ntp-exporter/web` |
+| `webConfig.scheme` / `webConfig.basicAuth` | `http` / `false` | Set `https` when the web configuration enables TLS (probes and ServiceMonitor use HTTPS); set `basicAuth` when it enables basic auth (probes then only check the port) |
+| `serviceMonitor.scheme` / `tlsConfig` / `basicAuth` | | Scrape settings of the ServiceMonitor endpoint |
 | `serviceMonitor.enabled` | `false` | Create a ServiceMonitor |
 | `prometheusRule.enabled` | `false` | Create a PrometheusRule with the recommended alerts |
 | `image.repository` | `ghcr.io/maximewewer/ntp-exporter` | Image, tagged with the chart appVersion by default |
@@ -36,3 +38,6 @@ rules with your own.
 
 Every value is documented in `values-with-all-options.yaml`. See the
 [project README](../../../../README.md) for the metrics.
+
+The pod has no Kubernetes API access: no RBAC role is created and the service
+account token is not mounted.

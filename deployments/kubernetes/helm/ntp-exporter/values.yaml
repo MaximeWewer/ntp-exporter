@@ -102,11 +102,15 @@ config:
 # https://prometheus.io/docs/prometheus/latest/configuration/https/
 # The secret must contain the web configuration file under `key`, plus the
 # certificate files it references (paths relative to /etc/ntp-exporter/web).
-# When TLS or basic auth is enabled, adapt the probes (scheme: HTTPS) and the
-# ServiceMonitor endpoint accordingly.
 webConfig:
   existingSecret: ""
   key: web.yml
+  # Set to https when the web configuration enables TLS: probes and the
+  # ServiceMonitor use HTTPS
+  scheme: http
+  # Set when the web configuration enables basic auth: probes then only check
+  # the port, the kubelet having no password
+  basicAuth: false
 
 serviceAccount:
   # Specifies whether a service account should be created
@@ -116,12 +120,6 @@ serviceAccount:
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
-
-rbac:
-  # Specifies whether RBAC resources should be created
-  create: true
-  # Additional annotations for RBAC resources
-  annotations: {}
 
 podAnnotations:
   prometheus.io/scrape: "true"
@@ -180,6 +178,10 @@ serviceMonitor:
   interval: 30s
   # Scrape timeout
   scrapeTimeout: 10s
+  # Scheme, TLS and basic auth of the scrape (scheme defaults to webConfig.scheme)
+  scheme: ""
+  tlsConfig: {}
+  basicAuth: {}
   # HonorLabels chooses the metric's labels on collisions with target labels
   honorLabels: true
   # RelabelConfigs to apply to samples before ingestion
@@ -241,7 +243,7 @@ envFrom: []
 livenessProbe:
   httpGet:
     path: /healthz
-    port: 9559
+    port: metrics
   initialDelaySeconds: 10
   periodSeconds: 10
   timeoutSeconds: 5
@@ -252,7 +254,7 @@ livenessProbe:
 readinessProbe:
   httpGet:
     path: /readyz
-    port: 9559
+    port: metrics
   initialDelaySeconds: 5
   periodSeconds: 10
   timeoutSeconds: 5

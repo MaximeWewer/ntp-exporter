@@ -23,7 +23,7 @@ fullnameOverride: ""
 # =============================================================================
 # YAML CONFIG FILE - Full configuration via ConfigMap
 # =============================================================================
-# This will be mounted at /etc/ntp-exporter/config.yaml
+# This will be mounted at /etc/ntp-exporter/config/config.yaml
 # You can customize this with the full YAML configuration structure
 configYaml:
   enabled: true
@@ -109,21 +109,20 @@ configYaml:
 # https://prometheus.io/docs/prometheus/latest/configuration/https/
 # The secret must contain the web configuration file under `key`, plus the
 # certificate files it references (paths relative to /etc/ntp-exporter/web).
-# When TLS or basic auth is enabled, adapt the probes (scheme: HTTPS) and the
-# ServiceMonitor endpoint accordingly.
 webConfig:
   existingSecret: ""
   key: web.yml
+  # Set to https when the web configuration enables TLS: probes and the
+  # ServiceMonitor use HTTPS
+  scheme: http
+  # Set when the web configuration enables basic auth: probes then only check
+  # the port, the kubelet having no password
+  basicAuth: false
 
 serviceAccount:
   create: true
   annotations: {}
   name: ""
-
-# RBAC
-rbac:
-  create: true
-  annotations: {}
 
 # Pod Annotations
 podAnnotations:
@@ -235,8 +234,8 @@ envFrom: []
 # Liveness probe
 livenessProbe:
   httpGet:
-    path: /metrics
-    port: 9559
+    path: /healthz
+    port: metrics
   initialDelaySeconds: 30
   periodSeconds: 10
   timeoutSeconds: 5
@@ -267,7 +266,7 @@ terminationGracePeriodSeconds: 30
 # USAGE NOTES
 # =============================================================================
 # This configuration uses a ConfigMap to mount the complete YAML configuration
-# file at /etc/ntp-exporter/config.yaml
+# file at /etc/ntp-exporter/config/config.yaml
 #
 # To customize the configuration:
 # 1. Edit the 'configYaml.content' section above

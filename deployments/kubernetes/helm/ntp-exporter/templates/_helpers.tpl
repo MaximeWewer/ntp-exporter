@@ -99,14 +99,25 @@ extensions/v1beta1
 {{- end -}}
 
 {{/*
-Return the appropriate apiVersion for RBAC
+Liveness or readiness probe. The web configuration applies to every path:
+with TLS the probe uses HTTPS, with basic auth (the kubelet has no password)
+it only checks that the port accepts connections.
 */}}
-{{- define "ntp-exporter.rbac.apiVersion" -}}
-{{- if .Capabilities.APIVersions.Has "rbac.authorization.k8s.io/v1" -}}
-rbac.authorization.k8s.io/v1
+{{- define "ntp-exporter.probe" -}}
+{{- $probe := deepCopy .probe -}}
+{{- $web := .root.Values.webConfig -}}
+{{- if $probe.httpGet -}}
+{{- if and $web.existingSecret $web.basicAuth -}}
+{{- $_ := unset $probe "httpGet" -}}
+{{- $_ := set $probe "tcpSocket" (dict "port" "metrics") -}}
 {{- else -}}
-rbac.authorization.k8s.io/v1beta1
+{{- $_ := set $probe.httpGet "port" "metrics" -}}
+{{- if and $web.existingSecret (eq ($web.scheme | default "http") "https") -}}
+{{- $_ := set $probe.httpGet "scheme" "HTTPS" -}}
 {{- end -}}
+{{- end -}}
+{{- end -}}
+{{- toYaml $probe -}}
 {{- end -}}
 
 {{/*

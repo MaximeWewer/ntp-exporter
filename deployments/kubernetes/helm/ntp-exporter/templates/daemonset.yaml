@@ -31,6 +31,8 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "ntp-exporter.serviceAccountName" . }}
+      # The exporter never calls the Kubernetes API
+      automountServiceAccountToken: false
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       hostNetwork: {{ .Values.hostNetwork }}
@@ -56,7 +58,7 @@ spec:
         {{- if .Values.args }}
         {{- toYaml .Values.args | nindent 8 }}
         {{- else }}
-        - --config=/etc/ntp-exporter/config.yaml
+        - --config=/etc/ntp-exporter/config/config.yaml
         {{- if .Values.webConfig.existingSecret }}
         - --web.config.file=/etc/ntp-exporter/web/{{ .Values.webConfig.key }}
         {{- end }}
@@ -68,17 +70,21 @@ spec:
           {{- if .Values.hostNetwork }}
           hostPort: {{ .Values.config.metricsPort }}
           {{- end }}
+        {{- with .Values.livenessProbe }}
         livenessProbe:
-          {{- toYaml .Values.livenessProbe | nindent 10 }}
+          {{- include "ntp-exporter.probe" (dict "probe" . "root" $) | nindent 10 }}
+        {{- end }}
         {{- with .Values.readinessProbe }}
         readinessProbe:
-          {{- toYaml . | nindent 10 }}
+          {{- include "ntp-exporter.probe" (dict "probe" . "root" $) | nindent 10 }}
         {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
         volumeMounts:
+        # Sibling mounts: a secret cannot be mounted inside the read-only
+        # ConfigMap mount
         - name: config
-          mountPath: /etc/ntp-exporter
+          mountPath: /etc/ntp-exporter/config
           readOnly: true
         {{- if .Values.webConfig.existingSecret }}
         - name: web-config

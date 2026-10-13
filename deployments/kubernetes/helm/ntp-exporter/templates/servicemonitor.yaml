@@ -22,6 +22,15 @@ spec:
     interval: {{ .Values.serviceMonitor.interval }}
     scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
     path: /metrics
+    scheme: {{ .Values.serviceMonitor.scheme | default .Values.webConfig.scheme | default "http" }}
+    {{- with .Values.serviceMonitor.tlsConfig }}
+    tlsConfig:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.serviceMonitor.basicAuth }}
+    basicAuth:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
     {{- if .Values.serviceMonitor.honorLabels }}
     honorLabels: true
     {{- end }}
