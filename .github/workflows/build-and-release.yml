@@ -442,6 +442,11 @@ jobs:
           # (on workflow_dispatch, the tag of this release does not exist yet)
           PREVIOUS_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname | grep -vx "${{ needs.prepare.outputs.tag }}" | head -n 1 || true)
 
+          # Binary list, built from the downloaded artifacts so that it follows
+          # the build matrix: ntp-exporter-OS-ARCH[vARM][.exe]
+          BINARIES=$(find binaries -maxdepth 1 -type f -name 'ntp-exporter-*' ! -name '*.sha256' ! -name '*.md5' -printf '%f\n' | sort |
+            sed -E 's/^(ntp-exporter-([a-z]+)-([a-z0-9]+)(\.exe)?)$/- `\1` (\2\/\3)/; s/\/armv([0-9]+)\)$/\/arm\/v\1)/')
+
           # Generate changelog
           cat << EOF > release_notes.md
           ## NTP Exporter ${{ needs.prepare.outputs.version }}
@@ -473,7 +478,7 @@ jobs:
           docker pull ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}
           \`\`\`
 
-          Supported platforms:
+          Docker platforms:
           - linux/amd64
           - linux/arm64
           - linux/arm/v7
@@ -487,7 +492,9 @@ jobs:
 
           ### Binary Downloads
 
-          Download pre-compiled binaries for your platform below. Verify checksums using SHA256SUMS.txt.
+          Download the binary for your platform from the assets below:
+
+          ${BINARIES}
 
           ### Verification
 
