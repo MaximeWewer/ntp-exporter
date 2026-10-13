@@ -49,7 +49,6 @@ type Exporter struct {
 	// Kernel state, only read when kernel monitoring is enabled
 	kernelReader KernelReader
 	chronyReader ChronyReader
-	nodeName     string
 
 	mu          sync.RWMutex
 	updatedAt   time.Time
@@ -70,32 +69,51 @@ func NewExporter(cfg *config.Config, m *metrics.NTPMetrics) *Exporter {
 		lastSuccess: make(map[string]time.Time),
 	}
 
-	if cfg.NTP.Kernel.Enabled {
+	if cfg.KernelEnabled() {
 		e.kernelReader = ntp.NewKernelReader(true)
 	}
-	if cfg.NTP.Chrony.Enabled {
+	if enabled, auto := cfg.ChronyEnabled(); enabled {
 		// The address is validated with the configuration
 		if client, err := ntp.NewChronyClient(cfg.NTP.Chrony.Address, cfg.NTP.Timeout); err == nil {
 			e.chronyReader = client
+			if auto && !chronyAnswers(cfg.NTP.Chrony.Address) {
+				e.chronyReader = nil
+			}
 		}
-	}
-	if cfg.NTP.Kernel.Enabled || cfg.NTP.Chrony.Enabled {
-		e.nodeName = nodeName()
 	}
 
 	return e
 }
 
+// chronyDetectTimeout bounds the detection of chronyd at startup
+const chronyDetectTimeout = time.Second
+
+// chronyAnswers tells whether chronyd answers a tracking request, to enable
+// the chrony option by default in agent mode only where chronyd runs
+func chronyAnswers(address string) bool {
+	client, err := ntp.NewChronyClient(address, chronyDetectTimeout)
+	if err == nil {
+		_, err = client.Tracking(context.Background())
+	}
+	if err != nil {
+		logger.SafeInfo("collector", "chronyd not found, chrony option disabled", map[string]interface{}{
+			"address": address,
+			"error":   err.Error(),
+		})
+		return false
+	}
+	logger.SafeInfo("collector", "chronyd found, chrony option enabled", map[string]interface{}{"address": address})
+	return true
+}
+
 // SetChronyReader replaces the chronyd client
 func (e *Exporter) SetChronyReader(r ChronyReader) {
 	e.chronyReader = r
-	if e.nodeName == "" {
-		e.nodeName = nodeName()
-	}
 }
 
-// nodeName returns the node name set by the DaemonSet, or the hostname
-func nodeName() string {
+// NodeName returns the node name set by the DaemonSet, or the hostname: the
+// node label of every metric in agent mode
+func NodeName() string {
 	if name := os.Getenv("NODE_NAME"); name != "" {
 		return name
 	}
@@ -277,30 +295,29 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 // collectChrony emits the chronyd tracking report
 func (e *Exporter) collectChrony(ch chan<- prometheus.Metric) {
 	d := e.descs
-	node := e.nodeName
 	t := e.chrony.tracking
 
 	if e.chrony.err != nil || t == nil {
-		gauge(ch, d.chronyUp, 0, node)
+		gauge(ch, d.chronyUp, 0)
 		return
 	}
-	gauge(ch, d.chronyUp, 1, node)
+	gauge(ch, d.chronyUp, 1)
 
-	gauge(ch, d.chronyInfo, 1, node, t.RefIDHex(), t.Source)
-	gauge(ch, d.chronyStratum, float64(t.Stratum), node)
-	gauge(ch, d.chronyLeapStatus, float64(t.LeapStatus), node)
+	gauge(ch, d.chronyInfo, 1, t.RefIDHex(), t.Source)
+	gauge(ch, d.chronyStratum, float64(t.Stratum))
+	gauge(ch, d.chronyLeapStatus, float64(t.LeapStatus))
 	if !t.RefTime.IsZero() {
-		gauge(ch, d.chronyRefTime, float64(t.RefTime.UnixNano())/1e9, node)
+		gauge(ch, d.chronyRefTime, float64(t.RefTime.UnixNano())/1e9)
 	}
-	gauge(ch, d.chronyCorrection, t.CurrentCorrection, node)
-	gauge(ch, d.chronyLastOffset, t.LastOffset, node)
-	gauge(ch, d.chronyRMSOffset, t.RMSOffset, node)
-	gauge(ch, d.chronyFrequency, t.FreqPPM, node)
-	gauge(ch, d.chronyResidualFrequency, t.ResidFreqPPM, node)
-	gauge(ch, d.chronySkew, t.SkewPPM, node)
-	gauge(ch, d.chronyRootDelay, t.RootDelay, node)
-	gauge(ch, d.chronyRootDispersion, t.RootDispersion, node)
-	gauge(ch, d.chronyUpdateInterval, t.LastUpdateInterval, node)
+	gauge(ch, d.chronyCorrection, t.CurrentCorrection)
+	gauge(ch, d.chronyLastOffset, t.LastOffset)
+	gauge(ch, d.chronyRMSOffset, t.RMSOffset)
+	gauge(ch, d.chronyFrequency, t.FreqPPM)
+	gauge(ch, d.chronyResidualFrequency, t.ResidFreqPPM)
+	gauge(ch, d.chronySkew, t.SkewPPM)
+	gauge(ch, d.chronyRootDelay, t.RootDelay)
+	gauge(ch, d.chronyRootDispersion, t.RootDispersion)
+	gauge(ch, d.chronyUpdateInterval, t.LastUpdateInterval)
 }
 
 func gauge(ch chan<- prometheus.Metric, desc *prometheus.Desc, value float64, labels ...string) {
@@ -431,7 +448,7 @@ func (e *Exporter) collectBoundViolation(ch chan<- prometheus.Metric, server str
 		if excess > bound.value {
 			violated = 1
 		}
-		gauge(ch, e.descs.kernelBoundViolation, violated, e.nodeName, server, bound.name)
+		gauge(ch, e.descs.kernelBoundViolation, violated, server, bound.name)
 	}
 }
 
@@ -484,22 +501,21 @@ func (e *Exporter) collectPool(ch chan<- prometheus.Metric, pool probe.PoolResul
 func (e *Exporter) collectKernel(ch chan<- prometheus.Metric) {
 	d := e.descs
 	k := e.kernelState
-	node := e.nodeName
 
 	synchronized := 0.0
 	if k.IsSynchronized() {
 		synchronized = 1
 	}
-	gauge(ch, d.kernelSyncStatus, synchronized, node)
+	gauge(ch, d.kernelSyncStatus, synchronized)
 
 	if e.cfg.NTP.Kernel.ViolationOnly {
 		return
 	}
 
-	gauge(ch, d.kernelState, 1, node, k.StateName())
-	gauge(ch, d.kernelOffset, k.GetOffsetSeconds(), node)
-	gauge(ch, d.kernelFrequency, k.GetFrequencyPPM(), node)
-	gauge(ch, d.kernelMaxError, k.GetMaxErrorSeconds(), node)
-	gauge(ch, d.kernelEstError, k.GetEstErrorSeconds(), node)
-	gauge(ch, d.kernelTAI, float64(k.TAI), node)
+	gauge(ch, d.kernelState, 1, k.StateName())
+	gauge(ch, d.kernelOffset, k.GetOffsetSeconds())
+	gauge(ch, d.kernelFrequency, k.GetFrequencyPPM())
+	gauge(ch, d.kernelMaxError, k.GetMaxErrorSeconds())
+	gauge(ch, d.kernelEstError, k.GetEstErrorSeconds())
+	gauge(ch, d.kernelTAI, float64(k.TAI))
 }

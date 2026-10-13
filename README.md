@@ -50,14 +50,29 @@ Two questions, two modes:
 | Question | Mode | Deployment | Key metrics |
 |---|---|---|---|
 | Are my time servers reliable? | **probe** | Deployment, Docker, systemd on a monitoring host | `ntp_up`, `ntp_response_valid`, `ntp_falseticker`, `ntp_offset_from_consensus_seconds`, `ntp_root_distance_seconds`, `ntp_target_suspended`, `ntp_nts_ke_success`, `ntp_probe_success` |
-| Is the clock of each machine right? | **agent** | DaemonSet, one container or service per host | `ntp_consensus_offset_seconds`, `ntp_offset_seconds`, with the kernel option `ntp_kernel_sync_status`, `ntp_kernel_error_bound_violated`, with the chrony option `ntp_chrony_*` |
+| Is the clock of each machine right? | **agent** | DaemonSet, one container or service per host | `ntp_kernel_sync_status`, `ntp_kernel_error_bound_violated`, `ntp_chrony_*`, `ntp_offset_seconds` against 1 or 2 reference servers, all with a `node` label |
 
 The mode is required: `mode: probe` or `mode: agent` in the YAML file, or
 `NTP_EXPORTER_MODE`. It applies its guards wherever the exporter runs: the
 kernel and chrony options describe the host clock and are refused in probe
-mode. In agent mode, the pod shares the node clock, so the measured offset is
-the node offset. Neither mode needs privileges or host networking (except the
-chrony option over UDP, see [chrony option](#chrony-option)).
+mode. Neither mode needs privileges or host networking (except the chrony
+option over UDP, see [chrony option](#chrony-option)).
+
+The agent measures the clock of its host, not the servers:
+
+- the kernel option (Linux) and the chrony option are enabled by default:
+  the kernel state is always read, chronyd when it answers;
+- at most 2 reference servers, preferably inside the site, and no pool: on
+  a fleet every node queries them, and a public server must not receive a
+  burst from each node. Without server, the agent reads the kernel and
+  chronyd only;
+- no consensus nor server health metrics: monitor the servers once, with a
+  probe;
+- every series carries a `node` label (`NODE_NAME`, or the hostname).
+
+The pod shares the node clock, so the offset it measures is the node offset;
+through the pod network it is only accurate to about half the round-trip
+delay, while chronyd knows the node offset much better.
 
 In probe mode, `ntp_offset_seconds` mixes the error of the probe host clock and
 the error of the server: use `ntp_offset_from_consensus_seconds` and

@@ -44,7 +44,7 @@ spec:
       containers:
       - name: ntp-exporter
         {{- $securityContext := deepCopy .Values.securityContext }}
-        {{- if and .Values.chrony.enabled .Values.chrony.socketDir }}
+        {{- if .Values.chrony.socketDir }}
         {{- /* The reply socket is created next to the chronyd socket, in a
                directory only the chronyd user may write to */}}
         {{- $_ := set $securityContext "runAsUser" .Values.chrony.runAsUser }}
@@ -91,7 +91,7 @@ spec:
           mountPath: /etc/ntp-exporter/web
           readOnly: true
         {{- end }}
-        {{- if and .Values.chrony.enabled .Values.chrony.socketDir }}
+        {{- if .Values.chrony.socketDir }}
         - name: chrony-socket
           mountPath: {{ .Values.chrony.socketDir }}
         {{- end }}
@@ -121,7 +121,7 @@ spec:
         secret:
           secretName: {{ .Values.webConfig.existingSecret }}
       {{- end }}
-      {{- if and .Values.chrony.enabled .Values.chrony.socketDir }}
+      {{- if .Values.chrony.socketDir }}
       # chronyd socket directory of the node: the reply socket is created there
       - name: chrony-socket
         hostPath:

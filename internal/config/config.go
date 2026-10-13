@@ -57,6 +57,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -163,8 +164,9 @@ type KoDConfig struct {
 
 // KernelConfig controls the kernel clock state option of the agent mode
 type KernelConfig struct {
-	// Enabled reads the kernel clock state (read-only adjtimex, Linux only)
-	Enabled bool `yaml:"enabled"`
+	// Enabled reads the kernel clock state (read-only adjtimex, Linux only);
+	// unset, it is enabled in agent mode on Linux
+	Enabled *bool `yaml:"enabled"`
 	// ViolationOnly exposes only the error bound violation and the sync status,
 	// for nodes where node_exporter already exposes node_timex_* metrics
 	ViolationOnly bool `yaml:"violation_only"`
@@ -172,8 +174,9 @@ type KernelConfig struct {
 
 // ChronyConfig controls the reading of the local chronyd tracking report
 type ChronyConfig struct {
-	// Enabled reads the source selected by chronyd and the state of the clock
-	Enabled bool `yaml:"enabled"`
+	// Enabled reads the source selected by chronyd and the state of the
+	// clock; unset, it is enabled in agent mode when chronyd answers
+	Enabled *bool `yaml:"enabled"`
 	// Address is udp://host:port (read-only commands are allowed from
 	// localhost) or unix:///path/to/chronyd.sock
 	Address string `yaml:"address"`
@@ -187,6 +190,29 @@ type ConsensusConfig struct {
 }
 
 // ConsensusEnabled tells whether the consensus must be computed
+// KernelEnabled tells whether the kernel clock state is read: explicitly
+// enabled, or by default in agent mode on Linux
+func (c *Config) KernelEnabled() bool {
+	if c.NTP.EnableKernel {
+		return true
+	}
+	if c.NTP.Kernel.Enabled != nil {
+		return *c.NTP.Kernel.Enabled
+	}
+	return c.Mode == ModeAgent && runtime.GOOS == "linux"
+}
+
+// ChronyEnabled tells whether the chronyd tracking report is read. auto is
+// set when the option is not configured in agent mode: it is then enabled
+// only if chronyd answers.
+func (c *Config) ChronyEnabled() (enabled, auto bool) {
+	if c.NTP.Chrony.Enabled != nil {
+		return *c.NTP.Chrony.Enabled, false
+	}
+	return c.Mode == ModeAgent, c.Mode == ModeAgent
+}
+
+// ConsensusEnabled tells whether the consensus of the servers is computed
 func (c *NTPConfig) ConsensusEnabled() bool {
 	if c.Consensus.Enabled != nil {
 		return *c.Consensus.Enabled
@@ -417,9 +443,9 @@ func applyEnvOverrides(cfg *Config) error {
 	e.list("NTP_SERVERS", &cfg.NTP.Servers)
 	e.pools("NTP_POOLS", &cfg.NTP.Pools)
 	e.bool("NTP_ENABLE_KERNEL", &cfg.NTP.EnableKernel)
-	e.bool("NTP_KERNEL_ENABLED", &cfg.NTP.Kernel.Enabled)
+	e.boolPtr("NTP_KERNEL_ENABLED", &cfg.NTP.Kernel.Enabled)
 	e.bool("NTP_KERNEL_VIOLATION_ONLY", &cfg.NTP.Kernel.ViolationOnly)
-	e.bool("NTP_CHRONY_ENABLED", &cfg.NTP.Chrony.Enabled)
+	e.boolPtr("NTP_CHRONY_ENABLED", &cfg.NTP.Chrony.Enabled)
 	e.string("NTP_CHRONY_ADDRESS", &cfg.NTP.Chrony.Address)
 	e.duration("NTP_TIMEOUT", &cfg.NTP.Timeout)
 	e.int("NTP_VERSION", &cfg.NTP.Version)

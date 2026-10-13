@@ -316,10 +316,17 @@ func (f fakeKernel) Read() (*ntp.KernelTimex, error) { return f.state, f.err }
 func newKernelHarness(t *testing.T, state *ntp.KernelTimex, servers ...string) *harness {
 	t.Helper()
 	h := newHarness(t, servers...)
-	h.cfg.NTP.Kernel.Enabled = true
+	h.asAgent("node1")
 	h.exporter.kernelReader = fakeKernel{state: state}
-	h.exporter.nodeName = "node1"
 	return h
+}
+
+// asAgent switches the harness to agent mode: like main, every series gets
+// the node label
+func (h *harness) asAgent(node string) {
+	h.cfg.Mode = config.ModeAgent
+	h.registry = prometheus.NewRegistry()
+	prometheus.WrapRegistererWith(prometheus.Labels{"node": node}, h.registry).MustRegister(h.metrics, h.exporter)
 }
 
 func TestExporter_Kernel(t *testing.T) {
@@ -651,9 +658,9 @@ type fakeChrony struct {
 func (f fakeChrony) Tracking(context.Context) (*ntp.ChronyTracking, error) { return f.tracking, f.err }
 
 func TestExporter_ChronyTracking(t *testing.T) {
-	t.Setenv("NODE_NAME", "node-1")
 	const server = "a.example.org"
 	h := newHarness(t, server)
+	h.asAgent("node-1")
 	h.mock.SetupSuccessfulServer(server, time.Millisecond, 2)
 	h.exporter.SetChronyReader(fakeChrony{tracking: &ntp.ChronyTracking{
 		RefID: 0xC0000201, Source: "192.0.2.1", Stratum: 3, RefTime: time.Unix(1_800_000_000, 0),

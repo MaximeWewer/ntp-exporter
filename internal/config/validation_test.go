@@ -1,6 +1,7 @@
 package config
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -709,7 +710,7 @@ func TestValidate_ProbeEndpointAllowedTargets(t *testing.T) {
 func TestValidate_ChronyAddress(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Mode = ModeAgent
-	cfg.NTP.Chrony.Enabled = true
+	cfg.NTP.Chrony.Enabled = boolPtr(true)
 	for _, ok := range []string{"udp://127.0.0.1:323", "udp://[::1]:323", "unix:///run/chrony/chronyd.sock"} {
 		cfg.NTP.Chrony.Address = ok
 		assert.NoError(t, Validate(cfg), ok)
@@ -719,7 +720,7 @@ func TestValidate_ChronyAddress(t *testing.T) {
 		assert.Error(t, Validate(cfg), bad)
 	}
 
-	cfg.NTP.Chrony.Enabled = false
+	cfg.NTP.Chrony.Enabled = boolPtr(false)
 	assert.NoError(t, Validate(cfg), "the address is only checked when chrony is enabled")
 }
 
@@ -797,12 +798,56 @@ func TestValidate_Mode(t *testing.T) {
 	assert.ErrorContains(t, Validate(cfg), "mode must be probe or agent")
 
 	cfg.Mode = ModeProbe
-	cfg.NTP.Kernel.Enabled = true
+	cfg.NTP.Kernel.Enabled = boolPtr(true)
 	assert.ErrorContains(t, Validate(cfg), "requires mode: agent")
-	cfg.NTP.Kernel.Enabled = false
-	cfg.NTP.Chrony.Enabled = true
+	cfg.NTP.Kernel.Enabled = boolPtr(false)
+	cfg.NTP.Chrony.Enabled = boolPtr(true)
 	assert.ErrorContains(t, Validate(cfg), "requires mode: agent")
 
 	cfg.Mode = ModeAgent
 	assert.NoError(t, Validate(cfg))
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+func TestValidate_AgentMode(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Mode = ModeAgent
+	cfg.NTP.Servers = nil
+	cfg.NTP.Pools = nil
+	assert.NoError(t, Validate(cfg), "kernel and chrony only, no server")
+
+	cfg.NTP.Servers = []string{"ntp1.example.org", "ntp2.example.org", "ntp3.example.org"}
+	assert.ErrorContains(t, Validate(cfg), "at most 2 reference servers")
+
+	cfg.NTP.Servers = []string{"ntp1.example.org"}
+	cfg.NTP.Pools = []PoolConfig{{Name: "pool.ntp.org", Strategy: "all", MaxServers: 4}}
+	assert.ErrorContains(t, Validate(cfg), "does not query pools")
+
+	cfg.NTP.Pools = nil
+	cfg.NTP.Consensus.Enabled = boolPtr(true)
+	assert.ErrorContains(t, Validate(cfg), "computes no consensus")
+
+	cfg.NTP.Consensus.Enabled = nil
+	cfg.Metrics.Labels = map[string]string{"node": "x"}
+	assert.ErrorContains(t, Validate(cfg), "must not set node")
+}
+
+func TestConfig_AgentDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+	assert.False(t, cfg.KernelEnabled(), "probe mode")
+	enabled, _ := cfg.ChronyEnabled()
+	assert.False(t, enabled)
+
+	cfg.Mode = ModeAgent
+	assert.Equal(t, runtime.GOOS == "linux", cfg.KernelEnabled(), "enabled by default on Linux")
+	enabled, auto := cfg.ChronyEnabled()
+	assert.True(t, enabled)
+	assert.True(t, auto, "enabled when chronyd answers")
+
+	cfg.NTP.Kernel.Enabled = boolPtr(false)
+	cfg.NTP.Chrony.Enabled = boolPtr(false)
+	assert.False(t, cfg.KernelEnabled())
+	enabled, _ = cfg.ChronyEnabled()
+	assert.False(t, enabled)
 }

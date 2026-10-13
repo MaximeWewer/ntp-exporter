@@ -11,13 +11,14 @@ services:
     environment:
       NTP_EXPORTER_MODE: agent
       NTP_EXPORTER_PORT: "${NTP_EXPORTER_PORT:-9559}"
+      # At most 2 reference servers
       NTP_SERVERS: "${NTP_SERVERS:-pool.ntp.org}"
       NTP_TIMEOUT: "${NTP_TIMEOUT:-2s}"
-      # Kernel clock state (Linux, read-only adjtimex)
-      NTP_KERNEL_ENABLED: "${NTP_KERNEL_ENABLED:-true}"
-      # chronyd tracking report, when chronyd runs on the host
-      NTP_CHRONY_ENABLED: "${NTP_CHRONY_ENABLED:-false}"
-      # Name of the host in the node label of the kernel and chrony metrics
+      # Kernel clock state (Linux) and chronyd tracking report are enabled by
+      # default, chronyd when it answers: set false to disable them
+      NTP_KERNEL_ENABLED: "${NTP_KERNEL_ENABLED:-}"
+      NTP_CHRONY_ENABLED: "${NTP_CHRONY_ENABLED:-}"
+      # node label of every series (default: the hostname)
       NODE_NAME: "${NODE_NAME:-}"
       METRICS_LABELS: "${METRICS_LABELS:-}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"

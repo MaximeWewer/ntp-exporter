@@ -53,15 +53,22 @@ data:
       scrape_interval: {{ .Values.config.scrapeInterval | default "60s" | quote }}
       max_clock_offset: {{ .Values.config.maxClockOffset | default "100ms" | quote }}
       max_root_distance: {{ .Values.config.maxRootDistance | default "1.5s" | quote }}
-      {{- if include "ntp-exporter.kernelEnabled" . }}
+      {{- if eq (include "ntp-exporter.mode" .) "agent" }}
+      # Unset options are enabled when available: kernel on Linux, chrony
+      # when chronyd answers
       kernel:
+        {{- if include "ntp-exporter.kernelEnabled" . }}
         enabled: true
+        {{- else if and .Values.kernel (eq (toString .Values.kernel.enabled) "false") }}
+        enabled: false
+        {{- end }}
         violation_only: {{ and .Values.kernel .Values.kernel.violationOnly | default false }}
-      {{- end }}
-
-      {{- if and .Values.chrony .Values.chrony.enabled }}
       chrony:
+        {{- if .Values.chrony.socketDir }}
         enabled: true
+        {{- else if not (kindIs "invalid" .Values.chrony.enabled) }}
+        enabled: {{ .Values.chrony.enabled }}
+        {{- end }}
         address: {{ include "ntp-exporter.chronyAddress" . | quote }}
       {{- end }}
 

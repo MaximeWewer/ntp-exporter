@@ -11,7 +11,8 @@ mode: agent
 
 # Kernel clock state option (agent mode only, unprivileged read-only adjtimex)
 kernel:
-  enabled: false
+  # Unset: enabled in agent mode on Linux nodes
+  enabled: null
   # Only expose ntp_kernel_error_bound_violated and ntp_kernel_sync_status
   violationOnly: false
 
@@ -19,7 +20,8 @@ kernel:
 # or set socketDir (e.g. /run/chrony) and runAsUser/runAsGroup to the uid/gid
 # of chronyd on the nodes (the reply socket is created in socketDir)
 chrony:
-  enabled: false
+  # Unset: enabled in agent mode when chronyd answers
+  enabled: null
   address: udp://127.0.0.1:323
   socketDir: ""
   runAsUser: null
@@ -85,10 +87,9 @@ config:
   # NTP - NTP client configuration
   # ---------------------------------------------------------------------------
   # List of NTP servers to query
+  # In agent mode: at most 2 reference servers, preferably inside the site
   ntpServers:
     - pool.ntp.org
-    - time.google.com
-    - time.cloudflare.com
 
   # NTP query timeout
   ntpTimeout: 5s

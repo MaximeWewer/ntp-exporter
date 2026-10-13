@@ -45,8 +45,15 @@ func Validate(cfg *Config) error {
 		return err
 	}
 
-	if err := validateNTP(&cfg.NTP, cfg.ProbeEndpoint.Only); err != nil {
+	// Probe mode needs targets; an agent may only read the kernel or chronyd
+	if err := validateNTP(&cfg.NTP, cfg.Mode == ModeAgent || cfg.ProbeEndpoint.Only); err != nil {
 		return err
+	}
+
+	if enabled, _ := cfg.ChronyEnabled(); enabled {
+		if err := validateChronyAddress(cfg.NTP.Chrony.Address); err != nil {
+			return err
+		}
 	}
 
 	if err := validateLogging(&cfg.Logging); err != nil {
@@ -66,21 +73,48 @@ func Validate(cfg *Config) error {
 func validateMode(cfg *Config) error {
 	switch cfg.Mode {
 	case ModeProbe:
-		if cfg.NTP.Kernel.Enabled || cfg.NTP.EnableKernel {
+		if cfg.KernelEnabled() {
 			return errors.New("the kernel option describes the clock of the host: it requires mode: agent")
 		}
-		if cfg.NTP.Chrony.Enabled {
+		if enabled, _ := cfg.ChronyEnabled(); enabled {
 			return errors.New("the chrony option reads the local chronyd: it requires mode: agent")
 		}
 		return nil
 	case ModeAgent:
-		return nil
+		return validateAgent(cfg)
 	case "":
 		return errors.New("mode is required: set mode: probe (monitor NTP servers from a central place) " +
 			"or mode: agent (measure the clock of this host), or NTP_EXPORTER_MODE")
 	default:
 		return errors.New("mode must be probe or agent, got " + strconv.Quote(cfg.Mode))
 	}
+}
+
+// MaxAgentServers bounds the reference servers of an agent: every node of a
+// fleet queries them, public servers must not receive a burst from each node
+const MaxAgentServers = 2
+
+// validateAgent keeps the agent on the clock of its host: a few reference
+// servers, no pool, no consensus
+func validateAgent(cfg *Config) error {
+	if len(cfg.NTP.Servers) > MaxAgentServers {
+		return errors.New("mode: agent accepts at most " + strconv.Itoa(MaxAgentServers) +
+			" reference servers, preferably inside the site: monitor NTP servers with mode: probe")
+	}
+	if len(cfg.NTP.Pools) > 0 {
+		return errors.New("mode: agent does not query pools: monitor them with mode: probe")
+	}
+	if cfg.NTP.Consensus.Enabled != nil && *cfg.NTP.Consensus.Enabled {
+		return errors.New("mode: agent computes no consensus: it needs 3 servers, monitor them with mode: probe")
+	}
+	chrony, _ := cfg.ChronyEnabled()
+	if len(cfg.NTP.Servers) == 0 && !cfg.KernelEnabled() && !chrony {
+		return errors.New("mode: agent has nothing to measure: configure a reference server, the kernel or the chrony option")
+	}
+	if _, ok := cfg.Metrics.Labels["node"]; ok {
+		return errors.New("metrics.labels must not set node in mode: agent: the exporter sets it (NODE_NAME or the hostname)")
+	}
+	return nil
 }
 
 func validateServer(cfg *ServerConfig) error {
@@ -168,8 +202,8 @@ func validateProbeEndpoint(cfg *Config) error {
 	return nil
 }
 
-func validateNTP(cfg *NTPConfig, probeOnly bool) error {
-	if len(cfg.Servers) == 0 && len(cfg.Pools) == 0 && !probeOnly {
+func validateNTP(cfg *NTPConfig, noTargetNeeded bool) error {
+	if len(cfg.Servers) == 0 && len(cfg.Pools) == 0 && !noTargetNeeded {
 		return errors.New("at least one NTP server or pool must be configured")
 	}
 
@@ -214,12 +248,6 @@ func validateNTP(cfg *NTPConfig, probeOnly bool) error {
 
 	if cfg.KoD.SuspendDuration <= 0 {
 		return errors.New("kod.suspend_duration must be positive, got " + cfg.KoD.SuspendDuration.String())
-	}
-
-	if cfg.Chrony.Enabled {
-		if err := validateChronyAddress(cfg.Chrony.Address); err != nil {
-			return err
-		}
 	}
 
 	switch cfg.IPFamily {

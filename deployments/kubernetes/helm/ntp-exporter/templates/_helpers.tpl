@@ -159,7 +159,7 @@ Validate mode value
 {{- if and (eq .Values.mode "probe") (include "ntp-exporter.kernelEnabled" .) -}}
 {{- fail "kernel.enabled only makes sense in agent mode: the kernel state describes the node the agent runs on" -}}
 {{- end -}}
-{{- if and .Values.chrony .Values.chrony.enabled -}}
+{{- if and .Values.chrony (or .Values.chrony.enabled .Values.chrony.socketDir) -}}
 {{- if eq (include "ntp-exporter.mode" .) "probe" -}}
 {{- fail "chrony.enabled only makes sense in agent mode: chronyd runs on the node" -}}
 {{- end -}}

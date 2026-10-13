@@ -85,6 +85,11 @@ func main() {
 		logger.Warn("config", warning)
 	}
 
+	// In agent mode every series describes this node
+	if cfg.Mode == config.ModeAgent {
+		cfg.Metrics.Labels["node"] = collector.NodeName()
+	}
+
 	// Create metrics registry with custom namespace and subsystem from config
 	registry := metrics.NewRegistryWithConfig(cfg.Metrics.Namespace, cfg.Metrics.Subsystem, cfg.Metrics.Labels)
 	if err := registry.Register(); err != nil {

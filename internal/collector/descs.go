@@ -92,7 +92,6 @@ func newDescs(namespace, subsystem string) *descs {
 	}
 	server := []string{"server"}
 	pool := []string{"pool"}
-	node := []string{"node"}
 
 	return &descs{
 		up:          d(subsystem, "up", "Whether the NTP server answered during the last cycle (1) or not (0)", server...),
@@ -140,31 +139,31 @@ func newDescs(namespace, subsystem string) *descs {
 		poolDNS:    d("pool", "dns_resolution_seconds", "DNS resolution duration for pool in seconds", pool...),
 		poolOffset: d("pool", "offset_median_seconds", "Median offset of the valid pool servers in seconds", pool...),
 
-		kernelSyncStatus: d(subsystem, "kernel_sync_status", "Whether the kernel clock is synchronized (1) or not (0, STA_UNSYNC set)", node...),
-		kernelState:      d(subsystem, "kernel_state", "Kernel clock state returned by adjtimex (value is always 1)", "node", "state"),
-		kernelOffset:     d(subsystem, "kernel_offset_seconds", "Residual offset the kernel PLL still has to correct in seconds", node...),
-		kernelFrequency:  d(subsystem, "kernel_frequency_ppm", "Kernel frequency adjustment in PPM", node...),
-		kernelMaxError:   d(subsystem, "kernel_max_error_seconds", "Maximum error announced by the kernel clock in seconds", node...),
-		kernelEstError:   d(subsystem, "kernel_est_error_seconds", "Estimated error announced by the kernel clock in seconds", node...),
-		kernelTAI:        d(subsystem, "kernel_tai_offset_seconds", "TAI-UTC offset known by the kernel in seconds", node...),
+		kernelSyncStatus: d(subsystem, "kernel_sync_status", "Whether the kernel clock is synchronized (1) or not (0, STA_UNSYNC set)"),
+		kernelState:      d(subsystem, "kernel_state", "Kernel clock state returned by adjtimex (value is always 1)", "state"),
+		kernelOffset:     d(subsystem, "kernel_offset_seconds", "Residual offset the kernel PLL still has to correct in seconds"),
+		kernelFrequency:  d(subsystem, "kernel_frequency_ppm", "Kernel frequency adjustment in PPM"),
+		kernelMaxError:   d(subsystem, "kernel_max_error_seconds", "Maximum error announced by the kernel clock in seconds"),
+		kernelEstError:   d(subsystem, "kernel_est_error_seconds", "Estimated error announced by the kernel clock in seconds"),
+		kernelTAI:        d(subsystem, "kernel_tai_offset_seconds", "TAI-UTC offset known by the kernel in seconds"),
 		kernelBoundViolation: d(subsystem, "kernel_error_bound_violated",
 			"Whether the offset measured against the server exceeds the error bound announced by the kernel, beyond the measurement uncertainty (1) or not (0)",
-			"node", "server", "bound"),
+			"server", "bound"),
 
-		chronyUp:                d(subsystem, "chrony_up", "Whether the chronyd tracking report could be read (1) or not (0)", node...),
-		chronyInfo:              d(subsystem, "chrony_tracking_info", "Source selected by chronyd: reference ID (hex) and address or reference clock name (value is always 1)", "node", "refid", "source"),
-		chronyStratum:           d(subsystem, "chrony_stratum", "Stratum of the local clock disciplined by chronyd", node...),
-		chronyLeapStatus:        d(subsystem, "chrony_leap_status", "chronyd leap status (0=normal, 1=insert second, 2=delete second, 3=not synchronised)", node...),
-		chronyRefTime:           d(subsystem, "chrony_reference_timestamp_seconds", "Unix time of the last measurement used by chronyd to update the clock", node...),
-		chronyCorrection:        d(subsystem, "chrony_system_time_offset_seconds", "Offset chronyd is still slewing out of the system clock in seconds (positive: the system clock is slow)", node...),
-		chronyLastOffset:        d(subsystem, "chrony_last_offset_seconds", "Offset estimated by chronyd at the last clock update in seconds", node...),
-		chronyRMSOffset:         d(subsystem, "chrony_rms_offset_seconds", "Long-term average of the offsets estimated by chronyd in seconds", node...),
-		chronyFrequency:         d(subsystem, "chrony_frequency_ppm", "Frequency error of the system clock corrected by chronyd in PPM (negative: the clock runs slow without correction, like chronyc)", node...),
-		chronyResidualFrequency: d(subsystem, "chrony_residual_frequency_ppm", "Residual frequency of the selected source in PPM", node...),
-		chronySkew:              d(subsystem, "chrony_skew_ppm", "Estimated error bound of the frequency in PPM", node...),
-		chronyRootDelay:         d(subsystem, "chrony_root_delay_seconds", "Root delay of the local clock to the stratum 1 source in seconds", node...),
-		chronyRootDispersion:    d(subsystem, "chrony_root_dispersion_seconds", "Root dispersion of the local clock in seconds", node...),
-		chronyUpdateInterval:    d(subsystem, "chrony_update_interval_seconds", "Interval between the last two clock updates of chronyd in seconds", node...),
+		chronyUp:                d(subsystem, "chrony_up", "Whether the chronyd tracking report could be read (1) or not (0)"),
+		chronyInfo:              d(subsystem, "chrony_tracking_info", "Source selected by chronyd: reference ID (hex) and address or reference clock name (value is always 1)", "refid", "source"),
+		chronyStratum:           d(subsystem, "chrony_stratum", "Stratum of the local clock disciplined by chronyd"),
+		chronyLeapStatus:        d(subsystem, "chrony_leap_status", "chronyd leap status (0=normal, 1=insert second, 2=delete second, 3=not synchronised)"),
+		chronyRefTime:           d(subsystem, "chrony_reference_timestamp_seconds", "Unix time of the last measurement used by chronyd to update the clock"),
+		chronyCorrection:        d(subsystem, "chrony_system_time_offset_seconds", "Offset chronyd is still slewing out of the system clock in seconds (positive: the system clock is slow)"),
+		chronyLastOffset:        d(subsystem, "chrony_last_offset_seconds", "Offset estimated by chronyd at the last clock update in seconds"),
+		chronyRMSOffset:         d(subsystem, "chrony_rms_offset_seconds", "Long-term average of the offsets estimated by chronyd in seconds"),
+		chronyFrequency:         d(subsystem, "chrony_frequency_ppm", "Frequency error of the system clock corrected by chronyd in PPM (negative: the clock runs slow without correction, like chronyc)"),
+		chronyResidualFrequency: d(subsystem, "chrony_residual_frequency_ppm", "Residual frequency of the selected source in PPM"),
+		chronySkew:              d(subsystem, "chrony_skew_ppm", "Estimated error bound of the frequency in PPM"),
+		chronyRootDelay:         d(subsystem, "chrony_root_delay_seconds", "Root delay of the local clock to the stratum 1 source in seconds"),
+		chronyRootDispersion:    d(subsystem, "chrony_root_dispersion_seconds", "Root dispersion of the local clock in seconds"),
+		chronyUpdateInterval:    d(subsystem, "chrony_update_interval_seconds", "Interval between the last two clock updates of chronyd in seconds"),
 	}
 }
 

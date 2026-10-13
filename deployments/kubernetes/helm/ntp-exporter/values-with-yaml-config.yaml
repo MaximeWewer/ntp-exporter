@@ -6,7 +6,7 @@
 # Use: helm install ntp-exporter . -f values-with-yaml-config.yaml
 # =============================================================================
 
-mode: agent
+mode: probe
 
 # =============================================================================
 # IMAGE CONFIGURATION
@@ -257,8 +257,8 @@ deploymentStrategy:
     maxUnavailable: 0
 
 # Host network mode
-hostNetwork: true
-dnsPolicy: ClusterFirstWithHostNet
+hostNetwork: false
+dnsPolicy: ClusterFirst
 
 # Termination grace period
 terminationGracePeriodSeconds: 30

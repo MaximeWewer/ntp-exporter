@@ -8,7 +8,8 @@ mode: agent
 # Exposes ntp_kernel_* metrics and ntp_kernel_error_bound_violated, which
 # flags nodes whose time daemon underestimates its error.
 kernel:
-  enabled: false
+  # Unset: enabled in agent mode on Linux nodes
+  enabled: null
   # Set to true when node_exporter already exposes node_timex_* metrics
   violationOnly: false
 
@@ -54,11 +55,12 @@ networkPolicy:
 
 # NTP configuration optimized for agent mode
 config:
-  ntpServers:
-  - 0.pool.ntp.org
-  - 1.pool.ntp.org
-  - 2.pool.ntp.org
-  - 3.pool.ntp.org
+  # At most 2 reference servers, preferably inside the site: every node
+  # queries them. Without server, the agent reads the kernel and chronyd only.
+  # Through the pod network, the offset to a server is only accurate to about
+  # half the round-trip delay; chronyd knows the node offset much better.
+  ntpServers: []
+  #  - ntp1.example.internal
   metricsPort: 9559
   scrapeInterval: 60s
   ntpTimeout: 5s

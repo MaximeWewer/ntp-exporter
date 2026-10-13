@@ -372,7 +372,7 @@ func TestKernelConfig_DeprecatedEnableKernel(t *testing.T) {
 	t.Setenv("NTP_ENABLE_KERNEL", "true")
 	cfg, err := LoadFromEnvVarsOnly()
 	require.NoError(t, err)
-	assert.True(t, cfg.NTP.Kernel.Enabled)
+	assert.True(t, cfg.KernelEnabled())
 }
 
 func TestLoadFromEnvVarsOnly_MetricsLabels(t *testing.T) {
@@ -441,7 +441,7 @@ func TestLoadFromEnvVarsOnly_Chrony(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.NTP.Chrony.Enabled || cfg.NTP.Chrony.Address != "udp://127.0.0.1:323" {
+	if enabled, auto := cfg.ChronyEnabled(); !enabled || auto || cfg.NTP.Chrony.Address != "udp://127.0.0.1:323" {
 		t.Errorf("unexpected chrony config %+v", cfg.NTP.Chrony)
 	}
 

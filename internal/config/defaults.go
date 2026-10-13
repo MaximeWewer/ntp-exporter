@@ -23,7 +23,7 @@ func ApplyDefaults(cfg *Config) {
 	}
 
 	// NTP defaults
-	if len(cfg.NTP.Servers) == 0 && len(cfg.NTP.Pools) == 0 && !cfg.ProbeEndpoint.Only {
+	if cfg.Mode != ModeAgent && len(cfg.NTP.Servers) == 0 && len(cfg.NTP.Pools) == 0 && !cfg.ProbeEndpoint.Only {
 		cfg.NTP.Servers = []string{
 			"pool.ntp.org",
 			"time.google.com",
@@ -31,7 +31,8 @@ func ApplyDefaults(cfg *Config) {
 	}
 	// Deprecated enable_kernel maps to kernel.enabled
 	if cfg.NTP.EnableKernel {
-		cfg.NTP.Kernel.Enabled = true
+		enabled := true
+		cfg.NTP.Kernel.Enabled = &enabled
 	}
 
 	for i := range cfg.NTP.Pools {

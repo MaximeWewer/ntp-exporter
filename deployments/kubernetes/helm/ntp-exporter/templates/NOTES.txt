@@ -11,8 +11,9 @@ DEPRECATED: config.enableKernel will be removed; use kernel.enabled=true.
 {{- if eq (include "ntp-exporter.mode" .) "agent" }}
 
 AGENT MODE: a DaemonSet measures the clock of every node.
-  Kernel option: {{ if include "ntp-exporter.kernelEnabled" . }}enabled{{ else }}disabled (kernel.enabled=true){{ end }}
-  chrony option: {{ if .Values.chrony.enabled }}enabled{{ else }}disabled (chrony.enabled=true){{ end }}
+  Kernel option: {{ if eq (toString .Values.kernel.enabled) "false" }}disabled{{ else }}enabled on Linux nodes{{ end }}
+  chrony option: {{ if eq (toString .Values.chrony.enabled) "false" }}disabled{{ else if or .Values.chrony.socketDir .Values.hostNetwork }}enabled when chronyd answers{{ else }}needs hostNetwork or chrony.socketDir{{ end }}
+  Every series carries the node label.
 
   kubectl -n {{ .Release.Namespace }} get daemonset {{ include "ntp-exporter.fullname" . }}
 {{- else }}

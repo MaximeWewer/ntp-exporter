@@ -11,7 +11,8 @@ mode: agent
 # Kernel clock state option (agent mode only, Linux nodes).
 # Read with an unprivileged read-only adjtimex call: no privilege required.
 kernel:
-  enabled: false
+  # Unset: enabled in agent mode on Linux nodes
+  enabled: null
   # Only expose ntp_kernel_error_bound_violated and ntp_kernel_sync_status,
   # when node_exporter already exposes node_timex_* metrics
   violationOnly: false
@@ -24,7 +25,8 @@ kernel:
 #     uid of chronyd on the nodes (id -u _chrony): like chronyc, the exporter
 #     creates its reply socket in that directory, writable by chronyd only
 chrony:
-  enabled: false
+  # Unset: enabled in agent mode when chronyd answers
+  enabled: null
   address: udp://127.0.0.1:323
   socketDir: ""
   # uid (and gid, defaulting to the uid) of chronyd on the nodes, required
@@ -78,10 +80,11 @@ fullnameOverride: ""
 # NTP Exporter configuration
 config:
   # NTP servers to query
-  ntpServers:
-    - pool.ntp.org
-    - time.google.com
-    - time.cloudflare.com
+  # Servers to query. Agent mode: at most 2 reference servers, preferably
+  # inside the site (every node queries them), or none to read the kernel and
+  # chronyd only. Probe mode: the servers to monitor (3 or more for the
+  # consensus).
+  ntpServers: []
 
   # Port to expose metrics on
   metricsPort: 9559

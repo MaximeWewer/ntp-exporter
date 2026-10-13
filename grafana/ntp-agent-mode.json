@@ -1,7 +1,7 @@
 {
   "uid": "ntp-exporter-agent",
   "title": "NTP exporter - Agent",
-  "description": "Clock accuracy of every node, with the optional kernel clock state and chronyd report.",
+  "description": "Clock of every node: kernel clock state and error bounds, chronyd tracking report, offset against 1 or 2 reference servers. Every series carries the node label.",
   "tags": [
     "ntp",
     "time"
