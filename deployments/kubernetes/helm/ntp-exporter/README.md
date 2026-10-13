@@ -4,8 +4,11 @@ Helm chart for deploying the NTP Exporter to Kubernetes. The NTP Exporter is a P
 
 ## Modes
 
-- `mode: agent` (default): DaemonSet measuring the clock of every node. Set
-  `kernel.enabled=true` to also read the kernel clock state (unprivileged).
+The mode is required (`values-agent.yaml` or `values-probe.yaml`):
+
+- `mode: agent`: DaemonSet measuring the clock of every node: kernel clock
+  state (unprivileged) and chronyd when available, at most 2 reference
+  servers, every series labelled with `node`.
 - `mode: probe`: Deployment monitoring NTP servers from a central place.
 
 `mode: hybrid` is deprecated and behaves as `mode: agent` with `kernel.enabled=true`.
@@ -33,9 +36,9 @@ helm install ntp-exporter deployments/kubernetes/helm/ntp-exporter \
 
 | Value | Default | Description |
 |---|---|---|
-| `mode` | `agent` | `agent` or `probe` |
-| `kernel.enabled` / `kernel.violationOnly` | `false` | Kernel option of the agent mode |
-| `config.ntpServers` | `pool.ntp.org`, `time.google.com`, `time.cloudflare.com` | Servers to query |
+| `mode` | (required) | `agent` or `probe` |
+| `kernel.enabled` / `chrony.enabled` | unset | Kernel and chrony options of the agent mode: unset, enabled when available |
+| `config.ntpServers` | none | Servers to query (agent: at most 2 reference servers) |
 | `config.scrapeInterval` | `60s` | Interval between two collection cycles |
 | `configYaml.enabled` / `configYaml.content` | `false` | Provide the full exporter YAML configuration |
 | `webConfig.existingSecret` | | Secret with a Prometheus web configuration (TLS, basic auth), mounted in `/etc/ntp-exporter/web` |

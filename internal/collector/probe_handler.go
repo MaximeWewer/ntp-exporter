@@ -187,7 +187,7 @@ func (c *targetCollector) Describe(ch chan<- *prometheus.Desc) {
 // Collect implements prometheus.Collector
 func (c *targetCollector) Collect(ch chan<- prometheus.Metric) {
 	success := 0.0
-	if writeMeasurement(ch, c.descs, c.cfg, c.meas) != nil {
+	if writeMeasurement(ch, c.descs, c.meas) != nil {
 		success = 1
 	}
 	gauge(ch, c.descs.probeSuccess, success)

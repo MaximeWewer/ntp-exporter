@@ -121,7 +121,7 @@ func TestExporter_ValidResponseIsPublished(t *testing.T) {
 	h.absent("ntp_server_trust_score", nil)
 	h.absent("ntp_invalid_responses_total", srv(server))
 	assert.InDelta(t, float64(time.Now().Unix()), h.mustValue("ntp_last_success_timestamp_seconds", srv(server)), 5)
-	assert.Equal(t, 1.0, h.mustValue("ntp_exporter_scrapes_total", map[string]string{"status": "success"}))
+	assert.Equal(t, 1.0, h.mustValue("ntp_exporter_cycles_total", map[string]string{"status": "success"}))
 }
 
 func TestExporter_InvalidResponsesAreNotPublished(t *testing.T) {
@@ -155,7 +155,7 @@ func TestExporter_InvalidResponsesAreNotPublished(t *testing.T) {
 			h.cycle()
 
 			assert.Equal(t, 1.0, h.mustValue("ntp_up", srv(server)), "server answered")
-			assert.Equal(t, 1.0, h.mustValue("ntp_packet_loss_ratio", srv(server)), "invalid samples count as lost")
+			assert.Equal(t, 0.0, h.mustValue("ntp_packet_loss_ratio", srv(server)), "an invalid answer is not a lost query")
 			assert.Equal(t, 0.0, h.mustValue("ntp_response_valid", srv(server)))
 			h.absent("ntp_offset_seconds", srv(server))
 			h.absent("ntp_stratum", srv(server))
@@ -198,8 +198,6 @@ func TestExporter_SingleSampleHasNoDispersion(t *testing.T) {
 	assert.Equal(t, 1.0, h.mustValue("ntp_samples_count", srv(server)))
 	assert.InDelta(t, 0.005, h.mustValue("ntp_offset_seconds", srv(server)), 1e-9)
 	h.absent("ntp_jitter_seconds", srv(server))
-	h.absent("ntp_offset_stddev_seconds", srv(server))
-	h.absent("ntp_rtt_stddev_seconds", srv(server))
 }
 
 func TestExporter_UnreachableServerHasNoStaleMeasurement(t *testing.T) {
@@ -218,7 +216,7 @@ func TestExporter_UnreachableServerHasNoStaleMeasurement(t *testing.T) {
 	assert.Equal(t, 0.0, h.mustValue("ntp_samples_count", srv(server)))
 	h.absent("ntp_offset_seconds", srv(server))
 	h.absent("ntp_stratum", srv(server))
-	assert.Equal(t, 1.0, h.mustValue("ntp_exporter_scrapes_total", map[string]string{"status": "failure"}))
+	assert.Equal(t, 1.0, h.mustValue("ntp_exporter_cycles_total", map[string]string{"status": "failure"}))
 }
 
 func TestExporter_Pool(t *testing.T) {
@@ -232,7 +230,8 @@ func TestExporter_Pool(t *testing.T) {
 	pool := map[string]string{"pool": member}
 	assert.Equal(t, 1.0, h.mustValue("ntp_pool_servers_total", pool))
 	assert.Equal(t, 1.0, h.mustValue("ntp_pool_servers_active", pool))
-	assert.InDelta(t, -0.003, h.mustValue("ntp_pool_offset_median_seconds", pool), 1e-9)
+	h.absent("ntp_pool_offset_median_seconds", nil)
+	h.absent("ntp_pool_dns_resolution_seconds", nil)
 	h.absent("ntp_pool_best_offset_seconds", nil)
 	assert.Equal(t, 1.0, h.mustValue("ntp_up", srv(member)))
 }
@@ -340,98 +339,57 @@ func TestExporter_Kernel(t *testing.T) {
 
 	node := map[string]string{"node": "node1"}
 	assert.Equal(t, 1.0, h.mustValue("ntp_kernel_sync_status", node))
-	assert.Equal(t, 1.0, h.mustValue("ntp_kernel_state", map[string]string{"node": "node1", "state": "synchronized"}))
-	assert.InDelta(t, 0.016, h.mustValue("ntp_kernel_max_error_seconds", node), 1e-9)
-	assert.InDelta(t, 0.001, h.mustValue("ntp_kernel_est_error_seconds", node), 1e-9)
-	assert.Equal(t, 37.0, h.mustValue("ntp_kernel_tai_offset_seconds", node))
-	assert.Equal(t, 10.0, h.mustValue("ntp_kernel_frequency_ppm", node))
+	assert.Equal(t, 0.0, h.mustValue("ntp_kernel_error_bound_violated", node))
+	assert.Equal(t, 1.0, h.mustValue("ntp_up", map[string]string{"node": "node1", "server": "a.example.org"}), "every series has the node label")
+	// Raw kernel values are node_exporter timex metrics
+	for _, removed := range []string{"ntp_kernel_state", "ntp_kernel_max_error_seconds", "ntp_kernel_est_error_seconds",
+		"ntp_kernel_tai_offset_seconds", "ntp_kernel_frequency_ppm", "ntp_kernel_offset_seconds"} {
+		h.absent(removed, nil)
+	}
 	h.absent("ntp_kernel_divergence_seconds", nil)
 	h.absent("ntp_kernel_coherence_score", nil)
 	h.absent("ntp_kernel_status_code", nil)
 }
 
 func TestExporter_KernelErrorBoundViolation(t *testing.T) {
-	// The mock servers have a 15ms root distance: the measurement uncertainty
+	// The reference is the server with the lowest root distance; its root
+	// distance is the measurement uncertainty
 	tests := []struct {
 		name     string
 		offset   time.Duration
 		maxError time.Duration
-		estError time.Duration
-		violated map[string]float64
+		violated float64
 	}{
-		{"bounds respected", 10 * time.Millisecond, 16 * time.Millisecond, 2 * time.Millisecond,
-			map[string]float64{"maxerror": 0, "esterror": 0}},
-		{"uncertainty absorbs the gap", 20 * time.Millisecond, 16 * time.Millisecond, 2 * time.Millisecond,
-			map[string]float64{"maxerror": 0, "esterror": 1}},
-		{"kernel underestimates its error", 80 * time.Millisecond, 16 * time.Millisecond, 2 * time.Millisecond,
-			map[string]float64{"maxerror": 1, "esterror": 1}},
+		{"bound respected", 10 * time.Millisecond, 16 * time.Millisecond, 0},
+		{"uncertainty absorbs the gap", 25 * time.Millisecond, 16 * time.Millisecond, 0},
+		{"kernel underestimates its error", 80 * time.Millisecond, 16 * time.Millisecond, 1},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := newKernelHarness(t, &ntp.KernelTimex{MaxError: tt.maxError, EstError: tt.estError}, "a.example.org", "192.0.2.50")
-			h.cfg.NTP.Servers = []string{"a.example.org"}
-			h.cfg.NTP.Pools = []config.PoolConfig{{Name: "192.0.2.50", Strategy: "all", MaxServers: 4}}
-			h.mock.SetupSuccessfulServer("a.example.org", tt.offset, 2)
-			h.mock.SetupSuccessfulServer("192.0.2.50", tt.offset, 2)
+			h := newKernelHarness(t, &ntp.KernelTimex{MaxError: tt.maxError}, "near.example.org", "far.example.org")
+			h.mock.SetupSuccessfulServer("near.example.org", tt.offset, 2) // root distance 15ms
+			far, _ := h.mock.Query(context.Background(), "near.example.org")
+			wide := *far
+			wide.Offset = 0
+			wide.RootDistance = time.Second // would absorb any gap
+			h.mock.SetResponse("far.example.org", &wide)
 
 			h.cycle()
 
-			for _, server := range []string{"a.example.org", "192.0.2.50"} {
-				for bound, want := range tt.violated {
-					assert.Equal(t, want, h.mustValue("ntp_kernel_error_bound_violated",
-						map[string]string{"node": "node1", "server": server, "bound": bound}), "%s %s", server, bound)
-				}
-			}
+			assert.Equal(t, tt.violated, h.mustValue("ntp_kernel_error_bound_violated", map[string]string{"node": "node1"}))
 		})
 	}
 }
 
-func TestExporter_KernelBoundViolationNeedsTrustedServers(t *testing.T) {
-	// The mock servers have a 15ms root distance and the kernel announces a
-	// 100ms maximum error
-	tests := []struct {
-		name    string
-		offsets map[string]time.Duration
-		want    map[string]float64 // absent servers emit no violation
-	}{
-		{"falseticker is ignored", map[string]time.Duration{
-			"a.example.org": 10 * time.Millisecond, "b.example.org": 12 * time.Millisecond, "c.example.org": 300 * time.Millisecond,
-		}, map[string]float64{"a.example.org": 0, "b.example.org": 0}},
-		{"majority shifted", map[string]time.Duration{
-			"a.example.org": 300 * time.Millisecond, "b.example.org": 302 * time.Millisecond, "c.example.org": 301 * time.Millisecond,
-		}, map[string]float64{"a.example.org": 1, "b.example.org": 1, "c.example.org": 1}},
-		{"no majority", map[string]time.Duration{
-			"a.example.org": 0, "b.example.org": time.Millisecond,
-			"c.example.org": 300 * time.Millisecond, "d.example.org": 301 * time.Millisecond,
-		}, map[string]float64{}},
-	}
+func TestExporter_KernelBoundViolationNeedsAReference(t *testing.T) {
+	h := newKernelHarness(t, &ntp.KernelTimex{MaxError: time.Millisecond})
+	h.cfg.NTP.Servers = nil
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			servers := make([]string, 0, len(tt.offsets))
-			for s := range tt.offsets {
-				servers = append(servers, s)
-			}
-			h := newKernelHarness(t, &ntp.KernelTimex{MaxError: 100 * time.Millisecond, EstError: time.Second}, servers...)
-			enabled := true
-			h.cfg.NTP.Consensus.Enabled = &enabled
-			for s, offset := range tt.offsets {
-				h.mock.SetupSuccessfulServer(s, offset, 2)
-			}
+	h.cycle()
 
-			h.cycle()
-
-			for _, s := range servers {
-				labels := map[string]string{"node": "node1", "server": s, "bound": "maxerror"}
-				if want, ok := tt.want[s]; ok {
-					assert.Equal(t, want, h.mustValue("ntp_kernel_error_bound_violated", labels), s)
-				} else {
-					h.absent("ntp_kernel_error_bound_violated", labels)
-				}
-			}
-		})
-	}
+	assert.Equal(t, 1.0, h.mustValue("ntp_kernel_sync_status", map[string]string{"node": "node1"}))
+	h.absent("ntp_kernel_error_bound_violated", nil)
 }
 
 func TestExporter_KernelUnsyncHasNoBound(t *testing.T) {
@@ -444,25 +402,12 @@ func TestExporter_KernelUnsyncHasNoBound(t *testing.T) {
 	h.absent("ntp_kernel_error_bound_violated", nil)
 }
 
-func TestExporter_KernelViolationOnly(t *testing.T) {
-	h := newKernelHarness(t, &ntp.KernelTimex{MaxError: time.Millisecond}, "a.example.org")
-	h.cfg.NTP.Kernel.ViolationOnly = true
-	h.mock.SetupSuccessfulServer("a.example.org", 50*time.Millisecond, 2)
-
-	h.cycle()
-
-	assert.Equal(t, 1.0, h.mustValue("ntp_kernel_sync_status", map[string]string{"node": "node1"}))
-	assert.Equal(t, 1.0, h.mustValue("ntp_kernel_error_bound_violated", map[string]string{"bound": "maxerror"}))
-	h.absent("ntp_kernel_max_error_seconds", nil)
-	h.absent("ntp_kernel_state", nil)
-}
-
 func TestExporter_KernelReadError(t *testing.T) {
 	h := newHarness(t)
 	h.exporter.kernelReader = fakeKernel{err: errors.New("unsupported")}
 
 	h.exporter.Update(&probe.CycleResult{})
-	h.absent("ntp_kernel_offset_seconds", nil)
+	h.absent("ntp_kernel_sync_status", nil)
 }
 
 func TestExporter_Lint(t *testing.T) {
@@ -540,17 +485,15 @@ func TestExporter_OffsetFromLowestDelaySample(t *testing.T) {
 		mk(8*time.Millisecond, 60*time.Millisecond),
 		mk(3*time.Millisecond, 15*time.Millisecond),
 	}}
-	h.cfg.NTP.MaxClockOffset = 2500 * time.Microsecond
-
 	h.cycle()
 
 	assert.InDelta(t, 0.002, h.mustValue("ntp_offset_seconds", srv(server)), 1e-9)
 	assert.InDelta(t, 0.012, h.mustValue("ntp_rtt_seconds", srv(server)), 1e-9)
-	assert.InDelta(t, 0.004, h.mustValue("ntp_offset_median_seconds", srv(server)), 1e-9)
-	assert.Equal(t, 0.0, h.mustValue("ntp_clock_offset_exceeded", srv(server)), "threshold applies to the best sample")
 	assert.InDelta(t, 0.0039158, h.mustValue("ntp_jitter_seconds", srv(server)), 1e-6)
-	assert.Greater(t, h.mustValue("ntp_rtt_stddev_seconds", srv(server)), 0.02)
-	assert.Greater(t, h.mustValue("ntp_offset_stddev_seconds", srv(server)), 0.0)
+	for _, removed := range []string{"ntp_offset_median_seconds", "ntp_clock_offset_exceeded",
+		"ntp_rtt_stddev_seconds", "ntp_offset_stddev_seconds"} {
+		h.absent(removed, nil)
+	}
 	h.absent("ntp_asymmetry_seconds", nil)
 	h.absent("ntp_stability_seconds", nil)
 }
@@ -565,11 +508,12 @@ func TestExporter_ServerInfo(t *testing.T) {
 
 	assert.Equal(t, 1.0, h.mustValue("ntp_server_info", map[string]string{
 		"server": "time.example.org", "address": "time.example.org", "pool": "",
-		"refid": "NIST", "stratum": "1", "leap": "0", "version": "4",
+		"refid": "NIST", "version": "4",
 	}))
 	assert.Equal(t, 1.0, h.mustValue("ntp_server_info", map[string]string{
-		"server": "192.0.2.40", "pool": "192.0.2.40", "refid": "78.73.83.84", "stratum": "2",
+		"server": "192.0.2.40", "pool": "192.0.2.40", "refid": "78.73.83.84",
 	}))
+	h.absent("ntp_server_info", map[string]string{"stratum": "1"})
 }
 
 func TestExporter_Consensus(t *testing.T) {
@@ -676,7 +620,9 @@ func TestExporter_ChronyTracking(t *testing.T) {
 	assert.Equal(t, 1.0, h.mustValue("ntp_chrony_tracking_info", map[string]string{"node": "node-1", "refid": "C0000201", "source": "192.0.2.1"}))
 	assert.Equal(t, 3.0, h.mustValue("ntp_chrony_stratum", node))
 	assert.Equal(t, -0.001, h.mustValue("ntp_chrony_system_time_offset_seconds", node))
-	assert.Equal(t, -33.6, h.mustValue("ntp_chrony_frequency_ppm", node))
+	// The rest of the chronyd state is chrony_exporter's
+	h.absent("ntp_chrony_frequency_ppm", nil)
+	h.absent("ntp_chrony_skew_ppm", nil)
 	assert.Equal(t, 1.8e9, h.mustValue("ntp_chrony_reference_timestamp_seconds", node))
 
 	h.exporter.SetChronyReader(fakeChrony{err: errors.New("connection refused")})

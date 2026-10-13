@@ -24,7 +24,7 @@ func newTestServer(t *testing.T, readiness ReadinessFunc) *httptest.Server {
 	t.Helper()
 	reg := metrics.NewRegistryWithConfig("ntp", "")
 	require.NoError(t, reg.Register())
-	reg.GetMetrics().ExporterScrapesTotal.WithLabelValues("success").Inc()
+	reg.GetMetrics().ExporterCyclesTotal.WithLabelValues("success").Inc()
 
 	ts := httptest.NewServer(New(config.DefaultConfig(), reg.GetRegistry(), readiness).Handler())
 	t.Cleanup(ts.Close)
@@ -46,7 +46,7 @@ func TestServer_Metrics(t *testing.T) {
 
 	code, body := get(t, ts.URL+"/metrics")
 	assert.Equal(t, http.StatusOK, code)
-	assert.Contains(t, body, "ntp_exporter_scrapes_total")
+	assert.Contains(t, body, "ntp_exporter_cycles_total")
 	assert.Contains(t, body, "go_goroutines")
 	assert.NotContains(t, body, "ntp_exporter_memory_usage_bytes", "runtime metrics come from the Go collector")
 	assert.NotContains(t, body, "ntp_exporter_gc_duration_seconds")

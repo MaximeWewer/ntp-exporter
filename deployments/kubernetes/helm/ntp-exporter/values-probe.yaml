@@ -79,7 +79,6 @@ config:
   metricsPort: 9559
   scrapeInterval: 60s
   ntpTimeout: 2s
-  maxClockOffset: 100ms
   logging:
     level: info
     format: json

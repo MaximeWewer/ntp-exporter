@@ -316,13 +316,11 @@ probe_endpoint:
 | `NTP_VERSION` | `4` | NTP protocol version (2 to 4) |
 | `NTP_MAX_CONCURRENCY` | `10` | Servers probed in parallel |
 | `NTP_IP_FAMILY` | `auto` | `auto`, `ipv4` or `ipv6` |
-| `NTP_MAX_CLOCK_OFFSET` | `100ms` | Threshold of `ntp_clock_offset_exceeded` |
 | `NTP_MAX_ROOT_DISTANCE` | `1.5s` | Responses with a larger root distance are invalid (`reason="root_distance"`), like ntpd's MAXDIST (chrony uses 3 s); 100 ms to 16 s |
 | `NTP_CONSENSUS_ENABLED` | `true` in probe mode | Consensus and falseticker detection, computed as soon as 3 targets (pool members included) answer |
 | `NTP_KOD_MAX_BACKOFF` | `1024s` | Longest polling interval after repeated `RATE` |
 | `NTP_KOD_SUSPEND_DURATION` | `1h` | Suspension after `DENY` or `RSTR` |
 | `NTP_KERNEL_ENABLED` | `false` | Kernel option (agent mode, Linux) |
-| `NTP_KERNEL_VIOLATION_ONLY` | `false` | Only expose the bound violation and sync status |
 | `NTP_CHRONY_ENABLED` | `false` | chrony option (agent mode) |
 | `NTP_CHRONY_ADDRESS` | `udp://127.0.0.1:323` | chronyd command address, or `unix:///run/chrony/chronyd.sock` |
 | `DNS_CACHE_MIN_TTL` / `DNS_CACHE_MAX_TTL` | `5m` / `60m` | Cache of pool DNS answers |
@@ -358,19 +356,16 @@ Names below use the default `ntp` namespace and no subsystem.
 | `ntp_up` | 1 when the server answered during the last cycle |
 | `ntp_response_valid` | 1 when at least one response was a valid time measurement |
 | `ntp_last_success_timestamp_seconds` | Unix time of the last cycle with a valid response |
-| `ntp_server_info{address,pool,refid,stratum,leap,version}` | Identity of the server (value 1). `refid` is an ASCII code (`GPS`, `PPS`...) for stratum 1, the upstream IPv4 address otherwise |
+| `ntp_server_info{address,pool,refid,version}` | Identity of the server (value 1): queried address, pool, reference ID (an ASCII code such as `GPS` or `PPS` for stratum 1, the upstream IPv4 address otherwise), NTP version of the response |
 | `ntp_offset_seconds` | Offset of the local clock, from the sample with the lowest delay: positive when the local clock is behind the server |
-| `ntp_offset_median_seconds` | Median offset of the valid samples |
-| `ntp_clock_offset_exceeded` | 1 when `abs(offset)` exceeds `max_clock_offset` |
 | `ntp_rtt_seconds` | Round-trip delay of the selected sample |
 | `ntp_stratum`, `ntp_leap_indicator`, `ntp_precision_seconds` | Fields of the server response |
 | `ntp_root_delay_seconds`, `ntp_root_dispersion_seconds` | Delay and dispersion to the stratum 1 source |
 | `ntp_root_distance_seconds` | Synchronization distance: `(root delay + rtt) / 2 + root dispersion`, an upper bound of the error of the server time |
 | `ntp_reference_age_seconds` | Time since the server clock was last set or corrected |
 | `ntp_jitter_seconds` | RFC 5905 jitter: `sqrt(Σ(θ₀ − θᵢ)² / (n − 1))`, θ₀ being the offset of the lowest-delay sample |
-| `ntp_offset_stddev_seconds`, `ntp_rtt_stddev_seconds` | Standard deviations of the offsets and delays of the burst |
 | `ntp_samples_count` | Valid samples in the last burst (jitter and standard deviations need 2 or more) |
-| `ntp_packet_loss_ratio` | Queries without valid response / queries sent |
+| `ntp_packet_loss_ratio` | Queries left without any answer / queries sent (invalid answers are counted in `ntp_invalid_responses_total`) |
 | `ntp_target_suspended{code}` | 1 while the server is not queried after `DENY` or `RSTR` |
 | `ntp_kiss_of_death_total{code}` | Kiss-o'-Death packets received |
 | `ntp_invalid_responses_total{reason}` | Queries without valid measurement: `kod`, `unsync`, `stratum`, `root_distance`, `stale_reference`, `invalid_time` (bad transmit time, clock ticking backwards, origin timestamp mismatch), `other`, `timeout` (no answer) |
@@ -393,18 +388,13 @@ Names below use the default `ntp` namespace and no subsystem.
 |---|---|
 | `ntp_pool_servers_total` | Addresses returned by the last resolution |
 | `ntp_pool_servers_active` | Members with a valid response |
-| `ntp_pool_offset_median_seconds` | Median offset of the valid members |
-| `ntp_pool_dns_resolution_seconds` | Duration of the last real (non cached) resolution |
 
 ### Kernel option (`node` label)
 
 | Metric | Description |
 |---|---|
 | `ntp_kernel_sync_status` | 1 when the kernel clock is synchronized (`STA_UNSYNC` not set) |
-| `ntp_kernel_error_bound_violated{server,bound}` | 1 when `abs(offset) − root distance` exceeds the `maxerror` or `esterror` bound announced by the kernel |
-| `ntp_kernel_state{state}` | Clock state returned by `adjtimex` (`synchronized`, `leap_insert_pending`...) |
-| `ntp_kernel_max_error_seconds`, `ntp_kernel_est_error_seconds` | Error bounds maintained by the time daemon |
-| `ntp_kernel_frequency_ppm`, `ntp_kernel_offset_seconds`, `ntp_kernel_tai_offset_seconds` | Frequency correction, residual PLL offset, TAI−UTC |
+| `ntp_kernel_error_bound_violated` | 1 when `abs(offset) − root distance` against the reference server (lowest root distance) exceeds the maximum error announced by the kernel |
 
 ### chrony option (`node` label)
 
@@ -414,19 +404,17 @@ Names below use the default `ntp` namespace and no subsystem.
 | `ntp_chrony_tracking_info{refid,source}` | Source selected by chronyd (address, or reference clock name) |
 | `ntp_chrony_stratum`, `ntp_chrony_leap_status` | Stratum of the local clock, leap status (3 = not synchronised) |
 | `ntp_chrony_system_time_offset_seconds` | Offset still being slewed out of the system clock (positive: clock slow) |
-| `ntp_chrony_last_offset_seconds`, `ntp_chrony_rms_offset_seconds` | Offset at the last update, long-term average |
-| `ntp_chrony_frequency_ppm`, `ntp_chrony_residual_frequency_ppm`, `ntp_chrony_skew_ppm` | Frequency error (negative: slow), residual frequency, frequency error bound |
-| `ntp_chrony_root_delay_seconds`, `ntp_chrony_root_dispersion_seconds` | Distance to the stratum 1 source |
-| `ntp_chrony_reference_timestamp_seconds`, `ntp_chrony_update_interval_seconds` | Last clock update, interval between updates |
+| `ntp_chrony_root_dispersion_seconds` | Dispersion accumulated since the stratum 1 source |
+| `ntp_chrony_reference_timestamp_seconds` | Last clock update |
 
 ### Exporter
 
 | Metric | Description |
 |---|---|
 | `ntp_exporter_build_info{version,commit,go_version}` | Build information |
-| `ntp_exporter_cycle_duration_seconds`, `ntp_exporter_scrape_duration_seconds` | Duration of the last cycle / histogram of cycle durations |
+| `ntp_exporter_cycle_duration_seconds` | Histogram of the collection cycle durations |
 | `ntp_exporter_cycle_overrun_total` | Cycles cut at their deadline |
-| `ntp_exporter_scrapes_total{status}` | Cycles with at least one answering server (`success`) or none (`failure`) |
+| `ntp_exporter_cycles_total{status}` | Cycles with at least one answering server (`success`) or none (`failure`) |
 | `ntp_exporter_servers_configured` | Servers and pools configured |
 
 Go runtime and process metrics (`go_*`, `process_*`) are also exposed.
@@ -459,7 +447,7 @@ Recommended rules are provided:
 | `NTPNTSKeyExchangeFailed` | The NTS key exchange of a server fails for 15 minutes |
 | `NTPNTSCertificateExpiringSoon` | The NTS key exchange certificate expires within 14 days |
 | `NTPKernelUnsynchronized` | The kernel clock of a node is unsynchronized for 10 minutes |
-| `NTPKernelErrorBoundViolated` | The measured offset exceeds the kernel `maxerror` for 10 minutes |
+| `NTPKernelErrorBoundViolated` | The offset against the reference server exceeds the kernel maximum error for 10 minutes |
 | `NTPExporterCycleOverrun` | Cycles hit their deadline |
 
 ## Grafana dashboards
@@ -476,43 +464,37 @@ Both dashboards use a Prometheus data source variable and `server` (and
 
 ## Kernel option
 
-With `kernel.enabled`, the exporter also reads the kernel clock state with a
-read-only `adjtimex` call (Linux only). **No privilege is required**: any
+In agent mode on Linux (unless `kernel.enabled: false`), the exporter reads
+the kernel clock state with a read-only `adjtimex` call. **No privilege is required**: any
 process may call `adjtimex` without modifying the clock, and the real-time
 clock is not namespaced, so a regular container sees the node clock.
 
 The key signal is `ntp_kernel_error_bound_violated`: the time daemon (chrony,
-ntpd, systemd-timesyncd) announces a maximum error (`maxerror`) and an
-estimated error (`esterror`) through the kernel. When the offset measured from
-the outside, minus the measurement uncertainty (root distance), exceeds that
-bound, the daemon underestimates its error: it may be locked on a wrong source.
-Alert on `maxerror` (guaranteed bound, few false positives) and keep `esterror`
-for dashboards (earlier detection, noisier).
+ntpd, systemd-timesyncd) announces a maximum error (`maxerror`) through the
+kernel, a guaranteed bound. The offset is measured against the reference
+server with the lowest root distance; when it exceeds that bound beyond the
+measurement uncertainty (the root distance of the server), the daemon
+underestimates its error: it may be locked on a wrong source. Without any
+answering reference server, the violation is not exposed.
 
-With 3 servers or more, the bounds are only checked against the servers that
-agree with a majority of the others: a falseticker, or a split without
-majority, would otherwise blame the local daemon for the error of a remote
-server. With 1 or 2 servers, every server is used.
-
-The other kernel metrics are equivalent to the `timex` collector of
-node_exporter (`node_timex_*`). If node_exporter already runs on your nodes,
-set `kernel.violation_only` to only expose `ntp_kernel_error_bound_violated`
-and `ntp_kernel_sync_status`.
+Only `ntp_kernel_sync_status` and the violation are exposed: the raw kernel
+values (frequency, error bounds, TAI offset) are the `timex` collector of
+node_exporter (`node_timex_*`).
 
 Notes per daemon:
 
-- **chrony** does not use the kernel PLL (see also the [chrony option](#chrony-option)): `ntp_kernel_offset_seconds` stays
-  close to 0, which is expected. Old versions (< 1.31) do not maintain
-  `STA_UNSYNC` reliably.
+- **chrony** does not use the kernel PLL (see also the [chrony option](#chrony-option)).
+  Old versions (< 1.31) do not maintain `STA_UNSYNC` reliably.
 - **ntpd** and **systemd-timesyncd** maintain the kernel state.
 - **OpenNTPD** < 5.9p1 does not update the kernel flags.
 
 ## chrony option
 
-With `chrony.enabled` (agent mode), the exporter reads the `tracking` report
-of the local chronyd once per cycle, like `chronyc tracking`: the source the
-daemon selected, its stratum, the offset it still has to correct, the last
-offset, the frequency and its skew. Comparing them with `ntp_offset_seconds`
+In agent mode, when chronyd answers at startup (or with `chrony.enabled:
+true`), the exporter reads the `tracking` report of the local chronyd once per
+cycle, like `chronyc tracking`: the source the daemon selected, its stratum
+and leap status, the offset it still has to correct, its root dispersion and
+the time of its last clock update. Comparing them with `ntp_offset_seconds`
 correlates the measurement from the outside with the decision of the daemon.
 
 chronyd answers read-only commands from localhost on UDP port 323 by default

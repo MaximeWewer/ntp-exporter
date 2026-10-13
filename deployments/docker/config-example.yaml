@@ -156,10 +156,6 @@ ntp:
   # Default: 60s
   scrape_interval: 60s
 
-  # Offset above which ntp_clock_offset_exceeded is set to 1
-  # Default: 100ms
-  max_clock_offset: 100ms
-
   # Responses whose root distance (upper bound of the server error) exceeds
   # this value are invalid: counted with reason="root_distance", never used as
   # a measurement nor by the consensus. ntpd uses 1.5s (MAXDIST), chrony 3s.
@@ -172,14 +168,10 @@ ntp:
   # Read with an unprivileged read-only adjtimex call
   # ----------------------------------------------------------------------------
   kernel:
-    # Expose ntp_kernel_* metrics and ntp_kernel_error_bound_violated
-    # Default: false
-    enabled: false
-
-    # Only expose ntp_kernel_error_bound_violated and ntp_kernel_sync_status
-    # (when node_exporter already exposes node_timex_* metrics)
-    # Default: false
-    violation_only: false
+    # Expose ntp_kernel_sync_status and ntp_kernel_error_bound_violated (agent
+    # mode only). The raw kernel values are node_exporter node_timex_* metrics.
+    # Default: unset, enabled in agent mode on Linux
+    # enabled: true
 
   # ----------------------------------------------------------------------------
   # CHRONY - Tracking report of the local chronyd (agent mode): selected
@@ -188,7 +180,7 @@ ntp:
   # the chronyd user (it creates its reply socket next to the chronyd socket).
   # ----------------------------------------------------------------------------
   chrony:
-    # Default: false
+    # Agent mode only. Default: unset, enabled in agent mode when chronyd answers
     enabled: false
 
     # Values: udp://host:port or unix:///path/to/chronyd.sock

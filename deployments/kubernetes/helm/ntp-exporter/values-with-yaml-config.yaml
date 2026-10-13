@@ -73,7 +73,6 @@ configYaml:
       # Kernel clock state (agent mode only)
       kernel:
         enabled: false
-        violation_only: false
 
       # Kiss-o'-Death handling
       kod:

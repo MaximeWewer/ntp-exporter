@@ -14,10 +14,9 @@ type NTPMetrics struct {
 
 	// Exporter operational metrics
 	ExporterBuildInfo         *prometheus.GaugeVec
-	ExporterScrapeDuration    prometheus.Histogram
-	ExporterScrapesTotal      *prometheus.CounterVec
+	ExporterCycleDuration     prometheus.Histogram
+	ExporterCyclesTotal       *prometheus.CounterVec
 	ExporterServersConfigured prometheus.Gauge
-	ExporterCycleDuration     prometheus.Gauge
 	ExporterCycleOverrunTotal prometheus.Counter
 }
 
@@ -52,21 +51,21 @@ func NewNTPMetricsWithConfig(namespace, subsystem string) *NTPMetrics {
 			},
 			[]string{"version", "commit", "go_version"},
 		),
-		ExporterScrapeDuration: prometheus.NewHistogram(
+		ExporterCycleDuration: prometheus.NewHistogram(
 			prometheus.HistogramOpts{
 				Namespace: namespace,
 				Subsystem: "exporter",
-				Name:      "scrape_duration_seconds",
-				Help:      "Duration of NTP collection cycles in seconds",
+				Name:      "cycle_duration_seconds",
+				Help:      "Duration of the NTP collection cycles in seconds",
 				Buckets:   []float64{0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0},
 			},
 		),
-		ExporterScrapesTotal: prometheus.NewCounterVec(
+		ExporterCyclesTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
 				Subsystem: "exporter",
-				Name:      "scrapes_total",
-				Help:      "Total number of collection cycles",
+				Name:      "cycles_total",
+				Help:      "Total number of collection cycles, with at least one answering target (success) or none (failure)",
 			},
 			[]string{"status"},
 		),
@@ -76,14 +75,6 @@ func NewNTPMetricsWithConfig(namespace, subsystem string) *NTPMetrics {
 				Subsystem: "exporter",
 				Name:      "servers_configured",
 				Help:      "Number of NTP servers and pools configured",
-			},
-		),
-		ExporterCycleDuration: prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Namespace: namespace,
-				Subsystem: "exporter",
-				Name:      "cycle_duration_seconds",
-				Help:      "Duration of the last collection cycle in seconds",
 			},
 		),
 		ExporterCycleOverrunTotal: prometheus.NewCounter(
@@ -104,10 +95,9 @@ func (m *NTPMetrics) getAllMetrics() []prometheus.Collector {
 		m.InvalidResponsesTotal,
 
 		m.ExporterBuildInfo,
-		m.ExporterScrapeDuration,
-		m.ExporterScrapesTotal,
-		m.ExporterServersConfigured,
 		m.ExporterCycleDuration,
+		m.ExporterCyclesTotal,
+		m.ExporterServersConfigured,
 		m.ExporterCycleOverrunTotal,
 	}
 }

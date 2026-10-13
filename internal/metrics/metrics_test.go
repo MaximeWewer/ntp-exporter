@@ -28,13 +28,13 @@ func TestRegistry_Register(t *testing.T) {
 
 	m := r.GetMetrics()
 	m.ExporterBuildInfo.WithLabelValues("v1", "abc", "go1.27").Set(1)
-	m.ExporterScrapesTotal.WithLabelValues("success").Inc()
+	m.ExporterCyclesTotal.WithLabelValues("success").Inc()
 	m.KissOfDeathTotal.WithLabelValues("time.example.org", "RATE").Inc()
 
 	names := gatherNames(t, r.GetRegistry())
 	for _, name := range []string{
 		"ntp_exporter_build_info",
-		"ntp_exporter_scrapes_total",
+		"ntp_exporter_cycles_total",
 		"ntp_exporter_cycle_duration_seconds",
 		"ntp_kiss_of_death_total",
 		"go_goroutines",
@@ -48,17 +48,17 @@ func TestNewRegistryWithConfig_Namespace(t *testing.T) {
 	r := NewRegistryWithConfig("custom", "probe")
 	require.NoError(t, r.Register())
 	r.GetMetrics().InvalidResponsesTotal.WithLabelValues("time.example.org", "kod").Inc()
-	r.GetMetrics().ExporterScrapesTotal.WithLabelValues("success").Inc()
+	r.GetMetrics().ExporterCyclesTotal.WithLabelValues("success").Inc()
 
 	names := gatherNames(t, r.GetRegistry())
 	assert.True(t, names["custom_probe_invalid_responses_total"])
-	assert.True(t, names["custom_exporter_scrapes_total"], "exporter metrics keep the exporter subsystem")
+	assert.True(t, names["custom_exporter_cycles_total"], "exporter metrics keep the exporter subsystem")
 }
 
 func TestRegistry_ConstLabels(t *testing.T) {
 	r := NewRegistryWithConfig("ntp", "", map[string]string{"site": "par1"})
 	require.NoError(t, r.Register())
-	r.GetMetrics().ExporterScrapesTotal.WithLabelValues("success").Inc()
+	r.GetMetrics().ExporterCyclesTotal.WithLabelValues("success").Inc()
 	require.NoError(t, r.RegisterCollector(prometheus.NewGauge(prometheus.GaugeOpts{Name: "ntp_extra"})))
 
 	families, err := r.GetRegistry().Gather()
@@ -77,7 +77,7 @@ func TestRegistry_ConstLabels(t *testing.T) {
 
 func TestNTPMetrics_Lint(t *testing.T) {
 	m := NewNTPMetricsWithConfig("ntp", "")
-	m.ExporterScrapesTotal.WithLabelValues("success").Inc()
+	m.ExporterCyclesTotal.WithLabelValues("success").Inc()
 	m.KissOfDeathTotal.WithLabelValues("time.example.org", "RATE").Inc()
 	m.InvalidResponsesTotal.WithLabelValues("time.example.org", "kod").Inc()
 	problems, err := testutil.CollectAndLint(m)

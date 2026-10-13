@@ -14,9 +14,6 @@ mode: ""
 kernel:
   # Unset: enabled in agent mode on Linux nodes
   enabled: null
-  # Only expose ntp_kernel_error_bound_violated and ntp_kernel_sync_status,
-  # when node_exporter already exposes node_timex_* metrics
-  violationOnly: false
 
 # chronyd tracking report (agent mode): source selected by the daemon, offset,
 # frequency, skew... Two ways to reach chronyd on the node:
@@ -93,8 +90,6 @@ config:
   # NTP query timeout
   ntpTimeout: 5s
 
-  # Maximum clock offset threshold
-  maxClockOffset: 100ms
 
   # Responses whose root distance exceeds this value are invalid (MAXDIST)
   maxRootDistance: 1.5s

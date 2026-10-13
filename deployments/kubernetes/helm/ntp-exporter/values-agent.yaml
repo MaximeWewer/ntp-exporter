@@ -10,8 +10,6 @@ mode: agent
 kernel:
   # Unset: enabled in agent mode on Linux nodes
   enabled: null
-  # Set to true when node_exporter already exposes node_timex_* metrics
-  violationOnly: false
 
 # Run on all nodes including master
 tolerations:
@@ -64,6 +62,5 @@ config:
   metricsPort: 9559
   scrapeInterval: 60s
   ntpTimeout: 5s
-  maxClockOffset: 50ms
   logging:
     level: info

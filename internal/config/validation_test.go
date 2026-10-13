@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -151,7 +153,6 @@ func TestValidateNTP_ServersOrPools(t *testing.T) {
 				SamplesPerServer: 3,
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
-				MaxClockOffset:   100 * time.Millisecond,
 				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
@@ -191,7 +192,6 @@ func TestValidateNTP_Timeout(t *testing.T) {
 				SamplesPerServer: 3,
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
-				MaxClockOffset:   100 * time.Millisecond,
 				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
@@ -232,7 +232,6 @@ func TestValidateNTP_Version(t *testing.T) {
 				SamplesPerServer: 3,
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
-				MaxClockOffset:   100 * time.Millisecond,
 				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
@@ -272,7 +271,6 @@ func TestValidateNTP_SamplesPerServer(t *testing.T) {
 				SamplesPerServer: tt.samples,
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
-				MaxClockOffset:   100 * time.Millisecond,
 				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
@@ -312,7 +310,6 @@ func TestValidateNTP_MaxConcurrency(t *testing.T) {
 				SamplesPerServer: 3,
 				MaxConcurrency:   tt.concurrent,
 				ScrapeInterval:   30 * time.Second,
-				MaxClockOffset:   100 * time.Millisecond,
 				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
@@ -377,7 +374,6 @@ func TestValidateNTP_Pools(t *testing.T) {
 				SamplesPerServer: 3,
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
-				MaxClockOffset:   100 * time.Millisecond,
 				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
@@ -413,7 +409,6 @@ func TestValidateNTP_PoolStrategies(t *testing.T) {
 				SamplesPerServer: 3,
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
-				MaxClockOffset:   100 * time.Millisecond,
 				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
@@ -569,7 +564,6 @@ func TestValidate_CompleteConfig(t *testing.T) {
 			SamplesPerServer: 3,
 			MaxConcurrency:   10,
 			ScrapeInterval:   30 * time.Second,
-			MaxClockOffset:   100 * time.Millisecond,
 			MaxRootDistance:  DefaultMaxRootDistance,
 			KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 			DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
@@ -608,14 +602,6 @@ func TestValidate_ScrapeIntervalBounds(t *testing.T) {
 	cfg.NTP.ScrapeInterval = 30 * time.Second
 	if err := Validate(cfg); err != nil {
 		t.Errorf("scrape_interval 30s should be accepted: %v", err)
-	}
-}
-
-func TestValidate_MaxClockOffsetPositive(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.NTP.MaxClockOffset = -time.Millisecond
-	if err := Validate(cfg); err == nil {
-		t.Error("negative max_clock_offset should be rejected")
 	}
 }
 
@@ -854,4 +840,16 @@ func validConfig() *Config {
 	cfg := DefaultConfig()
 	cfg.NTP.Servers = []string{"time.example.org"}
 	return cfg
+}
+
+func TestLoad_RemovedOptionsAreRejected(t *testing.T) {
+	for _, yaml := range []string{
+		"mode: probe\nntp:\n  servers: [a.example.org]\n  max_clock_offset: 100ms\n",
+		"mode: agent\nntp:\n  kernel:\n    violation_only: true\n",
+	} {
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(yaml), 0o600))
+		_, err := LoadFromYamlWithEnvOverrides(path)
+		assert.ErrorContains(t, err, "unknown field", yaml)
+	}
 }

@@ -241,7 +241,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count(max by (node) (ntp_kernel_error_bound_violated{node=~\"$node\",bound=\"maxerror\"}) == 1) or vector(0)",
+          "expr": "count(max by (node) (ntp_kernel_error_bound_violated{node=~\"$node\"}) == 1) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "format": "time_series",
@@ -439,27 +439,17 @@
     },
     {
       "type": "timeseries",
-      "title": "Error bound announced by the kernel",
-      "description": "maxerror is the guaranteed bound, esterror the estimate (dashboard only).",
+      "title": "Offset against the reference servers",
+      "description": "Offset of each node against its reference servers (positive: the node clock is behind). Through the pod network it is only accurate to about half the round-trip delay.",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_kernel_max_error_seconds{node=~\"$node\"}",
-          "legendFormat": "{{node}} maxerror",
+          "expr": "ntp_offset_seconds{node=~\"$node\"}",
+          "legendFormat": "{{node}} / {{server}}",
           "refId": "A",
-          "format": "time_series"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "ntp_kernel_est_error_seconds{node=~\"$node\"}",
-          "legendFormat": "{{node}} esterror",
-          "refId": "B",
           "format": "time_series"
         }
       ],
@@ -508,16 +498,16 @@
     },
     {
       "type": "timeseries",
-      "title": "Error bound violations (esterror shown for early detection)",
-      "description": "",
+      "title": "Error bound violations",
+      "description": "1 when the offset against the reference server, beyond its root distance, exceeds the maximum error announced by the kernel: the time daemon underestimates its error.",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (node, bound) (ntp_kernel_error_bound_violated{node=~\"$node\"})",
-          "legendFormat": "{{node}} {{bound}}",
+          "expr": "max by (node) (ntp_kernel_error_bound_violated{node=~\"$node\"})",
+          "legendFormat": "{{node}}",
           "refId": "A",
           "format": "time_series"
         }
@@ -568,15 +558,15 @@
     },
     {
       "type": "timeseries",
-      "title": "Kernel frequency correction",
-      "description": "",
+      "title": "Kernel synchronization",
+      "description": "Kernel clock synchronized (1) or STA_UNSYNC set (0). Raw kernel values (frequency, error bounds) are node_exporter node_timex_* metrics.",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_kernel_frequency_ppm{node=~\"$node\"}",
+          "expr": "ntp_kernel_sync_status{node=~\"$node\"}",
           "legendFormat": "{{node}}",
           "refId": "A",
           "format": "time_series"
@@ -616,67 +606,8 @@
       "id": 10,
       "gridPos": {
         "h": 7,
-        "w": 8,
+        "w": 24,
         "x": 0,
-        "y": 22
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Kernel residual offset",
-      "description": "",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "ntp_kernel_offset_seconds{node=~\"$node\"}",
-          "legendFormat": "{{node}}",
-          "refId": "A",
-          "format": "time_series"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 11,
-      "gridPos": {
-        "h": 7,
-        "w": 8,
-        "x": 8,
         "y": 22
       },
       "datasource": {
@@ -827,18 +758,6 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (node) (ntp_chrony_skew_ppm{node=~\"$node\"})",
-          "legendFormat": "",
-          "refId": "F",
-          "format": "table",
-          "instant": true,
-          "range": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
           "expr": "time() - max by (node) (ntp_chrony_reference_timestamp_seconds{node=~\"$node\"})",
           "legendFormat": "",
           "refId": "G",
@@ -864,7 +783,6 @@
               "Value #C": "stratum",
               "Value #D": "leap",
               "Value #E": "system time offset",
-              "Value #F": "skew",
               "Value #G": "last update"
             }
           }
@@ -886,18 +804,6 @@
               {
                 "id": "unit",
                 "value": "s"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "skew"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "ppm"
               }
             ]
           },
@@ -939,7 +845,7 @@
     {
       "type": "timeseries",
       "title": "chronyd offset vs measured offset",
-      "description": "What chronyd believes against what the exporter measures from the outside. The measured offset is negated to share the sign convention of chronyd.",
+      "description": "Offset chronyd still slews out of the clock, against the offset measured from the reference servers (inverted to share the chronyd sign convention).",
       "targets": [
         {
           "datasource": {
@@ -956,18 +862,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_chrony_last_offset_seconds{node=~\"$node\"}",
-          "legendFormat": "{{node}} chronyd last offset",
-          "refId": "B",
-          "format": "time_series"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "-ntp_consensus_offset_seconds",
-          "legendFormat": "{{instance}} measured (consensus)",
+          "expr": "-ntp_offset_seconds{node=~\"$node\"}",
+          "legendFormat": "{{node}} measured ({{server}})",
           "refId": "C",
           "format": "time_series"
         }
@@ -1006,7 +902,7 @@
       "id": 15,
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 38
       },
@@ -1017,84 +913,15 @@
     },
     {
       "type": "timeseries",
-      "title": "chronyd frequency and skew",
-      "description": "",
+      "title": "chronyd root dispersion",
+      "description": "Dispersion accumulated by chronyd since its source: grows when the node loses its source.",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_chrony_frequency_ppm{node=~\"$node\"}",
-          "legendFormat": "{{node}} frequency",
-          "refId": "A",
-          "format": "time_series"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "ntp_chrony_skew_ppm{node=~\"$node\"}",
-          "legendFormat": "{{node}} skew",
-          "refId": "B",
-          "format": "time_series"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ppm",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 16,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 38
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "chronyd root distance",
-      "description": "Root delay / 2 + root dispersion: error bound of the local clock announced by chronyd.",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "ntp_chrony_root_delay_seconds{node=~\"$node\"} / 2 + ntp_chrony_root_dispersion_seconds{node=~\"$node\"}",
+          "expr": "ntp_chrony_root_dispersion_seconds{node=~\"$node\"}",
           "legendFormat": "{{node}}",
           "refId": "A",
           "format": "time_series"
@@ -1145,7 +972,7 @@
     },
     {
       "type": "timeseries",
-      "title": "chronyd update interval",
+      "title": "Time since the last chronyd update",
       "description": "",
       "targets": [
         {
@@ -1153,7 +980,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_chrony_update_interval_seconds{node=~\"$node\"}",
+          "expr": "time() - ntp_chrony_reference_timestamp_seconds{node=~\"$node\"}",
           "legendFormat": "{{node}}",
           "refId": "A",
           "format": "time_series"

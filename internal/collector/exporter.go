@@ -239,15 +239,14 @@ func (e *Exporter) updateCounters(result *probe.CycleResult) {
 		}
 	}
 
-	m.ExporterScrapeDuration.Observe(result.Duration.Seconds())
-	m.ExporterCycleDuration.Set(result.Duration.Seconds())
+	m.ExporterCycleDuration.Observe(result.Duration.Seconds())
 	if result.Overrun {
 		m.ExporterCycleOverrunTotal.Inc()
 	}
 	if successCount > 0 {
-		m.ExporterScrapesTotal.WithLabelValues("success").Inc()
+		m.ExporterCyclesTotal.WithLabelValues("success").Inc()
 	} else {
-		m.ExporterScrapesTotal.WithLabelValues("failure").Inc()
+		m.ExporterCyclesTotal.WithLabelValues("failure").Inc()
 	}
 }
 
@@ -310,14 +309,7 @@ func (e *Exporter) collectChrony(ch chan<- prometheus.Metric) {
 		gauge(ch, d.chronyRefTime, float64(t.RefTime.UnixNano())/1e9)
 	}
 	gauge(ch, d.chronyCorrection, t.CurrentCorrection)
-	gauge(ch, d.chronyLastOffset, t.LastOffset)
-	gauge(ch, d.chronyRMSOffset, t.RMSOffset)
-	gauge(ch, d.chronyFrequency, t.FreqPPM)
-	gauge(ch, d.chronyResidualFrequency, t.ResidFreqPPM)
-	gauge(ch, d.chronySkew, t.SkewPPM)
-	gauge(ch, d.chronyRootDelay, t.RootDelay)
 	gauge(ch, d.chronyRootDispersion, t.RootDispersion)
-	gauge(ch, d.chronyUpdateInterval, t.LastUpdateInterval)
 }
 
 func gauge(ch chan<- prometheus.Metric, desc *prometheus.Desc, value float64, labels ...string) {
@@ -331,26 +323,12 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 		gauge(ch, e.descs.lastSuccess, float64(ts.UnixNano())/1e9, server)
 	}
 
-	best := writeMeasurement(ch, e.descs, e.cfg, meas)
-	if best != nil && e.kernelState != nil && e.kernelState.IsSynchronized() && e.trustedReference(server) {
-		e.collectBoundViolation(ch, server, best)
-	}
-}
-
-// trustedReference reports whether a server may be used to judge the kernel
-// error bounds. When a consensus is computed, only the servers agreeing with
-// a majority qualify: a falseticker, or a split without majority, would blame
-// the local time daemon for the error of a remote server.
-func (e *Exporter) trustedReference(server string) bool {
-	if e.consensus == nil {
-		return true
-	}
-	return e.consensus.Majority && !e.consensus.Falsetickers[server]
+	writeMeasurement(ch, e.descs, meas)
 }
 
 // writeMeasurement emits the metrics of one measurement and returns its
 // reference sample, or nil when no valid time measurement was received
-func writeMeasurement(ch chan<- prometheus.Metric, d *descs, cfg *config.Config, meas *probe.Measurement) *ntp.Response {
+func writeMeasurement(ch chan<- prometheus.Metric, d *descs, meas *probe.Measurement) *ntp.Response {
 	server := meas.Target.Server
 
 	if meas.NTS != nil {
@@ -383,7 +361,7 @@ func writeMeasurement(ch chan<- prometheus.Metric, d *descs, cfg *config.Config,
 	}
 
 	stats := meas.Stats()
-	gauge(ch, d.packetLoss, stats.PacketLossRatio, server)
+	gauge(ch, d.packetLoss, lossRatio(meas), server)
 	gauge(ch, d.samples, float64(stats.SamplesCount), server)
 
 	if meas.Reachable() {
@@ -402,16 +380,9 @@ func writeMeasurement(ch chan<- prometheus.Metric, d *descs, cfg *config.Config,
 	}
 
 	gauge(ch, d.info, 1, server, meas.Target.Address, meas.Target.Pool, best.ReferenceIDString(),
-		strconv.Itoa(int(best.Stratum)), strconv.Itoa(int(best.LeapIndicator)), strconv.Itoa(cfg.NTP.Version))
-
-	offsetExceeded := 0.0
-	if best.Offset.Abs() > cfg.NTP.MaxClockOffset {
-		offsetExceeded = 1
-	}
+		strconv.Itoa(best.Version))
 
 	gauge(ch, d.offset, best.Offset.Seconds(), server)
-	gauge(ch, d.offsetMedian, stats.MedianOffset.Seconds(), server)
-	gauge(ch, d.offsetExceeded, offsetExceeded, server)
 	gauge(ch, d.rtt, best.RTT.Seconds(), server)
 	gauge(ch, d.stratum, float64(best.Stratum), server)
 	gauge(ch, d.referenceAge, best.Time.Sub(best.ReferenceTime).Seconds(), server)
@@ -421,35 +392,57 @@ func writeMeasurement(ch chan<- prometheus.Metric, d *descs, cfg *config.Config,
 	gauge(ch, d.precision, best.Precision.Seconds(), server)
 	gauge(ch, d.leapIndicator, float64(best.LeapIndicator), server)
 
-	// Dispersion needs two samples: a single one would read as perfect stability
+	// Jitter needs two samples: a single one would read as perfect stability
 	if stats.SamplesCount >= 2 {
 		gauge(ch, d.jitter, stats.Jitter.Seconds(), server)
-		gauge(ch, d.offsetStdDev, stats.StdDevOffset.Seconds(), server)
-		gauge(ch, d.rttStdDev, stats.StdDevRTT.Seconds(), server)
 	}
 
 	return best
 }
 
-// collectBoundViolation compares the offset measured from the outside with
-// the error bounds the kernel announces. The root distance of the server
-// (which includes half the round-trip delay) is the measurement uncertainty:
-// a violation means the time daemon underestimates its own error.
-func (e *Exporter) collectBoundViolation(ch chan<- prometheus.Metric, server string, best *ntp.Response) {
-	excess := best.Offset.Abs() - best.RootDistance
-	for _, bound := range []struct {
-		name  string
-		value time.Duration
-	}{
-		{"maxerror", e.kernelState.MaxError},
-		{"esterror", e.kernelState.EstError},
-	} {
-		violated := 0.0
-		if excess > bound.value {
-			violated = 1
-		}
-		gauge(ch, e.descs.kernelBoundViolation, violated, server, bound.name)
+// lossRatio returns the share of the queries sent that got no answer at all;
+// invalid answers are counted in ntp_invalid_responses_total
+func lossRatio(meas *probe.Measurement) float64 {
+	if meas.Sent == 0 {
+		return 1
 	}
+	lost := meas.Sent - len(meas.Responses)
+	return float64(max(lost, 0)) / float64(meas.Sent)
+}
+
+// referenceSample returns the valid sample with the lowest root distance
+// among the reference servers of the agent: the most precise outside view of
+// the host clock
+func (e *Exporter) referenceSample() *ntp.Response {
+	if e.last == nil {
+		return nil
+	}
+	var ref *ntp.Response
+	for _, meas := range e.last.Measurements {
+		if meas.SuspendCode != "" {
+			continue
+		}
+		if best := meas.Best(); best != nil && (ref == nil || best.RootDistance < ref.RootDistance) {
+			ref = best
+		}
+	}
+	return ref
+}
+
+// collectBoundViolation compares the offset measured against the reference
+// server with the maximum error the kernel announces. The root distance of
+// the server (which includes half the round-trip delay) is the measurement
+// uncertainty: a violation means the time daemon underestimates its error.
+func (e *Exporter) collectBoundViolation(ch chan<- prometheus.Metric) {
+	ref := e.referenceSample()
+	if ref == nil || !e.kernelState.IsSynchronized() {
+		return
+	}
+	violated := 0.0
+	if ref.Offset.Abs()-ref.RootDistance > e.kernelState.MaxError {
+		violated = 1
+	}
+	gauge(ch, e.descs.kernelBoundViolation, violated)
 }
 
 // collectConsensus emits the consensus and the per-server agreement
@@ -482,19 +475,14 @@ func (e *Exporter) collectPool(ch chan<- prometheus.Metric, pool probe.PoolResul
 	d := e.descs
 
 	gauge(ch, d.poolTotal, float64(pool.Total), pool.Name)
-	gauge(ch, d.poolDNS, pool.DNSDuration.Seconds(), pool.Name)
 
-	var offsets []float64
+	active := 0
 	for _, meas := range e.last.PoolMeasurements(pool.Name) {
-		if best := meas.Best(); best != nil {
-			offsets = append(offsets, best.Offset.Seconds())
+		if meas.Best() != nil {
+			active++
 		}
 	}
-
-	gauge(ch, d.poolActive, float64(len(offsets)), pool.Name)
-	if len(offsets) > 0 {
-		gauge(ch, d.poolOffset, ntp.Median(offsets), pool.Name)
-	}
+	gauge(ch, d.poolActive, float64(active), pool.Name)
 }
 
 // collectKernel emits kernel state metrics
@@ -507,15 +495,5 @@ func (e *Exporter) collectKernel(ch chan<- prometheus.Metric) {
 		synchronized = 1
 	}
 	gauge(ch, d.kernelSyncStatus, synchronized)
-
-	if e.cfg.NTP.Kernel.ViolationOnly {
-		return
-	}
-
-	gauge(ch, d.kernelState, 1, k.StateName())
-	gauge(ch, d.kernelOffset, k.GetOffsetSeconds())
-	gauge(ch, d.kernelFrequency, k.GetFrequencyPPM())
-	gauge(ch, d.kernelMaxError, k.GetMaxErrorSeconds())
-	gauge(ch, d.kernelEstError, k.GetEstErrorSeconds())
-	gauge(ch, d.kernelTAI, float64(k.TAI))
+	e.collectBoundViolation(ch)
 }

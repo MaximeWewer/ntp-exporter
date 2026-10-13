@@ -116,6 +116,7 @@ func (m *MockNTPClient) SetupSuccessfulServer(server string, offset time.Duratio
 		Time:           now,
 		MinError:       time.Millisecond,
 		KissCode:       "",
+		Version:        4,
 	}
 }
 

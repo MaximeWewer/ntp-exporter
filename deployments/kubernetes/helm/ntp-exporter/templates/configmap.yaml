@@ -47,7 +47,6 @@ data:
       max_concurrency: {{ .Values.config.maxConcurrency | default 10 }}
       ip_family: {{ .Values.config.ipFamily | default "auto" | quote }}
       scrape_interval: {{ .Values.config.scrapeInterval | default "60s" | quote }}
-      max_clock_offset: {{ .Values.config.maxClockOffset | default "100ms" | quote }}
       max_root_distance: {{ .Values.config.maxRootDistance | default "1.5s" | quote }}
       {{- if eq (include "ntp-exporter.mode" .) "agent" }}
       # Unset options are enabled when available: kernel on Linux, chrony
@@ -58,7 +57,6 @@ data:
         {{- else if and .Values.kernel (eq (toString .Values.kernel.enabled) "false") }}
         enabled: false
         {{- end }}
-        violation_only: {{ and .Values.kernel .Values.kernel.violationOnly | default false }}
       chrony:
         {{- if .Values.chrony.socketDir }}
         enabled: true

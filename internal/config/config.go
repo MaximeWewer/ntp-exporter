@@ -27,9 +27,9 @@
 //	  - NTP_POOLS (comma-separated name[:strategy[:max_servers]])
 //	  - NTP_SAMPLES, NTP_SAMPLE_SPACING, NTP_MAX_CONCURRENCY
 //	  - NTP_IP_FAMILY (auto, ipv4 or ipv6)
-//	  - NTP_KERNEL_ENABLED, NTP_KERNEL_VIOLATION_ONLY (NTP_ENABLE_KERNEL is deprecated)
+//	  - NTP_KERNEL_ENABLED (NTP_ENABLE_KERNEL is deprecated)
 //	  - NTP_CHRONY_ENABLED, NTP_CHRONY_ADDRESS
-//	  - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET, NTP_MAX_ROOT_DISTANCE
+//	  - NTP_SCRAPE_INTERVAL, NTP_MAX_ROOT_DISTANCE
 //
 //	PROBE ENDPOINT:
 //	  - PROBE_ENDPOINT_ENABLED, PROBE_ENDPOINT_ALLOWED_TARGETS
@@ -129,8 +129,7 @@ type NTPConfig struct {
 	EnableKernel     bool          `yaml:"enable_kernel"` // Deprecated: use kernel.enabled
 	Kernel           KernelConfig  `yaml:"kernel"`
 	Chrony           ChronyConfig  `yaml:"chrony"`
-	ScrapeInterval   time.Duration `yaml:"scrape_interval"`  // Interval between NTP collections
-	MaxClockOffset   time.Duration `yaml:"max_clock_offset"` // Maximum acceptable clock offset threshold
+	ScrapeInterval   time.Duration `yaml:"scrape_interval"` // Interval between NTP collections
 	// MaxRootDistance rejects the responses of servers whose synchronization
 	// distance exceeds it (MAXDIST, 1.5s in ntpd)
 	MaxRootDistance time.Duration   `yaml:"max_root_distance"`
@@ -160,9 +159,6 @@ type KernelConfig struct {
 	// Enabled reads the kernel clock state (read-only adjtimex, Linux only);
 	// unset, it is enabled in agent mode on Linux
 	Enabled *bool `yaml:"enabled"`
-	// ViolationOnly exposes only the error bound violation and the sync status,
-	// for nodes where node_exporter already exposes node_timex_* metrics
-	ViolationOnly bool `yaml:"violation_only"`
 }
 
 // ChronyConfig controls the reading of the local chronyd tracking report
@@ -437,7 +433,6 @@ func applyEnvOverrides(cfg *Config) error {
 	e.pools("NTP_POOLS", &cfg.NTP.Pools)
 	e.bool("NTP_ENABLE_KERNEL", &cfg.NTP.EnableKernel)
 	e.boolPtr("NTP_KERNEL_ENABLED", &cfg.NTP.Kernel.Enabled)
-	e.bool("NTP_KERNEL_VIOLATION_ONLY", &cfg.NTP.Kernel.ViolationOnly)
 	e.boolPtr("NTP_CHRONY_ENABLED", &cfg.NTP.Chrony.Enabled)
 	e.string("NTP_CHRONY_ADDRESS", &cfg.NTP.Chrony.Address)
 	e.duration("NTP_TIMEOUT", &cfg.NTP.Timeout)
@@ -447,7 +442,6 @@ func applyEnvOverrides(cfg *Config) error {
 	e.int("NTP_MAX_CONCURRENCY", &cfg.NTP.MaxConcurrency)
 	e.string("NTP_IP_FAMILY", &cfg.NTP.IPFamily)
 	e.duration("NTP_SCRAPE_INTERVAL", &cfg.NTP.ScrapeInterval)
-	e.duration("NTP_MAX_CLOCK_OFFSET", &cfg.NTP.MaxClockOffset)
 	e.duration("NTP_MAX_ROOT_DISTANCE", &cfg.NTP.MaxRootDistance)
 
 	// CONSENSUS

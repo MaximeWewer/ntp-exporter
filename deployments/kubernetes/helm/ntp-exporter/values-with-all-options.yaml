@@ -13,8 +13,6 @@ mode: agent
 kernel:
   # Unset: enabled in agent mode on Linux nodes
   enabled: null
-  # Only expose ntp_kernel_error_bound_violated and ntp_kernel_sync_status
-  violationOnly: false
 
 # chronyd tracking report (agent mode): UDP 127.0.0.1:323 needs hostNetwork,
 # or set socketDir (e.g. /run/chrony) and runAsUser/runAsGroup to the uid/gid
@@ -111,8 +109,6 @@ config:
   # Interval between two collection cycles (60s or more for the public pool)
   scrapeInterval: 60s
 
-  # Maximum clock offset threshold
-  maxClockOffset: 100ms
 
   # Responses whose root distance exceeds this value are invalid (MAXDIST)
   maxRootDistance: 1.5s

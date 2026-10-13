@@ -226,10 +226,6 @@ func validateNTP(cfg *NTPConfig, noTargetNeeded bool) error {
 			") must be shorter than scrape_interval (" + cfg.ScrapeInterval.String() + ")")
 	}
 
-	if cfg.MaxClockOffset <= 0 {
-		return errors.New("max_clock_offset must be positive, got " + cfg.MaxClockOffset.String())
-	}
-
 	if cfg.MaxRootDistance < 100*time.Millisecond || cfg.MaxRootDistance > 16*time.Second {
 		return errors.New("max_root_distance must be between 100ms and 16s, got " + cfg.MaxRootDistance.String())
 	}

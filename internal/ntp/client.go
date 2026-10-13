@@ -47,6 +47,8 @@ type Response struct {
 	Time           time.Time
 	MinError       time.Duration
 	KissCode       string
+	// Version is the NTP version of the response
+	Version int
 }
 
 // NewClient creates a new NTP client
@@ -162,6 +164,7 @@ func fromNTP(server string, r *ntp.Response) *Response {
 		ReferenceID:    r.ReferenceID,
 		Time:           r.Time,
 		MinError:       r.MinError,
+		Version:        r.Version,
 		KissCode:       r.KissCode,
 	}
 }

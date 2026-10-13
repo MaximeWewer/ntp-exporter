@@ -90,12 +90,12 @@ spec:
         summary: Kernel clock of {{`{{ $labels.node }}`}} is not synchronized
         description: The time daemon of the node does not discipline the kernel clock (STA_UNSYNC).
     - alert: NTPKernelErrorBoundViolated
-      expr: min_over_time(ntp_kernel_error_bound_violated{bound="maxerror"}[10m]) == 1
+      expr: min_over_time(ntp_kernel_error_bound_violated[10m]) == 1
       labels:
         severity: critical
       annotations:
         summary: Time daemon of {{`{{ $labels.node }}`}} underestimates its error
-        description: The offset measured against {{`{{ $labels.server }}`}} exceeds the maximum error announced by the kernel for 10 minutes.
+        description: The offset measured against the reference server, beyond its root distance, exceeds the maximum error announced by the kernel for 10 minutes.
     - alert: NTPExporterCycleOverrun
       expr: increase(ntp_exporter_cycle_overrun_total[15m]) > 0
       labels:
