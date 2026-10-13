@@ -54,7 +54,9 @@ func (m *MockNTPClient) Query(ctx context.Context, server string) (*ntp.Response
 	// Return configured response
 	if resp, ok := m.responses[server]; ok {
 		m.mu.Unlock()
-		return resp, nil
+		// A new response per query, as the real client
+		c := *resp
+		return &c, nil
 	}
 
 	m.mu.Unlock()

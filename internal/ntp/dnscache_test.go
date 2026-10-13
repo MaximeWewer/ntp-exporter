@@ -35,6 +35,12 @@ func newTestCache(r *fakeResolver, ttl time.Duration) *DNSCache {
 	return c
 }
 
+// advance moves the clock of the cache forward
+func advance(c *DNSCache, d time.Duration) {
+	now := c.now()
+	c.now = func() time.Time { return now.Add(d) }
+}
+
 func TestNewDNSCache_Defaults(t *testing.T) {
 	c := NewDNSCache(DNSCacheConfig{})
 	assert.Equal(t, 5*time.Minute, c.minTTL)
@@ -67,10 +73,10 @@ func TestDNSCache_CachesAnswers(t *testing.T) {
 
 func TestDNSCache_ExpiredEntryIsResolvedAgain(t *testing.T) {
 	r := &fakeResolver{answers: map[string][]string{"pool.example.org": {"192.0.2.1"}}}
-	c := newTestCache(r, time.Nanosecond)
+	c := newTestCache(r, time.Minute)
 
 	_, _, _ = c.ResolveCached(context.Background(), "pool.example.org")
-	time.Sleep(time.Millisecond)
+	advance(c, 2*time.Minute)
 	_, cached, err := c.ResolveCached(context.Background(), "pool.example.org")
 	require.NoError(t, err)
 	assert.False(t, cached)
@@ -79,9 +85,9 @@ func TestDNSCache_ExpiredEntryIsResolvedAgain(t *testing.T) {
 
 func TestDNSCache_StaleEntryOnFailure(t *testing.T) {
 	r := &fakeResolver{answers: map[string][]string{"pool.example.org": {"192.0.2.1"}}}
-	c := newTestCache(r, time.Nanosecond)
+	c := newTestCache(r, time.Minute)
 	_, _, _ = c.ResolveCached(context.Background(), "pool.example.org")
-	time.Sleep(time.Millisecond)
+	advance(c, 2*time.Minute)
 
 	r.err = errors.New("SERVFAIL")
 	ips, cached, err := c.ResolveCached(context.Background(), "pool.example.org")

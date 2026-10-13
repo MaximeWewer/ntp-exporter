@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -104,11 +105,11 @@ func TestRunHealthcheck(t *testing.T) {
 	cfg.Server.Address = host
 	cfg.Server.Port, _ = strconv.Atoi(port)
 
-	assert.Equal(t, 0, runHealthcheck(cfg, nil))
-	assert.Equal(t, 1, runHealthcheck(cfg, errors.New("bad config")))
+	assert.Equal(t, 0, runHealthcheck(cfg, nil, io.Discard))
+	assert.Equal(t, 1, runHealthcheck(cfg, errors.New("bad config"), io.Discard))
 
 	ts.Close()
-	assert.Equal(t, 1, runHealthcheck(cfg, nil), "server down")
+	assert.Equal(t, 1, runHealthcheck(cfg, nil, io.Discard), "server down")
 }
 
 func TestApplyWebFlags(t *testing.T) {

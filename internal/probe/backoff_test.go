@@ -3,9 +3,11 @@ package probe
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/maximewewer/ntp-exporter/internal/config"
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
 	"github.com/maximewewer/ntp-exporter/internal/ntp/ntptest"
 	"github.com/stretchr/testify/assert"
@@ -169,4 +171,59 @@ func TestProber_KoDDenySuspendsTarget(t *testing.T) {
 	assert.Equal(t, KoDDeny, second.SuspendCode)
 	assert.False(t, second.Reachable())
 	assert.Equal(t, 1, mock.GetCallCount("deny.example.org"), "suspended target is not queried")
+}
+
+// sequenceResolver returns the next answer at each lookup
+type sequenceResolver struct {
+	mu      sync.Mutex
+	answers [][]string
+}
+
+func (r *sequenceResolver) LookupHost(context.Context, string) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	answer := r.answers[0]
+	if len(r.answers) > 1 {
+		r.answers = r.answers[1:]
+	}
+	return answer, nil
+}
+
+func TestProber_PoolRotationKeepsKissOfDeathOfMembers(t *testing.T) {
+	mock := ntptest.NewMockNTPClient()
+	mock.SetupKoDServer("192.0.2.1", KoDDeny)
+	mock.SetupSuccessfulServer("192.0.2.2", time.Millisecond, 2)
+	mock.SetupSuccessfulServer("192.0.2.3", time.Millisecond, 2)
+
+	cfg := newTestConfig()
+	cfg.NTP.Pools = []config.PoolConfig{{Name: "pool.example.org", MaxServers: 2}}
+	// Every cycle resolves the pool again
+	cfg.NTP.DNSCache.MinTTL, cfg.NTP.DNSCache.MaxTTL = time.Nanosecond, time.Nanosecond
+	p := New(cfg, mock)
+	p.SetResolver(&sequenceResolver{answers: [][]string{
+		{"192.0.2.1", "192.0.2.2"}, {"192.0.2.2", "192.0.2.3"}, {"192.0.2.1", "192.0.2.2"},
+	}})
+
+	members := func(r *CycleResult) []string {
+		var out []string
+		for _, m := range r.PoolMeasurements("pool.example.org") {
+			out = append(out, m.Target.Address)
+		}
+		return out
+	}
+
+	first := p.Run(context.Background())
+	assert.ElementsMatch(t, []string{"192.0.2.1", "192.0.2.2"}, members(first))
+
+	second := p.Run(context.Background())
+	assert.ElementsMatch(t, []string{"192.0.2.2", "192.0.2.3"}, members(second), "members follow the DNS answer")
+
+	third := p.Run(context.Background())
+	require.Contains(t, members(third), "192.0.2.1")
+	for _, m := range third.PoolMeasurements("pool.example.org") {
+		if m.Target.Address == "192.0.2.1" {
+			assert.Equal(t, KoDDeny, m.SuspendCode, "a member coming back is still suspended")
+		}
+	}
+	assert.Equal(t, 1, mock.GetCallCount("192.0.2.1"), "the suspended member is not queried again")
 }

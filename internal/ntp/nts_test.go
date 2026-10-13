@@ -20,11 +20,19 @@ type fakeSession struct {
 	address string
 	results []error // per query; nil means a valid response
 	queries int
-	delay   time.Duration
+	// started receives a value when a query starts; block holds the query
+	// until it is closed
+	started chan struct{}
+	block   chan struct{}
 }
 
 func (s *fakeSession) QueryWithOptions(*ntp.QueryOptions) (*ntp.Response, error) {
-	time.Sleep(s.delay)
+	if s.started != nil {
+		s.started <- struct{}{}
+	}
+	if s.block != nil {
+		<-s.block
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	i := s.queries
@@ -148,9 +156,17 @@ func TestNTSClient_AllQueriesFail(t *testing.T) {
 	assert.Empty(t, res.Responses)
 }
 
+// blocked returns a channel holding fake sessions until the end of the test
+func blocked(t *testing.T) chan struct{} {
+	ch := make(chan struct{})
+	t.Cleanup(func() { close(ch) })
+	return ch
+}
+
 func TestNTSClient_ContextCancelled(t *testing.T) {
+	hold := blocked(t)
 	c := newTestNTSClient(func(string, time.Duration) (ntsSession, time.Time, error) {
-		return &fakeSession{delay: time.Second}, time.Time{}, nil
+		return &fakeSession{block: hold}, time.Time{}, nil
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
@@ -159,7 +175,7 @@ func TestNTSClient_ContextCancelled(t *testing.T) {
 	assert.ErrorIs(t, res.Err, context.DeadlineExceeded)
 
 	slowKE := newTestNTSClient(func(string, time.Duration) (ntsSession, time.Time, error) {
-		time.Sleep(time.Second)
+		<-hold
 		return &fakeSession{}, time.Time{}, nil
 	})
 	res = slowKE.Burst(ctx, "nts.example.org", 1)
@@ -184,17 +200,18 @@ func TestKeyExchange_Unreachable(t *testing.T) {
 }
 
 func TestNTSClient_BusyServerHonorsContext(t *testing.T) {
+	hold, started := make(chan struct{}), make(chan struct{}, 1)
 	c := newTestNTSClient(func(string, time.Duration) (ntsSession, time.Time, error) {
-		return &fakeSession{delay: time.Second}, time.Time{}, nil
+		return &fakeSession{block: hold, started: started}, time.Time{}, nil
 	})
 
-	// A 1s burst holds the server
+	// A burst in progress holds the server
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		c.Burst(context.Background(), "nts.example.org", 1)
 	}()
-	time.Sleep(50 * time.Millisecond)
+	<-started
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -204,6 +221,7 @@ func TestNTSClient_BusyServerHonorsContext(t *testing.T) {
 	assert.Less(t, time.Since(start), 200*time.Millisecond, "does not wait for the burst in progress")
 	assert.ErrorIs(t, res.Err, context.DeadlineExceeded)
 	assert.Equal(t, 0, res.Sent)
+	close(hold)
 	<-done
 }
 

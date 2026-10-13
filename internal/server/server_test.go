@@ -227,7 +227,9 @@ func TestServer_ShutdownEndsRequestsInFlight(t *testing.T) {
 	require.NoError(t, reg.Register())
 	srv := New(cfg, reg.GetRegistry(), nil)
 	// A /probe burst lasting until its request context ends
+	entered := make(chan struct{}, 1)
 	srv.SetProbeHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		entered <- struct{}{}
 		select {
 		case <-r.Context().Done():
 		case <-time.After(time.Minute):
@@ -251,7 +253,7 @@ func TestServer_ShutdownEndsRequestsInFlight(t *testing.T) {
 			_ = resp.Body.Close()
 		}
 	}()
-	time.Sleep(100 * time.Millisecond)
+	<-entered
 
 	start := time.Now()
 	cancel()

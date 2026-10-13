@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -33,18 +34,33 @@ var (
 )
 
 func main() {
-	// Parse command-line flags
-	configFile := flag.String("config", "", "Path to configuration file")
-	showVersion := flag.Bool("version", false, "Show version information")
-	webConfigFile := flag.String("web.config.file", "", "Path to a Prometheus web configuration file (TLS, basic auth)")
-	listenAddress := flag.String("web.listen-address", "", "Address to listen on, e.g. :9559 (overrides server address and port)")
-	healthcheck := flag.Bool("healthcheck", false, "Query the local /healthz endpoint and exit (for container health checks)")
-	flag.Parse()
+	sigChan := make(chan os.Signal, 2)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	code := run(os.Args[1:], sigChan, os.Stdout, os.Stderr)
+	signal.Stop(sigChan)
+	os.Exit(code)
+}
 
-	// Show version and exit if requested
+// run starts the exporter and returns the process exit code once a signal or
+// a fatal error stops it
+func run(args []string, signals <-chan os.Signal, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("ntp-exporter", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configFile := flags.String("config", "", "Path to configuration file")
+	showVersion := flags.Bool("version", false, "Show version information")
+	webConfigFile := flags.String("web.config.file", "", "Path to a Prometheus web configuration file (TLS, basic auth)")
+	listenAddress := flags.String("web.listen-address", "", "Address to listen on, e.g. :9559 (overrides server address and port)")
+	healthcheck := flags.Bool("healthcheck", false, "Query the local /healthz endpoint and exit (for container health checks)")
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+
 	if *showVersion {
-		_, _ = os.Stdout.WriteString("ntp-exporter version " + version + " (commit " + commit + ", built " + buildDate + ", " + runtime.Version() + ")\n")
-		os.Exit(0)
+		_, _ = io.WriteString(stdout, "ntp-exporter version "+version+" (commit "+commit+", built "+buildDate+", "+runtime.Version()+")\n")
+		return 0
 	}
 
 	// Load configuration (before logger is initialized)
@@ -53,26 +69,24 @@ func main() {
 		err = applyWebFlags(cfg, *webConfigFile, *listenAddress)
 	}
 	if *healthcheck {
-		os.Exit(runHealthcheck(cfg, err))
+		return runHealthcheck(cfg, err, stderr)
 	}
 	if err != nil {
 		// Cannot use logger yet, write to stderr
-		os.Stderr.WriteString("Failed to load configuration: " + err.Error() + "\n")
-		os.Exit(1)
+		_, _ = io.WriteString(stderr, "Failed to load configuration: "+err.Error()+"\n")
+		return 1
 	}
 
-	// Initialize logger
 	if err := logger.InitLogger(logger.Config{
 		Level:     cfg.Logging.Level,
 		Format:    cfg.Logging.Format,
 		Component: "ntp-exporter",
 	}); err != nil {
-		os.Stderr.WriteString("Failed to initialize logger: " + err.Error() + "\n")
-		os.Exit(1)
+		_, _ = io.WriteString(stderr, "Failed to initialize logger: "+err.Error()+"\n")
+		return 1
 	}
 
-	// Log startup information
-	logger.Startup(version, commit, map[string]interface{}{
+	logger.Startup(version, commit, map[string]any{
 		"build_date": buildDate,
 		"go_version": runtime.Version(),
 		"config":     cfg,
@@ -87,16 +101,12 @@ func main() {
 		cfg.Metrics.Labels["node"] = collector.NodeName()
 	}
 
-	// Create metrics registry with custom namespace and subsystem from config
 	registry := metrics.NewRegistry(cfg.Metrics.Labels)
 	if err := registry.Register(); err != nil {
-		logger.Fatal("main", "Failed to register metrics", err)
+		logger.Error("main", "Failed to register metrics", err)
+		return 1
 	}
-
-	// Get metrics instance
 	m := registry.GetMetrics()
-
-	// Set build info metric
 	m.ExporterBuildInfo.WithLabelValues(version, commit, runtime.Version()).Set(1)
 	m.ExporterServersConfigured.Set(float64(len(cfg.NTP.Servers) + len(cfg.NTP.Pools)))
 
@@ -107,40 +117,35 @@ func main() {
 	prober := probe.New(cfg, client)
 	exporter := collector.NewExporter(cfg, m)
 	if err := registry.RegisterCollector(exporter); err != nil {
-		logger.Fatal("main", "Failed to register NTP collector", err)
+		logger.Error("main", "Failed to register NTP collector", err)
+		return 1
 	}
 
-	// Create context for graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Start HTTP server
 	srv := server.New(cfg, registry.GetRegistry(), exporter.Ready)
 	if cfg.ProbeEndpoint.IsEnabled() {
 		policy, err := probe.NewTargetPolicy(cfg.ProbeEndpoint.AllowedTargets)
 		if err != nil {
-			logger.Fatal("main", "Invalid /probe configuration", err)
+			logger.Error("main", "Invalid /probe configuration", err)
+			return 1
 		}
 		prober.SetTargetPolicy(policy)
 		srv.SetProbeHandler(collector.NewProbeHandler(cfg, prober))
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	serverErrChan := make(chan error, 1)
 	go func() {
 		serverErrChan <- srv.Start(ctx)
 	}()
-
-	// Start collection loop
 	collectorErrChan := make(chan error, 1)
 	go func() {
 		collectorErrChan <- runCollectionLoop(ctx, cfg, prober, exporter)
 	}()
 
-	sigChan := make(chan os.Signal, 2)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sigChan)
-
-	reason := waitAndShutdown(cancel, sigChan, serverErrChan, collectorErrChan, shutdownTimeout)
+	reason := waitAndShutdown(cancel, signals, serverErrChan, collectorErrChan, shutdownTimeout)
 	logger.Shutdown(reason)
+	return 0
 }
 
 // shutdownTimeout bounds the graceful shutdown
@@ -274,9 +279,9 @@ func logCycle(result *probe.CycleResult) {
 // runHealthcheck queries the liveness endpoint of the local exporter and
 // returns the process exit code. Distroless images have no shell nor wget, so
 // container health checks run the exporter binary itself.
-func runHealthcheck(cfg *config.Config, cfgErr error) int {
+func runHealthcheck(cfg *config.Config, cfgErr error, stderr io.Writer) int {
 	if cfgErr != nil {
-		_, _ = os.Stderr.WriteString("healthcheck: invalid configuration: " + cfgErr.Error() + "\n")
+		_, _ = io.WriteString(stderr, "healthcheck: invalid configuration: "+cfgErr.Error()+"\n")
 		return 1
 	}
 
@@ -313,7 +318,7 @@ func runHealthcheck(cfg *config.Config, cfgErr error) int {
 		lastErr = url + " returned " + resp.Status
 	}
 
-	_, _ = os.Stderr.WriteString("healthcheck: " + lastErr + "\n")
+	_, _ = io.WriteString(stderr, "healthcheck: "+lastErr+"\n")
 	return 1
 }
 

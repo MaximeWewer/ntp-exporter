@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"testing"
 	"time"
 
@@ -84,13 +85,15 @@ func TestClient_QueryMultiple(t *testing.T) {
 	})
 
 	t.Run("unreachable_server", func(t *testing.T) {
-		client := NewClient(200*time.Millisecond, 4)
-		responses, sent, err := client.QueryMultiple(context.Background(), "192.0.2.1", 2)
+		client := NewClient(100*time.Millisecond, 4)
+		client.SetSampleSpacing(time.Millisecond)
+		silent := silentServer(t)
+		responses, sent, err := client.QueryMultiple(context.Background(), silent, 2)
 
 		// Should fail with all queries failing, keeping the last error
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "all 2 NTP queries failed")
-		assert.Contains(t, err.Error(), "192.0.2.1")
+		assert.Contains(t, err.Error(), silent)
 		assert.Equal(t, 0, len(responses))
 		assert.Equal(t, 2, sent)
 	})
@@ -132,7 +135,7 @@ func TestClient_QueryWithTimeout(t *testing.T) {
 	client := NewClient(50*time.Millisecond, 4)
 
 	ctx := context.Background()
-	_, err := client.Query(ctx, "192.0.2.1") // TEST-NET-1 (non-routable)
+	_, err := client.Query(ctx, silentServer(t))
 
 	assert.Error(t, err, "Should timeout on unreachable server")
 }
@@ -181,4 +184,13 @@ func TestInvalidReason_ProtocolErrors(t *testing.T) {
 
 	_, ok := protocolErrorResponse("s", errors.New("i/o timeout"))
 	assert.False(t, ok, "a timeout stays a lost query")
+}
+
+// silentServer returns the address of a local UDP socket that never answers
+func silentServer(t *testing.T) string {
+	t.Helper()
+	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	return conn.LocalAddr().String()
 }
