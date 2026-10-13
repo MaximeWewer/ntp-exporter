@@ -13,6 +13,9 @@
 //
 // Environment variables supported:
 //
+//	MODE:
+//	  - NTP_EXPORTER_MODE (probe or agent, required)
+//
 //	SERVER:
 //	  - NTP_EXPORTER_ADDRESS, NTP_EXPORTER_PORT
 //	  - SERVER_READ_TIMEOUT, SERVER_WRITE_TIMEOUT
@@ -61,8 +64,18 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
+// Deployment modes
+const (
+	// ModeProbe monitors NTP servers from a central place
+	ModeProbe = "probe"
+	// ModeAgent measures the clock of the host the exporter runs on
+	ModeAgent = "agent"
+)
+
 // Config represents the complete application configuration
 type Config struct {
+	// Mode is probe or agent, required
+	Mode          string              `yaml:"mode"`
 	Server        ServerConfig        `yaml:"server"`
 	ProbeEndpoint ProbeEndpointConfig `yaml:"probe_endpoint"`
 	NTP           NTPConfig           `yaml:"ntp"`
@@ -382,6 +395,8 @@ func parsePools(s string) ([]PoolConfig, error) {
 // Unparsable values are reported as errors instead of being silently ignored.
 func applyEnvOverrides(cfg *Config) error {
 	e := &envReader{}
+
+	e.string("NTP_EXPORTER_MODE", &cfg.Mode)
 
 	// SERVER
 	e.string("NTP_EXPORTER_ADDRESS", &cfg.Server.Address)

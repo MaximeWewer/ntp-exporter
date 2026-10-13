@@ -9,6 +9,7 @@ services:
     ports:
       - "${NTP_EXPORTER_PORT:-9559}:9559"
     environment:
+      NTP_EXPORTER_MODE: probe
       # Servers that do not smear leap seconds: do not mix them with smearing
       # servers (time.google.com...), they differ by up to 0.5s around a leap
       # second. 3 servers or more enable the consensus.

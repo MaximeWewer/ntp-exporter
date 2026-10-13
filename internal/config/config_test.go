@@ -209,6 +209,7 @@ func TestLoadFromEnvVarsOnly_WithServersWithSpaces(t *testing.T) {
 }
 
 func TestLoadFromYamlWithEnvOverrides_Success(t *testing.T) {
+	t.Setenv("NTP_EXPORTER_MODE", "agent")
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "config.yaml")
 
@@ -367,6 +368,7 @@ func TestConsensusEnabled(t *testing.T) {
 }
 
 func TestKernelConfig_DeprecatedEnableKernel(t *testing.T) {
+	t.Setenv("NTP_EXPORTER_MODE", "agent")
 	t.Setenv("NTP_ENABLE_KERNEL", "true")
 	cfg, err := LoadFromEnvVarsOnly()
 	require.NoError(t, err)
@@ -433,6 +435,7 @@ func TestLoadFromEnvVarsOnly_ProbeEndpointOnly(t *testing.T) {
 }
 
 func TestLoadFromEnvVarsOnly_Chrony(t *testing.T) {
+	t.Setenv("NTP_EXPORTER_MODE", "agent")
 	t.Setenv("NTP_CHRONY_ENABLED", "true")
 	cfg, err := LoadFromEnvVarsOnly()
 	if err != nil {

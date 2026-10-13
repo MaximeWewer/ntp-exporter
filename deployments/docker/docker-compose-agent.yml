@@ -9,6 +9,7 @@ services:
     image: ${NTP_EXPORTER_IMAGE:-ghcr.io/maximewewer/ntp-exporter:latest}
     network_mode: host
     environment:
+      NTP_EXPORTER_MODE: agent
       NTP_EXPORTER_PORT: "${NTP_EXPORTER_PORT:-9559}"
       NTP_SERVERS: "${NTP_SERVERS:-pool.ntp.org}"
       NTP_TIMEOUT: "${NTP_TIMEOUT:-2s}"

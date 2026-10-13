@@ -33,6 +33,10 @@ const (
 
 // Validate checks if the configuration is valid
 func Validate(cfg *Config) error {
+	if err := validateMode(cfg); err != nil {
+		return err
+	}
+
 	if err := validateServer(&cfg.Server); err != nil {
 		return err
 	}
@@ -54,6 +58,29 @@ func Validate(cfg *Config) error {
 	}
 
 	return nil
+}
+
+// validateMode requires an explicit mode and applies its guards: the kernel
+// and chrony options describe the host the exporter runs on, they only make
+// sense in agent mode
+func validateMode(cfg *Config) error {
+	switch cfg.Mode {
+	case ModeProbe:
+		if cfg.NTP.Kernel.Enabled || cfg.NTP.EnableKernel {
+			return errors.New("the kernel option describes the clock of the host: it requires mode: agent")
+		}
+		if cfg.NTP.Chrony.Enabled {
+			return errors.New("the chrony option reads the local chronyd: it requires mode: agent")
+		}
+		return nil
+	case ModeAgent:
+		return nil
+	case "":
+		return errors.New("mode is required: set mode: probe (monitor NTP servers from a central place) " +
+			"or mode: agent (measure the clock of this host), or NTP_EXPORTER_MODE")
+	default:
+		return errors.New("mode must be probe or agent, got " + strconv.Quote(cfg.Mode))
+	}
 }
 
 func validateServer(cfg *ServerConfig) error {

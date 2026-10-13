@@ -3,6 +3,15 @@
 # ============================================================================
 
 # ----------------------------------------------------------------------------
+# MODE - required
+#   probe: monitor NTP servers from a central place (consensus, falsetickers,
+#          Kiss-o'-Death, NTS, pools, /probe)
+#   agent: measure the clock of this host (kernel and chrony options)
+# Environment variable: NTP_EXPORTER_MODE
+# ----------------------------------------------------------------------------
+mode: probe
+
+# ----------------------------------------------------------------------------
 # SERVER - HTTP Prometheus server configuration
 # ----------------------------------------------------------------------------
 server:

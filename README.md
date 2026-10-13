@@ -52,10 +52,12 @@ Two questions, two modes:
 | Are my time servers reliable? | **probe** | Deployment, Docker, systemd on a monitoring host | `ntp_up`, `ntp_response_valid`, `ntp_falseticker`, `ntp_offset_from_consensus_seconds`, `ntp_root_distance_seconds`, `ntp_target_suspended`, `ntp_nts_ke_success`, `ntp_probe_success` |
 | Is the clock of each machine right? | **agent** | DaemonSet, one container or service per host | `ntp_consensus_offset_seconds`, `ntp_offset_seconds`, with the kernel option `ntp_kernel_sync_status`, `ntp_kernel_error_bound_violated`, with the chrony option `ntp_chrony_*` |
 
-The mode is only a deployment concern: the binary is the same. In agent mode,
-the pod shares the node clock, so the measured offset is the node offset.
-Neither mode needs privileges or host networking (except the chrony option
-over UDP, see [chrony option](#chrony-option)).
+The mode is required: `mode: probe` or `mode: agent` in the YAML file, or
+`NTP_EXPORTER_MODE`. It applies its guards wherever the exporter runs: the
+kernel and chrony options describe the host clock and are refused in probe
+mode. In agent mode, the pod shares the node clock, so the measured offset is
+the node offset. Neither mode needs privileges or host networking (except the
+chrony option over UDP, see [chrony option](#chrony-option)).
 
 In probe mode, `ntp_offset_seconds` mixes the error of the probe host clock and
 the error of the server: use `ntp_offset_from_consensus_seconds` and
@@ -70,7 +72,7 @@ curl -LO https://github.com/MaximeWewer/ntp-exporter/releases/latest/download/nt
 chmod +x ntp-exporter-linux-amd64
 sudo mv ntp-exporter-linux-amd64 /usr/local/bin/ntp-exporter
 
-NTP_SERVERS=time.cloudflare.com,time.google.com,ptbtime1.ptb.de ntp-exporter
+NTP_EXPORTER_MODE=probe NTP_SERVERS=time.cloudflare.com,time.google.com,ptbtime1.ptb.de ntp-exporter
 curl -s localhost:9559/metrics | grep '^ntp_'
 ```
 
@@ -78,6 +80,7 @@ curl -s localhost:9559/metrics | grep '^ntp_'
 
 ```bash
 docker run -d --name ntp-exporter -p 9559:9559 \
+  -e NTP_EXPORTER_MODE=probe \
   -e NTP_SERVERS=time.cloudflare.com,time.google.com,ptbtime1.ptb.de \
   ghcr.io/maximewewer/ntp-exporter:latest
 ```
@@ -286,6 +289,7 @@ probe_endpoint:
 
 | Variable | Default | Description |
 |---|---|---|
+| `NTP_EXPORTER_MODE` | (required) | `probe` or `agent` |
 | `PROBE_ENDPOINT_ENABLED` | `false` | Serve `/probe?target=` |
 | `PROBE_ENDPOINT_ONLY` | `false` | Only measure `/probe` targets (no static servers); implies `PROBE_ENDPOINT_ENABLED` |
 | `PROBE_ENDPOINT_ALLOWED_TARGETS` | | Comma-separated CIDR ranges and host name regular expressions `/probe` may reach |

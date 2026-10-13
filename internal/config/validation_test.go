@@ -554,6 +554,7 @@ func TestValidateMetrics_Namespace(t *testing.T) {
 
 func TestValidate_CompleteConfig(t *testing.T) {
 	cfg := &Config{
+		Mode: ModeProbe,
 		Server: ServerConfig{
 			Address:      "0.0.0.0",
 			Port:         9559,
@@ -707,6 +708,7 @@ func TestValidate_ProbeEndpointAllowedTargets(t *testing.T) {
 
 func TestValidate_ChronyAddress(t *testing.T) {
 	cfg := DefaultConfig()
+	cfg.Mode = ModeAgent
 	cfg.NTP.Chrony.Enabled = true
 	for _, ok := range []string{"udp://127.0.0.1:323", "udp://[::1]:323", "unix:///run/chrony/chronyd.sock"} {
 		cfg.NTP.Chrony.Address = ok
@@ -784,4 +786,23 @@ func TestValidateNTP_MaxRootDistance(t *testing.T) {
 		cfg.NTP.MaxRootDistance = d
 		assert.ErrorContains(t, Validate(cfg), "max_root_distance must be between 100ms and 16s")
 	}
+}
+
+func TestValidate_Mode(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Mode = ""
+	assert.ErrorContains(t, Validate(cfg), "mode is required")
+
+	cfg.Mode = "hybrid"
+	assert.ErrorContains(t, Validate(cfg), "mode must be probe or agent")
+
+	cfg.Mode = ModeProbe
+	cfg.NTP.Kernel.Enabled = true
+	assert.ErrorContains(t, Validate(cfg), "requires mode: agent")
+	cfg.NTP.Kernel.Enabled = false
+	cfg.NTP.Chrony.Enabled = true
+	assert.ErrorContains(t, Validate(cfg), "requires mode: agent")
+
+	cfg.Mode = ModeAgent
+	assert.NoError(t, Validate(cfg))
 }

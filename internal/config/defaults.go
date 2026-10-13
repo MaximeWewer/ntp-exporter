@@ -109,9 +109,9 @@ func ApplyDefaults(cfg *Config) {
 	}
 }
 
-// DefaultConfig returns a configuration with all defaults applied
+// DefaultConfig returns a probe mode configuration with all defaults applied
 func DefaultConfig() *Config {
-	cfg := &Config{}
+	cfg := &Config{Mode: ModeProbe}
 	ApplyDefaults(cfg)
 	return cfg
 }
