@@ -482,9 +482,13 @@ chronyd answers read-only commands from localhost on UDP port 323 by default
 (`udp://127.0.0.1:323`, the default address): the exporter must share the
 network namespace of the host (`hostNetwork: true`, Docker `--network host`,
 systemd). Without host networking, use the unix socket
-(`unix:///run/chrony/chronyd.sock`, Helm `chrony.socketDir: /run/chrony`): the
-exporter must belong to the group owning the socket (usually `chrony` or
-`_chrony`, Helm `podSecurityContext.supplementalGroups`).
+(`unix:///run/chrony/chronyd.sock`, Helm `chrony.socketDir: /run/chrony`).
+Like `chronyc`, the exporter creates its reply socket next to the chronyd
+socket: chronyd resolves that path in its own mount namespace and cannot see
+the `/tmp` of the exporter (systemd `PrivateTmp`, a container). The directory
+is usually writable by chronyd only (`/run/chrony` is `0700 _chrony` on
+Debian and Ubuntu): run the exporter as the chronyd user (systemd
+`User=_chrony`, Helm `chrony.runAsUser` set to `id -u _chrony` of the nodes).
 
 For the full chronyd state (every source, server statistics), run
 [chrony_exporter](https://github.com/SuperQ/chrony_exporter) next to it.
@@ -537,9 +541,9 @@ for instance `time.google.com`). The `NTS key exchange failed` log gives the
 TLS or protocol error.
 
 **`ntp_chrony_up` is 0.** Over UDP, chronyd only answers from localhost: the
-exporter needs host networking. Over the unix socket, the exporter must belong
-to the group owning the socket. Check that chronyd allows commands
-(`cmdport` not 0).
+exporter needs host networking, and chronyd must allow commands (`cmdport` not
+0). Over the unix socket, the exporter must be able to create its reply socket
+in the chronyd socket directory: the log names the directory.
 
 **No kernel metrics.** The kernel option is Linux only and must be enabled
 (`NTP_KERNEL_ENABLED=true`, Helm `kernel.enabled=true`); check the logs for

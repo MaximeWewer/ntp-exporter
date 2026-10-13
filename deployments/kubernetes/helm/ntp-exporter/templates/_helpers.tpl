@@ -166,6 +166,9 @@ Validate mode value
 {{- if and (not .Values.chrony.socketDir) (not .Values.hostNetwork) (hasPrefix "udp://127." (.Values.chrony.address | default "udp://127.0.0.1:323")) -}}
 {{- fail "chrony.enabled needs hostNetwork: true to reach udp://127.0.0.1:323 on the node, or chrony.socketDir" -}}
 {{- end -}}
+{{- if and .Values.chrony.socketDir (kindIs "invalid" .Values.chrony.runAsUser) -}}
+{{- fail "chrony.socketDir needs chrony.runAsUser: the uid of chronyd on the nodes (e.g. id -u _chrony), the only user allowed to write in its socket directory" -}}
+{{- end -}}
 {{- end -}}
 {{- if and (include "ntp-exporter.probeEndpointOnly" .) (not (include "ntp-exporter.probeEndpointEnabled" .)) -}}
 {{- fail "probeEndpoint.only requires probeEndpoint.enabled" -}}

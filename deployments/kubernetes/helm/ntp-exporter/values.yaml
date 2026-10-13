@@ -20,12 +20,17 @@ kernel:
 # frequency, skew... Two ways to reach chronyd on the node:
 #   - its UDP command port on 127.0.0.1:323 (read-only commands are allowed
 #     from localhost by default): requires hostNetwork: true
-#   - its unix socket: set socketDir (e.g. /run/chrony); the pod must belong to
-#     the group owning the socket (podSecurityContext.supplementalGroups)
+#   - its unix socket: set socketDir (e.g. /run/chrony) and runAsUser to the
+#     uid of chronyd on the nodes (id -u _chrony): like chronyc, the exporter
+#     creates its reply socket in that directory, writable by chronyd only
 chrony:
   enabled: false
   address: udp://127.0.0.1:323
   socketDir: ""
+  # uid (and gid, defaulting to the uid) of chronyd on the nodes, required
+  # with socketDir
+  runAsUser: null
+  runAsGroup: null
 
 # Multi-target endpoint /probe?target=host[&samples=N], like blackbox_exporter:
 # Prometheus drives the targets through relabeling, so probe replicas hold no

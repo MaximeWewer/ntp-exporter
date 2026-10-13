@@ -16,11 +16,14 @@ kernel:
   violationOnly: false
 
 # chronyd tracking report (agent mode): UDP 127.0.0.1:323 needs hostNetwork,
-# or set socketDir (e.g. /run/chrony) and the socket group in supplementalGroups
+# or set socketDir (e.g. /run/chrony) and runAsUser/runAsGroup to the uid/gid
+# of chronyd on the nodes (the reply socket is created in socketDir)
 chrony:
   enabled: false
   address: udp://127.0.0.1:323
   socketDir: ""
+  runAsUser: null
+  runAsGroup: null
 
 # Multi-target /probe?target= endpoint (Prometheus drives the targets)
 probeEndpoint:

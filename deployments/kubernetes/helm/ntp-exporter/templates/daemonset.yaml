@@ -41,8 +41,15 @@ spec:
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       containers:
       - name: ntp-exporter
+        {{- $securityContext := deepCopy .Values.securityContext }}
+        {{- if and .Values.chrony.enabled .Values.chrony.socketDir }}
+        {{- /* The reply socket is created next to the chronyd socket, in a
+               directory only the chronyd user may write to */}}
+        {{- $_ := set $securityContext "runAsUser" .Values.chrony.runAsUser }}
+        {{- $_ := set $securityContext "runAsGroup" (.Values.chrony.runAsGroup | default .Values.chrony.runAsUser) }}
+        {{- end }}
         securityContext:
-          {{- toYaml .Values.securityContext | nindent 10 }}
+          {{- toYaml $securityContext | nindent 10 }}
         image: {{ include "ntp-exporter.image" . }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         args:
@@ -81,8 +88,6 @@ spec:
         {{- if and .Values.chrony.enabled .Values.chrony.socketDir }}
         - name: chrony-socket
           mountPath: {{ .Values.chrony.socketDir }}
-        - name: tmp
-          mountPath: /tmp
         {{- end }}
         {{- with .Values.volumeMounts }}
         {{- toYaml . | nindent 8 }}
@@ -109,13 +114,11 @@ spec:
           secretName: {{ .Values.webConfig.existingSecret }}
       {{- end }}
       {{- if and .Values.chrony.enabled .Values.chrony.socketDir }}
-      # chronyd socket of the node, and a writable directory for the reply socket
+      # chronyd socket directory of the node: the reply socket is created there
       - name: chrony-socket
         hostPath:
           path: {{ .Values.chrony.socketDir }}
           type: Directory
-      - name: tmp
-        emptyDir: {}
       {{- end }}
       {{- with .Values.volumes }}
       {{- toYaml . | nindent 6 }}

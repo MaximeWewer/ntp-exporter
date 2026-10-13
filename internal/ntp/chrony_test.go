@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"math"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -105,17 +106,46 @@ func TestChronyClient_TrackingUDP(t *testing.T) {
 }
 
 func TestChronyClient_TrackingUnixSocket(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "chronyd.sock")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "chronyd.sock")
 	conn, err := net.ListenPacket("unixgram", path)
 	require.NoError(t, err)
 	defer conn.Close()
-	fakeChronyd(t, conn, func(seq uint32) [][]byte { return [][]byte{trackingReply(seq, 0, 0)} })
+
+	// Record where the client bound its reply socket
+	replyDirs := make(chan string, 1)
+	recorder := &recordingConn{PacketConn: conn, from: replyDirs}
+	fakeChronyd(t, recorder, func(seq uint32) [][]byte { return [][]byte{trackingReply(seq, 0, 0)} })
 
 	c, err := NewChronyClient("unix://"+path, time.Second)
 	require.NoError(t, err)
 	tr, err := c.Tracking(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "PPS", tr.Source, "reference clocks are named by their reference ID")
+
+	// Like chronyc, the reply socket sits next to the chronyd socket: chronyd
+	// may not see the /tmp of the exporter (PrivateTmp, pod)
+	assert.Equal(t, dir, <-replyDirs)
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "the reply socket is removed after the request")
+}
+
+// recordingConn reports the directory of the sender of each datagram
+type recordingConn struct {
+	net.PacketConn
+	from chan string
+}
+
+func (r *recordingConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	n, addr, err := r.PacketConn.ReadFrom(b)
+	if err == nil {
+		select {
+		case r.from <- filepath.Dir(addr.String()):
+		default:
+		}
+	}
+	return n, addr, err
 }
 
 func TestChronyClient_Errors(t *testing.T) {

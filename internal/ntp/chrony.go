@@ -143,7 +143,10 @@ func (c *ChronyClient) Tracking(ctx context.Context) (*ChronyTracking, error) {
 }
 
 // dial connects to chronyd. A unix datagram client needs its own bound
-// socket so that chronyd can send the reply back.
+// socket so that chronyd can send the reply back. chronyd resolves that path
+// in its own mount namespace (systemd PrivateTmp, a pod with its own /tmp):
+// like chronyc, the reply socket is created next to the chronyd socket, and
+// in the temporary directory only when that directory is not writable.
 func (c *ChronyClient) dial(ctx context.Context) (net.Conn, func(), error) {
 	if c.network == "udp" {
 		var d net.Dialer
@@ -158,20 +161,28 @@ func (c *ChronyClient) dial(ctx context.Context) (net.Conn, func(), error) {
 	if _, err := rand.Read(suffix[:]); err != nil {
 		return nil, nil, err
 	}
-	local := filepath.Join(os.TempDir(), "ntp-exporter-chrony-"+hex.EncodeToString(suffix[:])+".sock")
-	conn, err := net.DialUnix("unixgram",
-		&net.UnixAddr{Name: local, Net: "unixgram"},
-		&net.UnixAddr{Name: c.address, Net: "unixgram"})
-	if err != nil {
-		_ = os.Remove(local)
-		return nil, nil, fmt.Errorf("chrony connection to %s failed: %w", c.address, err)
+	name := "ntp-exporter-chrony-" + hex.EncodeToString(suffix[:]) + ".sock"
+
+	var lastErr error
+	for _, dir := range []string{filepath.Dir(c.address), os.TempDir()} {
+		local := filepath.Join(dir, name)
+		conn, err := net.DialUnix("unixgram",
+			&net.UnixAddr{Name: local, Net: "unixgram"},
+			&net.UnixAddr{Name: c.address, Net: "unixgram"})
+		if err != nil {
+			_ = os.Remove(local)
+			lastErr = err
+			continue
+		}
+		// chronyd runs as another user: it must be able to write the reply
+		_ = os.Chmod(local, 0o666) //nolint:gosec // short-lived reply socket, removed after the request
+		return conn, func() {
+			_ = conn.Close()
+			_ = os.Remove(local)
+		}, nil
 	}
-	// chronyd runs as another user: it must be able to write the reply
-	_ = os.Chmod(local, 0o666) //nolint:gosec // short-lived reply socket, removed after the request
-	return conn, func() {
-		_ = conn.Close()
-		_ = os.Remove(local)
-	}, nil
+	return nil, nil, fmt.Errorf("chrony connection to %s failed (the exporter must be able to create its reply socket in %s, "+
+		"i.e. run as the chronyd user or root): %w", c.address, filepath.Dir(c.address), lastErr)
 }
 
 // chronyTrackingRequest encodes a tracking request, padded to the reply size

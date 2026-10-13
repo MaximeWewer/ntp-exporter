@@ -166,7 +166,8 @@ ntp:
   # ----------------------------------------------------------------------------
   # CHRONY - Tracking report of the local chronyd (agent mode): selected
   # source, offset, frequency, skew. Read-only commands are allowed from
-  # localhost over UDP 323 by default; the unix socket needs the chrony group.
+  # localhost over UDP 323 by default; with the unix socket, the exporter runs as
+  # the chronyd user (it creates its reply socket next to the chronyd socket).
   # ----------------------------------------------------------------------------
   chrony:
     # Default: false
