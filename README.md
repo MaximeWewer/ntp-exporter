@@ -159,7 +159,9 @@ Every `scrape_interval` (60 s by default), the exporter runs one **cycle**:
    smallest number `f` of falsetickers (`f < n/2`) such that `n - f` intervals
    overlap and at most `f` offsets lie outside that intersection. Servers whose
    offset lies outside it are falsetickers; the result does not depend on the
-   order of the servers.
+   order of the servers. The consensus offset combines the offsets of the
+   truechimers weighted by 1/root distance (RFC 5905 §11.2.3): an imprecise
+   server barely moves it.
 6. **Snapshot**: metrics are built from the last cycle at scrape time. A server
    that stops answering exposes `ntp_up 0` and no stale offset; a pool member
    gone from DNS disappears.
@@ -349,7 +351,7 @@ Names below use the default `ntp` namespace and no subsystem.
 
 | Metric | Description |
 |---|---|
-| `ntp_consensus_offset_seconds` | Offset of the local clock against the consensus (median of the truechimers) |
+| `ntp_consensus_offset_seconds` | Offset of the local clock against the consensus (truechimers weighted by 1/root distance) |
 | `ntp_consensus_servers` / `ntp_consensus_truechimers` | Servers taking part / agreeing with the consensus |
 | `ntp_offset_from_consensus_seconds{server}` | Offset of a server against the consensus, independent of the local clock |
 | `ntp_falseticker{server}` | 1 when the server interval misses the majority intersection |

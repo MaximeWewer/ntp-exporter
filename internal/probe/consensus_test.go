@@ -150,6 +150,32 @@ func TestComputeConsensus_Selection(t *testing.T) {
 	}
 }
 
+func TestComputeConsensus_WeightedByRootDistance(t *testing.T) {
+	ms := time.Millisecond
+	// A median or a plain mean would be pulled by the imprecise servers
+	c := ComputeConsensus([]*Measurement{
+		serverMeasurement("precise", 0, ms),
+		serverMeasurement("sloppy1", 4*ms, 10*ms),
+		serverMeasurement("sloppy2", -2*ms, 10*ms),
+	})
+	require.NotNil(t, c)
+	require.True(t, c.Majority)
+	assert.Empty(t, c.Falsetickers)
+	// (0/1 + 4/10 - 2/10) / (1 + 1/10 + 1/10) ms
+	assert.InDelta(t, float64(ms)/6, float64(c.Offset), float64(time.Microsecond))
+
+	// An accurate server is not dragged away by a server with a large error
+	c = ComputeConsensus([]*Measurement{
+		serverMeasurement("a", 0, ms),
+		serverMeasurement("b", ms, ms),
+		serverMeasurement("wide", 900*ms, time.Second),
+	})
+	require.NotNil(t, c)
+	assert.Less(t, c.Offset.Abs(), 5*ms)
+	assert.False(t, c.Falsetickers["a"])
+	assert.False(t, c.Falsetickers["b"])
+}
+
 func TestComputeConsensus_NeedsThreeValidServers(t *testing.T) {
 	kod := &Measurement{Target: Target{Server: "kod"}, Responses: []*ntp.Response{{KissCode: "RATE"}}}
 	assert.Nil(t, ComputeConsensus([]*Measurement{

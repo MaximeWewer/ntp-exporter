@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"math"
 	"sort"
 	"time"
 )
@@ -8,6 +9,10 @@ import (
 // MinConsensusServers is the minimum number of valid servers needed to
 // compute a consensus
 const MinConsensusServers = 3
+
+// minWeightDistance bounds the weight of a server in the combined offset, so
+// that a zero root distance does not divide by zero
+const minWeightDistance = time.Microsecond
 
 // Consensus is the agreement between servers measured during a cycle.
 // It judges servers against each other, independently of the local clock.
@@ -32,15 +37,17 @@ type Consensus struct {
 }
 
 type interval struct {
-	server string
-	offset time.Duration
-	lo, hi time.Duration
+	server   string
+	offset   time.Duration
+	distance time.Duration
+	lo, hi   time.Duration
 }
 
 // ComputeConsensus applies the RFC 5905 selection algorithm (§11.2.1, derived
 // from Marzullo's algorithm) to the correctness intervals
 // [offset - root distance, offset + root distance] of the valid servers, then
-// takes the median offset of the truechimers. It returns nil with fewer than MinConsensusServers valid
+// combines the offsets of the truechimers weighted by 1/root distance
+// (§11.2.3). It returns nil with fewer than MinConsensusServers valid
 // servers. A server reached through several names (a host name and a pool
 // member resolving to the same address) votes once.
 func ComputeConsensus(measurements []*Measurement) *Consensus {
@@ -59,10 +66,11 @@ func ComputeConsensus(measurements []*Measurement) *Consensus {
 		}
 		distance := max(best.RootDistance, 0)
 		intervals = append(intervals, interval{
-			server: m.Target.Server,
-			offset: best.Offset,
-			lo:     best.Offset - distance,
-			hi:     best.Offset + distance,
+			server:   m.Target.Server,
+			offset:   best.Offset,
+			distance: distance,
+			lo:       best.Offset - distance,
+			hi:       best.Offset + distance,
 		})
 	}
 
@@ -87,27 +95,19 @@ func ComputeConsensus(measurements []*Measurement) *Consensus {
 	}
 
 	c.Majority = true
-	var chimers []time.Duration
+	var weighted, weights float64
 	for _, iv := range intervals {
 		if iv.offset < lo || iv.offset > hi {
 			c.Falsetickers[iv.server] = true
 			continue
 		}
-		chimers = append(chimers, iv.offset)
+		c.Truechimers++
+		w := 1 / max(iv.distance, minWeightDistance).Seconds()
+		weighted += w * float64(iv.offset)
+		weights += w
 	}
-	c.Truechimers = len(chimers)
-	c.Offset = medianDuration(chimers)
+	c.Offset = time.Duration(math.Round(weighted / weights))
 	return c
-}
-
-func medianDuration(values []time.Duration) time.Duration {
-	sorted := append([]time.Duration(nil), values...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
-	n := len(sorted)
-	if n%2 == 0 {
-		return (sorted[n/2-1] + sorted[n/2]) / 2
-	}
-	return sorted[n/2]
 }
 
 // selectIntersection returns the intersection of the RFC 5905 selection
