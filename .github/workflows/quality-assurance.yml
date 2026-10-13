@@ -12,6 +12,8 @@ on:
     paths-ignore:
       - '**.md'
   workflow_dispatch:
+  # Called by the release workflow: nothing is published without QA
+  workflow_call:
 
 permissions:
   contents: read
@@ -129,6 +131,32 @@ jobs:
           GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: '0'
         run: go build -trimpath -ldflags="-s -w" -o /dev/null ./cmd/ntp-exporter
+
+  # ===========================================================================
+  # Container image: build (not pushed) and scan
+  # ===========================================================================
+  image:
+    name: Docker image
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build image
+        run: docker build -t ntp-exporter:qa .
+
+      - name: Check the image starts
+        run: docker run --rm ntp-exporter:qa --version
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: 'image'
+          image-ref: 'ntp-exporter:qa'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+          exit-code: '1'
 
   # ===========================================================================
   # Security scanning

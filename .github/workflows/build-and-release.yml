@@ -24,11 +24,22 @@ env:
 
 jobs:
   # =============================================================================
+  # Job 0: Quality assurance - lint, tests, builds, image and security scans
+  # =============================================================================
+  qa:
+    name: Quality Assurance
+    uses: ./.github/workflows/quality-assurance.yml
+    permissions:
+      contents: read
+      security-events: write
+
+  # =============================================================================
   # Job 1: Prepare Build - Extract version and validate
   # =============================================================================
   prepare:
     name: Prepare Release
     runs-on: ubuntu-latest
+    needs: qa
     outputs:
       version: ${{ steps.get_version.outputs.version }}
       tag: ${{ steps.get_version.outputs.tag }}
