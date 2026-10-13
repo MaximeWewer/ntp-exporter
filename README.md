@@ -179,11 +179,13 @@ ntp:
 ```
 
 The session is kept across cycles; the key exchange runs again every hour,
-after an authentication failure or a `NTSN` Kiss-o'-Death, so that the key
+after an authentication failure (including a `NTSN` Kiss-o'-Death), so that the key
 exchange server and its certificate are monitored too
 (`ntp_nts_ke_success`, `ntp_nts_cert_expiry_timestamp_seconds`). When the key
 exchange fails, no NTP query is sent and `ntp_up` is 0. `/probe` accepts NTS
-targets as well (`/probe?target=nts://time.cloudflare.com`).
+targets as well (`/probe?target=nts://time.cloudflare.com`). Other
+Kiss-o'-Death codes are not authenticated in NTS and are ignored (RFC 8915
+§5.7): NTS targets get no `RATE` backoff.
 
 Outgoing TCP 4460 must be open towards the key exchange servers (the Helm
 network policy opens it).
@@ -335,7 +337,7 @@ Names below use the default `ntp` namespace and no subsystem.
 | `ntp_packet_loss_ratio` | Queries without valid response / queries sent |
 | `ntp_target_suspended{code}` | 1 while the server is not queried after `DENY` or `RSTR` |
 | `ntp_kiss_of_death_total{code}` | Kiss-o'-Death packets received |
-| `ntp_invalid_responses_total{reason}` | Queries without valid measurement: `kod`, `unsync`, `stratum`, `root_distance`, `stale_reference`, `invalid_time`, `other`, `timeout` |
+| `ntp_invalid_responses_total{reason}` | Queries without valid measurement: `kod`, `unsync`, `stratum`, `root_distance`, `stale_reference`, `invalid_time` (bad transmit time, clock ticking backwards, origin timestamp mismatch), `other`, `timeout` (no answer) |
 | `ntp_nts_ke_success` | NTS servers: 1 when the last key exchange succeeded |
 | `ntp_nts_cert_expiry_timestamp_seconds` | NTS servers: expiry of the key exchange server certificate |
 

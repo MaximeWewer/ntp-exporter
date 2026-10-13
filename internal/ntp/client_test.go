@@ -2,9 +2,12 @@ package ntp
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/beevik/ntp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -149,4 +152,33 @@ func TestClient_VersionConfiguration(t *testing.T) {
 			assert.NotNil(t, client)
 		})
 	}
+}
+
+func TestClient_RejectedPacketIsAnInvalidResponse(t *testing.T) {
+	server := startFakeServer(t, "")
+	server.setZeroTransmit()
+	client := NewClient(2*time.Second, 4)
+
+	resp, err := client.Query(context.Background(), server.addr())
+
+	require.NoError(t, err, "the server answered: not a lost query")
+	assert.False(t, resp.IsValid())
+	assert.ErrorIs(t, resp.ValidateError, ntp.ErrInvalidTransmitTime)
+	assert.Equal(t, ReasonInvalidTime, resp.InvalidReason())
+}
+
+func TestInvalidReason_ProtocolErrors(t *testing.T) {
+	for err, want := range map[error]string{
+		ntp.ErrInvalidTransmitTime:    ReasonInvalidTime,
+		ntp.ErrServerTickedBackwards:  ReasonInvalidTime,
+		ntp.ErrServerResponseMismatch: ReasonInvalidTime,
+		ntp.ErrInvalidMode:            ReasonOther,
+	} {
+		resp, ok := protocolErrorResponse("s", fmt.Errorf("query: %w", err))
+		require.True(t, ok, err)
+		assert.Equal(t, want, resp.InvalidReason(), err)
+	}
+
+	_, ok := protocolErrorResponse("s", errors.New("i/o timeout"))
+	assert.False(t, ok, "a timeout stays a lost query")
 }

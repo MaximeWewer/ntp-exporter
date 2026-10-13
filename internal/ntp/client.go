@@ -92,6 +92,9 @@ func (c *Client) Query(ctx context.Context, server string) (*Response, error) {
 		// The garbage collector will clean everything up
 		return nil, fmt.Errorf("query context cancelled: %w", ctx.Err())
 	case result := <-resultChan:
+		if resp, ok := protocolErrorResponse(server, result.err); ok {
+			return resp, nil
+		}
 		if result.err != nil {
 			logger.SafeDebug("ntp", "NTP query failed", map[string]interface{}{
 				"server": server,
@@ -111,6 +114,24 @@ func (c *Client) Query(ctx context.Context, server string) (*Response, error) {
 
 		return resp, nil
 	}
+}
+
+// protocolErrorResponse turns the errors beevik/ntp returns for a received but
+// unusable packet (bad transmit time, clock ticking backwards, origin
+// timestamp mismatch, bad mode) into an invalid response: the server answered,
+// so the query is neither lost nor a timeout.
+func protocolErrorResponse(server string, err error) (*Response, bool) {
+	if !errors.Is(err, ntp.ErrInvalidTransmitTime) &&
+		!errors.Is(err, ntp.ErrServerTickedBackwards) &&
+		!errors.Is(err, ntp.ErrServerResponseMismatch) &&
+		!errors.Is(err, ntp.ErrInvalidMode) {
+		return nil, false
+	}
+	logger.SafeDebug("ntp", "NTP response rejected", map[string]interface{}{
+		"server": server,
+		"error":  err.Error(),
+	})
+	return &Response{Server: server, ValidateError: err}, true
 }
 
 // fromNTP converts a beevik/ntp response. The response is validated once:
@@ -283,6 +304,14 @@ func (r *Response) InvalidReason() string {
 		errors.Is(r.ValidateError, ntp.ErrServerNotSynchronized) ||
 		errors.Is(r.ValidateError, ntp.ErrInvalidLeapSecond):
 		return ReasonUnsync
+	// Checked before the stratum: a rejected packet carries no field
+	case errors.Is(r.ValidateError, ntp.ErrInvalidTime),
+		errors.Is(r.ValidateError, ntp.ErrServerTickedBackwards),
+		errors.Is(r.ValidateError, ntp.ErrInvalidTransmitTime),
+		errors.Is(r.ValidateError, ntp.ErrServerResponseMismatch):
+		return ReasonInvalidTime
+	case errors.Is(r.ValidateError, ntp.ErrInvalidMode):
+		return ReasonOther
 	case r.Stratum < 1 || r.Stratum > 15 || errors.Is(r.ValidateError, ntp.ErrInvalidStratum):
 		return ReasonStratum
 	case errors.Is(r.ValidateError, ntp.ErrInvalidDispersion),
@@ -290,10 +319,6 @@ func (r *Response) InvalidReason() string {
 		return ReasonRootDistance
 	case errors.Is(r.ValidateError, ntp.ErrServerClockFreshness):
 		return ReasonStaleReference
-	case errors.Is(r.ValidateError, ntp.ErrInvalidTime),
-		errors.Is(r.ValidateError, ntp.ErrServerTickedBackwards),
-		errors.Is(r.ValidateError, ntp.ErrInvalidTransmitTime):
-		return ReasonInvalidTime
 	case r.ValidateError != nil:
 		return ReasonOther
 	default:

@@ -35,8 +35,6 @@ const (
 	ntsKeyExchangeInterval = time.Hour
 	// maxNTSSessions bounds the sessions kept for /probe targets
 	maxNTSSessions = 1024
-	// kissNTSNak is the Kiss-o'-Death sent when the server cannot decrypt the cookie
-	kissNTSNak = "NTSN"
 )
 
 // NTSState describes the key exchange of an NTS server
@@ -170,6 +168,10 @@ func (c *NTSClient) Burst(ctx context.Context, host string, count int) NTSResult
 
 		res.Sent++
 		resp, err := c.query(ctx, t.session)
+		if r, ok := protocolErrorResponse(NTSScheme+host, err); ok {
+			res.Responses = append(res.Responses, r)
+			continue
+		}
 		if err != nil {
 			lastErr = err
 			logger.SafeDebug("ntp", "NTS query failed", map[string]interface{}{
@@ -190,12 +192,11 @@ func (c *NTSClient) Burst(ctx context.Context, host string, count int) NTSResult
 			continue
 		}
 
-		r := fromNTP(NTSScheme+host, resp)
-		res.Responses = append(res.Responses, r)
-		if r.KissCode == kissNTSNak {
-			t.session = nil
-			break
-		}
+		// A NTSN Kiss-o'-Death (cookie not decrypted) is reported by
+		// beevik/nts as ErrAuthFailedOnServer, handled above. Other
+		// Kiss-o'-Death codes are not authenticated and are dropped by
+		// beevik/nts (RFC 8915 §5.7): NTS targets get no RATE backoff.
+		res.Responses = append(res.Responses, fromNTP(NTSScheme+host, resp))
 	}
 
 	res.State = t.state

@@ -18,7 +18,6 @@ type fakeSession struct {
 	mu      sync.Mutex
 	address string
 	results []error // per query; nil means a valid response
-	kiss    string
 	queries int
 	delay   time.Duration
 }
@@ -35,7 +34,7 @@ func (s *fakeSession) QueryWithOptions(*ntp.QueryOptions) (*ntp.Response, error)
 	now := time.Now()
 	return &ntp.Response{
 		Time: now, ClockOffset: time.Millisecond, RTT: 5 * time.Millisecond, Stratum: 1,
-		ReferenceTime: now.Add(-time.Second), RootDistance: time.Millisecond, KissCode: s.kiss,
+		ReferenceTime: now.Add(-time.Second), RootDistance: time.Millisecond,
 	}, nil
 }
 
@@ -124,12 +123,13 @@ func TestNTSClient_NakDropsSession(t *testing.T) {
 	exchanges := 0
 	c := newTestNTSClient(func(string, time.Duration) (ntsSession, time.Time, error) {
 		exchanges++
-		return &fakeSession{kiss: kissNTSNak}, time.Time{}, nil
+		// beevik/nts reports a NTSN Kiss-o'-Death as ErrAuthFailedOnServer
+		return &fakeSession{results: []error{nil, nts.ErrAuthFailedOnServer}}, time.Time{}, nil
 	})
 
 	res := c.Burst(context.Background(), "nts.example.org", 3)
 	require.Len(t, res.Responses, 1)
-	assert.Equal(t, ReasonKoD, res.Responses[0].InvalidReason())
+	assert.Equal(t, 2, res.Sent, "the burst stops when the session is rejected")
 
 	c.Burst(context.Background(), "nts.example.org", 1)
 	assert.Equal(t, 2, exchanges)

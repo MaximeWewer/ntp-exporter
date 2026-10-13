@@ -19,6 +19,9 @@ type fakeServer struct {
 	// kissFrom is the 1-based index of the first request answered with the
 	// Kiss-o'-Death (1 when unset)
 	kissFrom int
+	// zeroTransmit answers with a zero transmit timestamp, a packet beevik/ntp
+	// rejects with ErrInvalidTransmitTime
+	zeroTransmit bool
 }
 
 const ntpEpochOffset = 2208988800
@@ -55,6 +58,7 @@ func startFakeServer(t *testing.T, kissCode string) *fakeServer {
 			s.mu.Lock()
 			s.received = append(s.received, now)
 			kiss := s.kissCode != "" && len(s.received) >= max(s.kissFrom, 1)
+			zeroTransmit := s.zeroTransmit
 			s.mu.Unlock()
 
 			resp := make([]byte, 48)
@@ -74,11 +78,21 @@ func startFakeServer(t *testing.T, kissCode string) *fakeServer {
 			copy(resp[24:32], buf[40:48]) // origin = client transmit time
 			putNTPTime(resp[32:40], now)
 			putNTPTime(resp[40:48], now)
+			if zeroTransmit {
+				clear(resp[40:48])
+			}
 			_, _ = conn.WriteToUDP(resp, addr)
 		}
 	}()
 
 	return s
+}
+
+// setZeroTransmit answers every request with a zero transmit timestamp
+func (s *fakeServer) setZeroTransmit() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.zeroTransmit = true
 }
 
 // setKissFrom sends the Kiss-o'-Death from the n-th request on
