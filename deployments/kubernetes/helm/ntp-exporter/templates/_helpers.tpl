@@ -185,3 +185,34 @@ Validate mode value
 {{- fail "probeEndpoint.only requires probeEndpoint.enabled" -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Pod annotations: the prometheus.io scrape annotations, unless a ServiceMonitor
+already scrapes the pods (both would collect every series twice)
+*/}}
+{{- define "ntp-exporter.podAnnotations" -}}
+{{- $annotations := dict -}}
+{{- if and .Values.scrapeAnnotations (not .Values.serviceMonitor.enabled) -}}
+{{- $_ := set $annotations "prometheus.io/scrape" "true" -}}
+{{- $_ := set $annotations "prometheus.io/port" (toString (.Values.config.metricsPort | default 9559)) -}}
+{{- $_ := set $annotations "prometheus.io/path" "/metrics" -}}
+{{- end -}}
+{{- with .Values.podAnnotations -}}
+{{- $annotations = merge (deepCopy .) $annotations -}}
+{{- end -}}
+{{- with $annotations -}}
+{{- toYaml . -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+DNS policy: a pod on the host network needs ClusterFirstWithHostNet to keep
+resolving through the cluster DNS
+*/}}
+{{- define "ntp-exporter.dnsPolicy" -}}
+{{- if and .Values.hostNetwork (eq .Values.dnsPolicy "ClusterFirst") -}}
+ClusterFirstWithHostNet
+{{- else -}}
+{{ .Values.dnsPolicy }}
+{{- end -}}
+{{- end -}}

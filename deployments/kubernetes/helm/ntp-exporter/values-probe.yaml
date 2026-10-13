@@ -4,8 +4,9 @@
 
 mode: probe
 
-# Number of replicas for redundancy
-replicaCount: 2
+# A single replica: each replica probes every server, so two replicas double
+# the load on the servers and every alert (the pod restarts in seconds)
+replicaCount: 1
 
 # Standard resources for Deployment
 resources:
@@ -74,7 +75,7 @@ config:
   - time.apple.com
   metricsPort: 9559
   scrapeInterval: 60s
-  ntpTimeout: 15s
+  ntpTimeout: 2s
   maxClockOffset: 100ms
   logging:
     level: info

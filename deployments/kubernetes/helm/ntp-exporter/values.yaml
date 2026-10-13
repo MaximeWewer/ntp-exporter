@@ -121,10 +121,11 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
-podAnnotations:
-  prometheus.io/scrape: "true"
-  prometheus.io/port: "9559"
-  prometheus.io/path: "/metrics"
+# prometheus.io/scrape, port and path annotations, added when the
+# ServiceMonitor is disabled (both would scrape every pod twice)
+scrapeAnnotations: true
+
+podAnnotations: {}
 
 podLabels: {}
 

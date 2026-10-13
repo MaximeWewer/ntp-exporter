@@ -23,6 +23,7 @@ Helm chart for deploying the NTP Exporter to Kubernetes. The NTP Exporter is a P
 | `webConfig.scheme` / `webConfig.basicAuth` | `http` / `false` | Set `https` when the web configuration enables TLS (probes and ServiceMonitor use HTTPS); set `basicAuth` when it enables basic auth (probes then only check the port) |
 | `serviceMonitor.scheme` / `tlsConfig` / `basicAuth` | | Scrape settings of the ServiceMonitor endpoint |
 | `serviceMonitor.enabled` | `false` | Create a ServiceMonitor |
+| `scrapeAnnotations` | `true` | Add the `prometheus.io/*` scrape annotations, only when the ServiceMonitor is disabled |
 | `prometheusRule.enabled` | `false` | Create a PrometheusRule with the recommended alerts |
 | `image.repository` | `ghcr.io/maximewewer/ntp-exporter` | Image, tagged with the chart appVersion by default |
 | `networkPolicy.enabled` | `false` | Create a NetworkPolicy (enabled in `values-agent.yaml` and `values-probe.yaml`) |
@@ -41,3 +42,15 @@ Every value is documented in `values-with-all-options.yaml`. See the
 
 The pod has no Kubernetes API access: no RBAC role is created and the service
 account token is not mounted.
+
+## Pod Security Standards
+
+With the default values the pods meet the `restricted` profile. Two options
+of the agent mode need the `privileged` profile on their namespace, as they
+are not allowed by `baseline`:
+
+- `hostNetwork: true` (chrony option over UDP 127.0.0.1:323);
+- `chrony.socketDir`, a `hostPath` volume on the chronyd socket directory.
+
+On the host network the DNS policy becomes `ClusterFirstWithHostNet`, so that
+server names still resolve through the cluster DNS.

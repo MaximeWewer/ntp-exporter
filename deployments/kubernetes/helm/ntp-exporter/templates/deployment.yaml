@@ -18,8 +18,8 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        {{- with .Values.podAnnotations }}
-        {{- toYaml . | nindent 8 }}
+        {{- with include "ntp-exporter.podAnnotations" . }}
+        {{- . | nindent 8 }}
         {{- end }}
       labels:
         {{- include "ntp-exporter.selectorLabels" . | nindent 8 }}
@@ -37,7 +37,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       hostNetwork: {{ .Values.hostNetwork }}
-      dnsPolicy: {{ .Values.dnsPolicy }}
+      dnsPolicy: {{ include "ntp-exporter.dnsPolicy" . }}
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}

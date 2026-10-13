@@ -174,11 +174,12 @@ serviceAccount:
   annotations: {}
   name: ""
 
+# prometheus.io/scrape, port and path annotations, added when the
+# ServiceMonitor is disabled (both would scrape every pod twice)
+scrapeAnnotations: true
+
 # Pod Annotations
-podAnnotations:
-  prometheus.io/scrape: "true"
-  prometheus.io/port: "9559"
-  prometheus.io/path: "/metrics"
+podAnnotations: {}
 
 # Pod Labels
 podLabels: {}
