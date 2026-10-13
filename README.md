@@ -184,7 +184,7 @@ exchange fails, no NTP query is sent and `ntp_up` is 0. `/probe` accepts NTS
 targets as well (`/probe?target=nts://time.cloudflare.com`).
 
 Outgoing TCP 4460 must be open towards the key exchange servers (the Helm
-`values-probe.yaml` network policy opens it).
+network policy opens it).
 
 ## Multi-target probing
 

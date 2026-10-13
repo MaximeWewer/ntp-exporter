@@ -1,4 +1,5 @@
 {{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
 apiVersion: {{ include "ntp-exporter.networkPolicy.apiVersion" . }}
 kind: NetworkPolicy
 metadata:
@@ -13,12 +14,61 @@ spec:
   policyTypes:
   - Ingress
   - Egress
-  {{- with .Values.networkPolicy.ingress }}
   ingress:
+  {{- if $np.ingress }}
+  {{- toYaml $np.ingress | nindent 2 }}
+  {{- else }}
+  # Prometheus scrapes the metrics port
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ $np.prometheusNamespace | quote }}
+    ports:
+    - protocol: TCP
+      port: {{ .Values.config.metricsPort | default 9559 }}
+  {{- end }}
+  egress:
+  {{- if $np.egress }}
+  {{- toYaml $np.egress | nindent 2 }}
+  {{- else }}
+  # DNS resolution of the servers and pools
+  - to:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # NTP servers (UDP 123) and NTS key exchange (TCP 4460), outside the cluster:
+  # ipBlock is required, namespaceSelector only matches in-cluster pods
+  - to:
+    {{- range $cidr := $np.ntpCIDRs }}
+    - ipBlock:
+        cidr: {{ $cidr | quote }}
+        {{- $family := ternary "ipv6" "ipv4" (contains ":" $cidr) }}
+        {{- $except := list }}
+        {{- range $e := $np.exceptCIDRs }}
+        {{- if eq $family (ternary "ipv6" "ipv4" (contains ":" $e)) }}
+        {{- $except = append $except $e }}
+        {{- end }}
+        {{- end }}
+        {{- with $except }}
+        except:
+        {{- range . }}
+        - {{ . | quote }}
+        {{- end }}
+        {{- end }}
+    {{- end }}
+    ports:
+    - protocol: UDP
+      port: 123
+    - protocol: TCP
+      port: 4460
+  {{- with $np.extraEgress }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
-  {{- with .Values.networkPolicy.egress }}
-  egress:
-  {{- toYaml . | nindent 2 }}
   {{- end }}
 {{- end }}

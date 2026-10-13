@@ -48,23 +48,9 @@ serviceMonitor:
   additionalLabels:
     prometheus: kube-prometheus
 
-# Network policy for host network mode
+# Network policy: Prometheus ingress, DNS and NTP/NTS egress (see values.yaml)
 networkPolicy:
   enabled: true
-  egress:
-  - to:
-    - namespaceSelector: {}
-      podSelector:
-        matchLabels:
-          k8s-app: kube-dns
-    ports:
-    - protocol: UDP
-      port: 53
-  - to:
-    - namespaceSelector: {}
-    ports:
-    - protocol: UDP
-      port: 123
 
 # NTP configuration optimized for agent mode
 config:

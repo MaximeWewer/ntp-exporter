@@ -56,7 +56,7 @@ probeEndpoint:
 replicaCount: 1
 
 image:
-  repository: ntp-exporter
+  repository: ghcr.io/maximewewer/ntp-exporter
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
@@ -179,43 +179,23 @@ serviceMonitor:
   # MetricRelabelConfigs to apply to samples before ingestion
   metricRelabelings: []
 
-# Network Policy
+# Network Policy. The rules are generated from the settings below; set
+# ingress or egress to replace them with your own rules.
 networkPolicy:
-  # Enable network policy
   enabled: false
-  # Ingress rules
-  ingress:
-    # Allow Prometheus to scrape metrics
-    - from:
-      - namespaceSelector:
-          matchLabels:
-            name: monitoring
-      ports:
-      - protocol: TCP
-        port: 9559
-  # Egress rules
-  egress:
-    # Allow DNS
-    - to:
-      - namespaceSelector: {}
-        podSelector:
-          matchLabels:
-            k8s-app: kube-dns
-      ports:
-      - protocol: UDP
-        port: 53
-    # Allow NTP (port 123)
-    - to:
-      - namespaceSelector: {}
-      ports:
-      - protocol: UDP
-        port: 123
-    # Allow HTTPS for external NTP servers
-    - to:
-      - namespaceSelector: {}
-      ports:
-      - protocol: TCP
-        port: 443
+  # Namespace of Prometheus, matched on its kubernetes.io/metadata.name label
+  prometheusNamespace: monitoring
+  # Destinations of the NTP queries (UDP 123) and NTS key exchanges (TCP 4460)
+  ntpCIDRs:
+    - 0.0.0.0/0
+    - ::/0
+  # Ranges excluded from ntpCIDRs, e.g. the pod and service CIDRs of the cluster
+  exceptCIDRs: []
+  # Additional egress rules, appended to the generated ones
+  extraEgress: []
+  # Raw rules replacing the generated ones
+  ingress: []
+  egress: []
 
 resources:
   limits:
