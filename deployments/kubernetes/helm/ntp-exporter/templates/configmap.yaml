@@ -1,3 +1,4 @@
+{{- include "ntp-exporter.validateMode" . -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -27,7 +28,6 @@ data:
 
     probe_endpoint:
       enabled: {{ include "ntp-exporter.probeEndpointEnabled" . | empty | not }}
-      only: {{ include "ntp-exporter.probeEndpointOnly" . | empty | not }}
       {{- with .Values.probeEndpoint.allowedTargets }}
       allowed_targets:
       {{- range . }}
@@ -36,13 +36,9 @@ data:
       {{- end }}
 
     ntp:
-      {{- if include "ntp-exporter.probeEndpointOnly" . }}
-      servers: []
-      {{- else }}
       servers:
       {{- range .Values.config.ntpServers }}
       - {{ . | quote }}
-      {{- end }}
       {{- end }}
       timeout: {{ .Values.config.ntpTimeout | default "5s" | quote }}
       version: {{ .Values.config.ntpVersion | default 4 }}

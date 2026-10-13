@@ -49,10 +49,11 @@ configYaml:
     # NTP - NTP client configuration and query strategy
     # ----------------------------------------------------------------------------
     ntp:
+      # Servers that do not smear leap seconds (do not mix them with
+      # time.google.com or time.cloudflare.com, which smear)
       servers:
-      - "pool.ntp.org"
-      - "time.google.com"
-      - "time.cloudflare.com"
+      - "ptbtime1.ptb.de"
+      - "ptbtime2.ptb.de"
 
       # NTP pool configuration with selection strategy
       pools:

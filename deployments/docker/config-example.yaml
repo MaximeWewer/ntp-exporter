@@ -64,14 +64,10 @@ server:
 probe_endpoint:
   # Serve /probe. Anyone reaching the exporter can then make it query any
   # host: restrict the targets below, or the access (network policy, basic
-  # auth in the web configuration).
+  # auth in the web configuration). Without ntp.servers nor ntp.pools, the
+  # exporter only serves /probe.
   # Default: false
   enabled: false
-
-  # Only measure /probe targets: no server nor pool is probed in the
-  # background (ntp.servers and ntp.pools must then be empty). Implies enabled.
-  # Default: false
-  only: false
 
   # CIDR ranges and host name regular expressions (matched against the whole
   # name) /probe may reach. An address in a listed range is always allowed;
@@ -90,11 +86,12 @@ ntp:
   # List of individual NTP servers to query
   # Values: list of host, host:port, or nts://host[:port] for Network Time
   # Security (RFC 8915, key exchange over TLS port 4460)
-  # Default: ["pool.ntp.org"]
+  # Default: none, nothing is queried unless configured. Do not mix servers
+  # that smear leap seconds (time.google.com, time.cloudflare.com...) with
+  # servers that step them: they differ by up to 0.5s around a leap second.
   servers:
-  - "pool.ntp.org"
-  - "time.google.com"
-  - "time.cloudflare.com"
+  - "ptbtime1.ptb.de"
+  - "ptbtime2.ptb.de"
   # NTP pool configuration with selection strategy
   # A pool resolves to multiple IPs via DNS and applies a strategy
   pools:

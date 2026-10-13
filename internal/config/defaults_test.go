@@ -65,7 +65,7 @@ func TestDefaultConfig(t *testing.T) {
 	assert.NotNil(t, cfg)
 	assert.Equal(t, "0.0.0.0", cfg.Server.Address)
 	assert.Equal(t, 9559, cfg.Server.Port)
-	assert.NotEmpty(t, cfg.NTP.Servers)
+	assert.Empty(t, cfg.NTP.Servers, "no implicit server")
 	assert.Equal(t, "info", cfg.Logging.Level)
 	assert.Equal(t, "ntp", cfg.Metrics.Namespace)
 }

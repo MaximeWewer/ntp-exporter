@@ -104,6 +104,7 @@ func TestLoadFromEnvVarsOnly_Defaults(t *testing.T) {
 	os.Unsetenv("NTP_EXPORTER_PORT")
 	os.Unsetenv("NTP_SERVERS")
 	os.Unsetenv("LOG_LEVEL")
+	t.Setenv("NTP_SERVERS", "time.example.org")
 
 	cfg, err := LoadFromEnvVarsOnly()
 
@@ -112,7 +113,7 @@ func TestLoadFromEnvVarsOnly_Defaults(t *testing.T) {
 	assert.Equal(t, "0.0.0.0", cfg.Server.Address)
 	assert.Equal(t, 9559, cfg.Server.Port)
 	assert.Equal(t, "info", cfg.Logging.Level)
-	assert.NotEmpty(t, cfg.NTP.Servers)
+	assert.Equal(t, []string{"time.example.org"}, cfg.NTP.Servers)
 }
 
 func TestLoadFromEnvVarsOnly_WithOverrides(t *testing.T) {
@@ -354,17 +355,17 @@ func TestLoadFromYamlFile_PoolDefaults(t *testing.T) {
 
 func TestConsensusEnabled(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.NTP.Servers = []string{"a", "b"}
-	assert.False(t, cfg.NTP.ConsensusEnabled(), "auto: 2 servers")
+	assert.True(t, cfg.ConsensusEnabled(), "probe mode: computed as soon as 3 targets answer")
 
-	cfg.NTP.Pools = []PoolConfig{{Name: "pool.ntp.org"}}
-	assert.True(t, cfg.NTP.ConsensusEnabled(), "auto: 2 servers + 1 pool")
+	cfg.Mode = ModeAgent
+	assert.False(t, cfg.ConsensusEnabled(), "agent mode")
 
+	t.Setenv("NTP_SERVERS", "a.example.org")
 	t.Setenv("NTP_CONSENSUS_ENABLED", "false")
 	envCfg, err := LoadFromEnvVarsOnly()
 	require.NoError(t, err)
 	require.NotNil(t, envCfg.NTP.Consensus.Enabled)
-	assert.False(t, envCfg.NTP.ConsensusEnabled())
+	assert.False(t, envCfg.ConsensusEnabled())
 }
 
 func TestKernelConfig_DeprecatedEnableKernel(t *testing.T) {
@@ -376,6 +377,7 @@ func TestKernelConfig_DeprecatedEnableKernel(t *testing.T) {
 }
 
 func TestLoadFromEnvVarsOnly_MetricsLabels(t *testing.T) {
+	t.Setenv("NTP_SERVERS", "time.example.org")
 	t.Setenv("METRICS_LABELS", "site=par1, env = prod")
 	cfg, err := LoadFromEnvVarsOnly()
 	require.NoError(t, err)
@@ -418,20 +420,14 @@ func TestLoadFromEnvVarsOnly_IPFamily(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnvVarsOnly_ProbeEndpointOnly(t *testing.T) {
-	t.Setenv("PROBE_ENDPOINT_ONLY", "true")
-	cfg, err := LoadFromEnvVarsOnly()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cfg.NTP.Servers) != 0 {
-		t.Errorf("no default server expected with PROBE_ENDPOINT_ONLY, got %v", cfg.NTP.Servers)
-	}
+func TestLoadFromEnvVarsOnly_NoImplicitServer(t *testing.T) {
+	_, err := LoadFromEnvVarsOnly()
+	assert.ErrorContains(t, err, "nothing to probe", "no server is queried unless configured")
 
-	t.Setenv("PROBE_ENDPOINT_ENABLED", "false")
-	if _, err := LoadFromEnvVarsOnly(); err == nil {
-		t.Error("PROBE_ENDPOINT_ONLY without the endpoint must fail")
-	}
+	t.Setenv("PROBE_ENDPOINT_ENABLED", "true")
+	cfg, err := LoadFromEnvVarsOnly()
+	require.NoError(t, err)
+	assert.Empty(t, cfg.NTP.Servers, "only /probe requests")
 }
 
 func TestLoadFromEnvVarsOnly_Chrony(t *testing.T) {

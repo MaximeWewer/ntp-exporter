@@ -153,7 +153,7 @@ func (e *Exporter) Update(result *probe.CycleResult) {
 	e.updateCounters(result)
 
 	var consensus *probe.Consensus
-	if e.cfg.NTP.ConsensusEnabled() {
+	if e.cfg.ConsensusEnabled() {
 		consensus = probe.ComputeConsensus(result.Measurements)
 		if consensus != nil && len(consensus.Falsetickers) > 0 {
 			servers := make([]string, 0, len(consensus.Falsetickers))

@@ -22,7 +22,7 @@ PROBE MODE: a Deployment monitors the NTP servers.
 
   kubectl -n {{ .Release.Namespace }} get deployment {{ include "ntp-exporter.fullname" . }}
 {{- end }}
-{{- if not (include "ntp-exporter.probeEndpointOnly" .) }}
+{{- if .Values.config.ntpServers }}
 
 Servers:
 {{- range .Values.config.ntpServers }}

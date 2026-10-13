@@ -22,7 +22,8 @@ func newProbeHandler(t *testing.T) (*ProbeHandler, *ntptest.MockNTPClient, *conf
 	t.Helper()
 	cfg := config.DefaultConfig()
 	cfg.NTP.Servers = nil
-	cfg.ProbeEndpoint.Only = true
+	enabled := true
+	cfg.ProbeEndpoint.Enabled = &enabled
 	cfg.NTP.SampleSpacing = time.Millisecond
 	cfg.Metrics.Labels = map[string]string{"site": "lab"}
 	mock := ntptest.NewMockNTPClient()

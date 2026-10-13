@@ -414,6 +414,8 @@ func TestExporter_KernelBoundViolationNeedsTrustedServers(t *testing.T) {
 				servers = append(servers, s)
 			}
 			h := newKernelHarness(t, &ntp.KernelTimex{MaxError: 100 * time.Millisecond, EstError: time.Second}, servers...)
+			enabled := true
+			h.cfg.NTP.Consensus.Enabled = &enabled
 			for s, offset := range tt.offsets {
 				h.mock.SetupSuccessfulServer(s, offset, 2)
 			}

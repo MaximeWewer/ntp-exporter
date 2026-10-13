@@ -128,14 +128,7 @@ config.enableKernel or deprecated hybrid mode)
 Whether the /probe endpoint is served (enabled unless explicitly disabled)
 */}}
 {{- define "ntp-exporter.probeEndpointEnabled" -}}
-{{- if and .Values.probeEndpoint (or .Values.probeEndpoint.enabled .Values.probeEndpoint.only) -}}true{{- end -}}
-{{- end -}}
-
-{{/*
-Whether only /probe targets are measured (no static servers)
-*/}}
-{{- define "ntp-exporter.probeEndpointOnly" -}}
-{{- if and .Values.probeEndpoint .Values.probeEndpoint.only -}}true{{- end -}}
+{{- if and .Values.probeEndpoint .Values.probeEndpoint.enabled -}}true{{- end -}}
 {{- end -}}
 
 {{/*
@@ -153,8 +146,14 @@ unix://{{ trimSuffix "/" .Values.chrony.socketDir }}/chronyd.sock
 Validate mode value
 */}}
 {{- define "ntp-exporter.validateMode" -}}
+{{- if not .Values.mode -}}
+{{- fail "mode is required: --set mode=probe (monitor NTP servers from one Deployment, see values-probe.yaml) or --set mode=agent (measure the clock of every node, see values-agent.yaml)" -}}
+{{- end -}}
 {{- if and (ne .Values.mode "agent") (ne .Values.mode "probe") (ne .Values.mode "hybrid") -}}
 {{- fail "mode must be 'agent' or 'probe' ('hybrid' is deprecated: use mode=agent with kernel.enabled=true)" -}}
+{{- end -}}
+{{- if and (eq .Values.mode "probe") (not .Values.config.ntpServers) (not (include "ntp-exporter.probeEndpointEnabled" .)) (not (and .Values.configYaml .Values.configYaml.enabled)) -}}
+{{- fail "mode=probe has nothing to monitor: set config.ntpServers or probeEndpoint.enabled=true" -}}
 {{- end -}}
 {{- if and (eq .Values.mode "probe") (include "ntp-exporter.kernelEnabled" .) -}}
 {{- fail "kernel.enabled only makes sense in agent mode: the kernel state describes the node the agent runs on" -}}

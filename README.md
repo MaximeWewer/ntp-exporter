@@ -87,7 +87,7 @@ curl -LO https://github.com/MaximeWewer/ntp-exporter/releases/latest/download/nt
 chmod +x ntp-exporter-linux-amd64
 sudo mv ntp-exporter-linux-amd64 /usr/local/bin/ntp-exporter
 
-NTP_EXPORTER_MODE=probe NTP_SERVERS=time.cloudflare.com,time.google.com,ptbtime1.ptb.de ntp-exporter
+NTP_EXPORTER_MODE=probe NTP_SERVERS=ptbtime1.ptb.de,ptbtime2.ptb.de,ptbtime3.ptb.de ntp-exporter
 curl -s localhost:9559/metrics | grep '^ntp_'
 ```
 
@@ -96,7 +96,7 @@ curl -s localhost:9559/metrics | grep '^ntp_'
 ```bash
 docker run -d --name ntp-exporter -p 9559:9559 \
   -e NTP_EXPORTER_MODE=probe \
-  -e NTP_SERVERS=time.cloudflare.com,time.google.com,ptbtime1.ptb.de \
+  -e NTP_SERVERS=ptbtime1.ptb.de,ptbtime2.ptb.de,ptbtime3.ptb.de \
   ghcr.io/maximewewer/ntp-exporter:latest
 ```
 
@@ -198,9 +198,9 @@ exchange host: `ntp_server_info{address}` shows the one negotiated.
 ```yaml
 ntp:
   servers:
-    - nts://time.cloudflare.com
     - nts://nts.netnod.se
     - nts://ptbtime1.ptb.de
+    - nts://ptbtime2.ptb.de
 ```
 
 The session is kept across cycles; the key exchange runs again every hour,
@@ -254,11 +254,10 @@ nothing and answers `ntp_probe_success 0` (with `ntp_target_suspended` for a
 suspension).
 
 With the Prometheus Operator, the Helm chart creates the `Probe` resource
-(`probeEndpoint.probe.enabled`, `probeEndpoint.probe.targets`). Set
-`probe_endpoint.only: true` (`PROBE_ENDPOINT_ONLY=true`, Helm
-`probeEndpoint.only`) to stop probing static servers in the background.
-Consensus and pool metrics need the static targets: they are not available
-through `/probe`.
+(`probeEndpoint.probe.enabled`, `probeEndpoint.probe.targets`). Without
+`ntp.servers` nor `ntp.pools`, the exporter only serves `/probe` and probes
+nothing in the background. Consensus and pool metrics need the static
+targets: they are not available through `/probe`.
 
 ## Configuration
 
@@ -271,8 +270,9 @@ A fully commented file is available in
 Minimal example:
 
 ```yaml
+mode: probe
 ntp:
-  servers: [time.cloudflare.com, time.google.com, ptbtime1.ptb.de]
+  servers: [ptbtime1.ptb.de, ptbtime2.ptb.de, ptbtime3.ptb.de]
   pools:
     - name: europe.pool.ntp.org
       strategy: best_n   # best_n, all or round_robin
@@ -306,9 +306,8 @@ probe_endpoint:
 |---|---|---|
 | `NTP_EXPORTER_MODE` | (required) | `probe` or `agent` |
 | `PROBE_ENDPOINT_ENABLED` | `false` | Serve `/probe?target=` |
-| `PROBE_ENDPOINT_ONLY` | `false` | Only measure `/probe` targets (no static servers); implies `PROBE_ENDPOINT_ENABLED` |
 | `PROBE_ENDPOINT_ALLOWED_TARGETS` | | Comma-separated CIDR ranges and host name regular expressions `/probe` may reach |
-| `NTP_SERVERS` | `pool.ntp.org,time.google.com` (when no pool) | Comma-separated servers (`host`, `host:port` or `nts://host[:port]`) |
+| `NTP_SERVERS` | (none) | Comma-separated servers (`host`, `host:port` or `nts://host[:port]`); nothing is queried unless configured |
 | `NTP_POOLS` | | Comma-separated pools, `name[:strategy[:max_servers]]` |
 | `NTP_SCRAPE_INTERVAL` | `60s` | Interval between two cycles (5 s to 1 h) |
 | `NTP_SAMPLES` | `4` | Queries per server and per cycle (1 to 20) |
@@ -319,7 +318,7 @@ probe_endpoint:
 | `NTP_IP_FAMILY` | `auto` | `auto`, `ipv4` or `ipv6` |
 | `NTP_MAX_CLOCK_OFFSET` | `100ms` | Threshold of `ntp_clock_offset_exceeded` |
 | `NTP_MAX_ROOT_DISTANCE` | `1.5s` | Responses with a larger root distance are invalid (`reason="root_distance"`), like ntpd's MAXDIST (chrony uses 3 s); 100 ms to 16 s |
-| `NTP_CONSENSUS_ENABLED` | enabled with 3+ servers or pools | Consensus and falseticker detection |
+| `NTP_CONSENSUS_ENABLED` | `true` in probe mode | Consensus and falseticker detection, computed as soon as 3 targets (pool members included) answer |
 | `NTP_KOD_MAX_BACKOFF` | `1024s` | Longest polling interval after repeated `RATE` |
 | `NTP_KOD_SUSPEND_DURATION` | `1h` | Suspension after `DENY` or `RSTR` |
 | `NTP_KERNEL_ENABLED` | `false` | Kernel option (agent mode, Linux) |
@@ -341,6 +340,12 @@ Deprecated but still accepted: `NTP_ENABLE_KERNEL`, `TLS_ENABLED`,
 
 When querying the **public NTP pool**, keep `scrape_interval` at 60 s or more:
 the exporter logs a warning otherwise.
+
+The exporter only queries the servers it is given. Do not mix servers that
+smear leap seconds (`time.google.com`, `time.cloudflare.com`, `time.apple.com`
+and other cloud providers) with servers that step them (PTB, NIST, Netnod, the
+public pool): around a leap second they differ by up to 0.5 s, and the
+consensus would flag one group as falsetickers.
 
 ## Metrics reference
 

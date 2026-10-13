@@ -11,7 +11,7 @@ import (
 )
 
 func TestValidate_ValidConfig(t *testing.T) {
-	cfg := DefaultConfig()
+	cfg := validConfig()
 
 	err := Validate(cfg)
 
@@ -161,7 +161,7 @@ func TestValidateNTP_ServersOrPools(t *testing.T) {
 
 			if tt.wantErr {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "at least one NTP server or pool")
+				assert.Contains(t, err.Error(), "nothing to probe")
 			} else {
 				assert.NoError(t, err)
 			}
@@ -598,13 +598,13 @@ func BenchmarkValidate(b *testing.B) {
 
 func TestValidate_ScrapeIntervalBounds(t *testing.T) {
 	for _, interval := range []time.Duration{0, -time.Second, time.Second, 2 * time.Hour} {
-		cfg := DefaultConfig()
+		cfg := validConfig()
 		cfg.NTP.ScrapeInterval = interval
 		if err := Validate(cfg); err == nil {
 			t.Errorf("scrape_interval %s should be rejected", interval)
 		}
 	}
-	cfg := DefaultConfig()
+	cfg := validConfig()
 	cfg.NTP.ScrapeInterval = 30 * time.Second
 	if err := Validate(cfg); err != nil {
 		t.Errorf("scrape_interval 30s should be accepted: %v", err)
@@ -620,7 +620,7 @@ func TestValidate_MaxClockOffsetPositive(t *testing.T) {
 }
 
 func TestValidate_BurstMustFitInInterval(t *testing.T) {
-	cfg := DefaultConfig()
+	cfg := validConfig()
 	cfg.NTP.ScrapeInterval = 10 * time.Second
 	cfg.NTP.SamplesPerServer = 5
 	cfg.NTP.SampleSpacing = 2 * time.Second
@@ -633,7 +633,7 @@ func TestValidate_BurstMustFitInInterval(t *testing.T) {
 		t.Errorf("4 samples x 2s fit in a 10s interval: %v", err)
 	}
 
-	cfg = DefaultConfig()
+	cfg = validConfig()
 	cfg.NTP.SampleSpacing = -time.Second
 	if err := Validate(cfg); err == nil {
 		t.Error("negative sample_spacing must be rejected")
@@ -667,14 +667,14 @@ func TestWarnings_DeprecatedEnableKernel(t *testing.T) {
 
 func TestValidate_IPFamily(t *testing.T) {
 	for _, family := range []string{IPFamilyAuto, IPFamilyIPv4, IPFamilyIPv6} {
-		cfg := DefaultConfig()
+		cfg := validConfig()
 		cfg.NTP.IPFamily = family
 		if err := Validate(cfg); err != nil {
 			t.Errorf("ip_family %q must be accepted: %v", family, err)
 		}
 	}
 
-	cfg := DefaultConfig()
+	cfg := validConfig()
 	cfg.NTP.IPFamily = "inet6"
 	if err := Validate(cfg); err == nil {
 		t.Error("unknown ip_family must be rejected")
@@ -685,21 +685,17 @@ func TestValidate_ProbeEndpoint(t *testing.T) {
 	cfg := DefaultConfig()
 	assert.False(t, cfg.ProbeEndpoint.IsEnabled(), "the endpoint is opt-in")
 
-	cfg.ProbeEndpoint.Only = true
-	assert.True(t, cfg.ProbeEndpoint.IsEnabled(), "probe_endpoint.only implies the endpoint")
-	assert.ErrorContains(t, Validate(cfg), "excludes static servers")
-
 	cfg.NTP.Servers = nil
 	cfg.NTP.Pools = nil
-	assert.NoError(t, Validate(cfg), "no static target needed with probe_endpoint.only")
+	assert.ErrorContains(t, Validate(cfg), "nothing to probe: configure ntp.servers, ntp.pools or probe_endpoint")
 
-	disabled := false
-	cfg.ProbeEndpoint.Enabled = &disabled
-	assert.ErrorContains(t, Validate(cfg), "requires probe_endpoint.enabled")
+	enabled := true
+	cfg.ProbeEndpoint.Enabled = &enabled
+	assert.NoError(t, Validate(cfg), "no static target: only /probe requests are served")
 }
 
 func TestValidate_ProbeEndpointAllowedTargets(t *testing.T) {
-	cfg := DefaultConfig()
+	cfg := validConfig()
 	cfg.ProbeEndpoint.AllowedTargets = []string{"192.0.2.0/24", "2001:db8::/32", `.*\.ntp\.example\.org`}
 	assert.NoError(t, Validate(cfg))
 
@@ -777,13 +773,14 @@ func TestValidateNTP_MaxRootDistance(t *testing.T) {
 	cfg := DefaultConfig()
 	assert.Equal(t, 1500*time.Millisecond, cfg.NTP.MaxRootDistance, "MAXDIST of ntpd by default")
 
+	t.Setenv("NTP_SERVERS", "time.example.org")
 	t.Setenv("NTP_MAX_ROOT_DISTANCE", "3s")
 	loaded, err := LoadFromEnvVarsOnly()
 	require.NoError(t, err)
 	assert.Equal(t, 3*time.Second, loaded.NTP.MaxRootDistance)
 
 	for _, d := range []time.Duration{50 * time.Millisecond, 17 * time.Second} {
-		cfg := DefaultConfig()
+		cfg := validConfig()
 		cfg.NTP.MaxRootDistance = d
 		assert.ErrorContains(t, Validate(cfg), "max_root_distance must be between 100ms and 16s")
 	}
@@ -850,4 +847,11 @@ func TestConfig_AgentDefaults(t *testing.T) {
 	assert.False(t, cfg.KernelEnabled())
 	enabled, _ = cfg.ChronyEnabled()
 	assert.False(t, enabled)
+}
+
+// validConfig returns the default probe configuration with one server
+func validConfig() *Config {
+	cfg := DefaultConfig()
+	cfg.NTP.Servers = []string{"time.example.org"}
+	return cfg
 }

@@ -22,13 +22,8 @@ func ApplyDefaults(cfg *Config) {
 		cfg.Server.WriteTimeout = 10 * time.Second
 	}
 
-	// NTP defaults
-	if cfg.Mode != ModeAgent && len(cfg.NTP.Servers) == 0 && len(cfg.NTP.Pools) == 0 && !cfg.ProbeEndpoint.Only {
-		cfg.NTP.Servers = []string{
-			"pool.ntp.org",
-			"time.google.com",
-		}
-	}
+	// NTP defaults: no implicit server, the exporter only queries what it is
+	// told to
 	// Deprecated enable_kernel maps to kernel.enabled
 	if cfg.NTP.EnableKernel {
 		enabled := true

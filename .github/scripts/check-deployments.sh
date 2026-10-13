@@ -19,8 +19,11 @@ crds='https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{
 echo "== Helm chart"
 for values in "$chart"/values*.yaml; do
   echo "-- $(basename "$values")"
-  helm lint --strict "$chart" -f "$values" >/dev/null
-  helm template ci "$chart" -f "$values" \
+  # values.yaml leaves the mode to the user
+  mode=()
+  [ "$(basename "$values")" = values.yaml ] && mode=(--set mode=agent)
+  helm lint --strict "$chart" -f "$values" "${mode[@]}" >/dev/null
+  helm template ci "$chart" -f "$values" "${mode[@]}" \
     --set serviceMonitor.enabled=true --set prometheusRule.enabled=true \
     >"$work/rendered.yaml"
   kubeconform -strict -summary -kubernetes-version 1.30.0 \
@@ -31,7 +34,12 @@ echo "== Alerting rules"
 
 # The plain rules file is the spec of the PrometheusRule rendered with the
 # default values
-helm template ci "$chart" --set prometheusRule.enabled=true -s templates/prometheusrule.yaml |
+# Also check that a chart without mode refuses to render
+if helm template ci "$chart" >/dev/null 2>&1; then
+  echo "the chart must require a mode" >&2
+  exit 1
+fi
+helm template ci "$chart" --set mode=probe --set probeEndpoint.enabled=true --set prometheusRule.enabled=true -s templates/prometheusrule.yaml |
   sed -n '/^spec:/,$p' | tail -n +2 | sed 's/^  //' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' >"$work/from-helm.yml"
 if $update_rules; then
   { sed -n '1,/^groups:/p' "$rules" | sed '$d'; cat "$work/from-helm.yml"; } >"$work/rules.yml"

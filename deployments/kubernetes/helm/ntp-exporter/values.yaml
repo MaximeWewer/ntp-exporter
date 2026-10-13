@@ -6,7 +6,8 @@
 #   - "agent": DaemonSet, measures the clock of every node
 #   - "probe": Deployment, monitors NTP servers from a central place
 # ("hybrid" is deprecated: use mode=agent with kernel.enabled=true)
-mode: agent
+# Required: start from values-agent.yaml or values-probe.yaml
+mode: ""
 
 # Kernel clock state option (agent mode only, Linux nodes).
 # Read with an unprivileged read-only adjtimex call: no privilege required.
@@ -40,9 +41,6 @@ chrony:
 # query any host.
 probeEndpoint:
   enabled: false
-  # Only serve /probe: config.ntpServers are not probed in the background
-  # (implies enabled)
-  only: false
   # CIDR ranges and host name regular expressions /probe may reach; empty:
   # any address but loopback, link-local (cloud metadata), multicast
   allowedTargets: []

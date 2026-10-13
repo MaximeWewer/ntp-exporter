@@ -45,8 +45,9 @@ func Validate(cfg *Config) error {
 		return err
 	}
 
-	// Probe mode needs targets; an agent may only read the kernel or chronyd
-	if err := validateNTP(&cfg.NTP, cfg.Mode == ModeAgent || cfg.ProbeEndpoint.Only); err != nil {
+	// Probe mode needs targets: servers, pools or /probe requests. An agent
+	// may only read the kernel or chronyd.
+	if err := validateNTP(&cfg.NTP, cfg.Mode == ModeAgent || cfg.ProbeEndpoint.IsEnabled()); err != nil {
 		return err
 	}
 
@@ -190,21 +191,12 @@ func validateProbeEndpoint(cfg *Config) error {
 				" is neither a CIDR range nor a regular expression: " + err.Error())
 		}
 	}
-	if !cfg.ProbeEndpoint.Only {
-		return nil
-	}
-	if !cfg.ProbeEndpoint.IsEnabled() {
-		return errors.New("probe_endpoint.only requires probe_endpoint.enabled")
-	}
-	if len(cfg.NTP.Servers) > 0 || len(cfg.NTP.Pools) > 0 {
-		return errors.New("probe_endpoint.only excludes static servers and pools: targets come from /probe requests")
-	}
 	return nil
 }
 
 func validateNTP(cfg *NTPConfig, noTargetNeeded bool) error {
 	if len(cfg.Servers) == 0 && len(cfg.Pools) == 0 && !noTargetNeeded {
-		return errors.New("at least one NTP server or pool must be configured")
+		return errors.New("nothing to probe: configure ntp.servers, ntp.pools or probe_endpoint")
 	}
 
 	if cfg.Timeout < 1*time.Second || cfg.Timeout > 60*time.Second {

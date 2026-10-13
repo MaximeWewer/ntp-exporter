@@ -32,10 +32,10 @@
 //	  - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET, NTP_MAX_ROOT_DISTANCE
 //
 //	PROBE ENDPOINT:
-//	  - PROBE_ENDPOINT_ENABLED, PROBE_ENDPOINT_ONLY, PROBE_ENDPOINT_ALLOWED_TARGETS
+//	  - PROBE_ENDPOINT_ENABLED, PROBE_ENDPOINT_ALLOWED_TARGETS
 //
 //	CONSENSUS:
-//	  - NTP_CONSENSUS_ENABLED (default: enabled with 3+ servers or pools)
+//	  - NTP_CONSENSUS_ENABLED (default: enabled in probe mode)
 //
 //	KISS-O'-DEATH:
 //	  - NTP_KOD_MAX_BACKOFF, NTP_KOD_SUSPEND_DURATION
@@ -91,22 +91,15 @@ type ProbeEndpointConfig struct {
 	// exporter can make it send NTP queries to any host: restrict it with
 	// AllowedTargets or a network policy.
 	Enabled *bool `yaml:"enabled"`
-	// Only disables the static targets: no server nor pool is probed in the
-	// background, targets only come from /probe requests
-	Only bool `yaml:"only"`
 	// AllowedTargets lists the CIDR ranges and host name regular expressions
 	// /probe requests may reach; empty means any address but the loopback,
 	// link-local, multicast and unspecified ones
 	AllowedTargets []string `yaml:"allowed_targets"`
 }
 
-// IsEnabled tells whether the /probe endpoint is served: when enabled, or
-// when only /probe targets are measured and enabled is not set
+// IsEnabled tells whether the /probe endpoint is served
 func (c *ProbeEndpointConfig) IsEnabled() bool {
-	if c.Enabled == nil {
-		return c.Only
-	}
-	return *c.Enabled
+	return c.Enabled != nil && *c.Enabled
 }
 
 // ServerConfig contains HTTP server configuration
@@ -212,12 +205,13 @@ func (c *Config) ChronyEnabled() (enabled, auto bool) {
 	return c.Mode == ModeAgent, c.Mode == ModeAgent
 }
 
-// ConsensusEnabled tells whether the consensus of the servers is computed
-func (c *NTPConfig) ConsensusEnabled() bool {
-	if c.Consensus.Enabled != nil {
-		return *c.Consensus.Enabled
+// ConsensusEnabled tells whether the consensus of the servers is computed: by
+// default in probe mode, as soon as 3 targets (pool members included) answer
+func (c *Config) ConsensusEnabled() bool {
+	if c.NTP.Consensus.Enabled != nil {
+		return *c.NTP.Consensus.Enabled
 	}
-	return len(c.Servers)+len(c.Pools) >= 3
+	return c.Mode == ModeProbe
 }
 
 // DNSCacheConfig contains the cache configuration for pool DNS answers
@@ -436,7 +430,6 @@ func applyEnvOverrides(cfg *Config) error {
 
 	// PROBE ENDPOINT
 	e.boolPtr("PROBE_ENDPOINT_ENABLED", &cfg.ProbeEndpoint.Enabled)
-	e.bool("PROBE_ENDPOINT_ONLY", &cfg.ProbeEndpoint.Only)
 	e.list("PROBE_ENDPOINT_ALLOWED_TARGETS", &cfg.ProbeEndpoint.AllowedTargets)
 
 	// NTP
