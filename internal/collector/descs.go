@@ -101,7 +101,7 @@ func newDescs(namespace, subsystem string) *descs {
 		info: d(subsystem, "server_info", "Identity of the NTP server from its last valid response (value is always 1)",
 			"server", "address", "pool", "refid", "stratum", "leap", "version"),
 
-		offset:         d(subsystem, "offset_seconds", "Time offset between local clock and NTP server in seconds, from the sample with the lowest delay (RFC 5905 clock filter)", server...),
+		offset:         d(subsystem, "offset_seconds", "Time offset between local clock and NTP server in seconds, from the sample with the lowest delay (RFC 5905 clock filter); positive when the local clock is behind", server...),
 		offsetMedian:   d(subsystem, "offset_median_seconds", "Median time offset of the valid samples of the last burst in seconds", server...),
 		offsetExceeded: d(subsystem, "clock_offset_exceeded", "Whether the clock offset exceeds the configured threshold (1 = exceeded, 0 = within limits)", server...),
 		rtt:            d(subsystem, "rtt_seconds", "Round-trip time to NTP server in seconds", server...),
@@ -109,7 +109,7 @@ func newDescs(namespace, subsystem string) *descs {
 		referenceAge:   d(subsystem, "reference_age_seconds", "Time elapsed since the server clock was last set or corrected (transmit time minus reference time) in seconds", server...),
 		rootDelay:      d(subsystem, "root_delay_seconds", "Root delay of the NTP server in seconds", server...),
 		rootDispersion: d(subsystem, "root_dispersion_seconds", "Root dispersion of the NTP server in seconds", server...),
-		rootDistance:   d(subsystem, "root_distance_seconds", "Synchronization distance to the stratum 1 source (RFC 5905: root delay/2 + root dispersion + measurement delay and dispersion) in seconds", server...),
+		rootDistance:   d(subsystem, "root_distance_seconds", "Synchronization distance to the stratum 1 source in seconds: (rtt + root delay) / 2 + root dispersion, an upper bound of the server error", server...),
 		precision:      d(subsystem, "precision_seconds", "Precision of the NTP server in seconds", server...),
 		leapIndicator:  d(subsystem, "leap_indicator", "Leap second indicator (0=no warning, 1=61s, 2=59s, 3=unsync)", server...),
 

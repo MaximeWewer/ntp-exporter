@@ -398,18 +398,19 @@ func writeMeasurement(ch chan<- prometheus.Metric, d *descs, cfg *config.Config,
 	gauge(ch, d.offsetExceeded, offsetExceeded, server)
 	gauge(ch, d.rtt, best.RTT.Seconds(), server)
 	gauge(ch, d.stratum, float64(best.Stratum), server)
-	if !best.ReferenceTime.IsZero() && !best.Time.IsZero() {
-		gauge(ch, d.referenceAge, best.Time.Sub(best.ReferenceTime).Seconds(), server)
-	}
+	gauge(ch, d.referenceAge, best.Time.Sub(best.ReferenceTime).Seconds(), server)
 	gauge(ch, d.rootDelay, best.RootDelay.Seconds(), server)
 	gauge(ch, d.rootDispersion, best.RootDispersion.Seconds(), server)
 	gauge(ch, d.rootDistance, best.RootDistance.Seconds(), server)
 	gauge(ch, d.precision, best.Precision.Seconds(), server)
 	gauge(ch, d.leapIndicator, float64(best.LeapIndicator), server)
 
-	gauge(ch, d.jitter, stats.Jitter.Seconds(), server)
-	gauge(ch, d.offsetStdDev, stats.StdDevOffset.Seconds(), server)
-	gauge(ch, d.rttStdDev, stats.StdDevRTT.Seconds(), server)
+	// Dispersion needs two samples: a single one would read as perfect stability
+	if stats.SamplesCount >= 2 {
+		gauge(ch, d.jitter, stats.Jitter.Seconds(), server)
+		gauge(ch, d.offsetStdDev, stats.StdDevOffset.Seconds(), server)
+		gauge(ch, d.rttStdDev, stats.StdDevRTT.Seconds(), server)
+	}
 
 	return best
 }

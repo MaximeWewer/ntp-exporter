@@ -187,6 +187,21 @@ func TestExporter_RootDistanceAboveMaximumIsInvalid(t *testing.T) {
 	assert.Equal(t, 1.0, h.mustValue("ntp_response_valid", srv(server)))
 }
 
+func TestExporter_SingleSampleHasNoDispersion(t *testing.T) {
+	const server = "single.example.org"
+	h := newHarness(t, server)
+	h.cfg.NTP.SamplesPerServer = 1
+	h.mock.SetupSuccessfulServer(server, 5*time.Millisecond, 2)
+
+	h.cycle()
+
+	assert.Equal(t, 1.0, h.mustValue("ntp_samples_count", srv(server)))
+	assert.InDelta(t, 0.005, h.mustValue("ntp_offset_seconds", srv(server)), 1e-9)
+	h.absent("ntp_jitter_seconds", srv(server))
+	h.absent("ntp_offset_stddev_seconds", srv(server))
+	h.absent("ntp_rtt_stddev_seconds", srv(server))
+}
+
 func TestExporter_UnreachableServerHasNoStaleMeasurement(t *testing.T) {
 	const server = "flaky.example.org"
 	h := newHarness(t, server)

@@ -323,7 +323,7 @@ Names below use the default `ntp` namespace and no subsystem.
 | `ntp_response_valid` | 1 when at least one response was a valid time measurement |
 | `ntp_last_success_timestamp_seconds` | Unix time of the last cycle with a valid response |
 | `ntp_server_info{address,pool,refid,stratum,leap,version}` | Identity of the server (value 1). `refid` is an ASCII code (`GPS`, `PPS`...) for stratum 1, the upstream IPv4 address otherwise |
-| `ntp_offset_seconds` | Offset of the local clock, from the sample with the lowest delay |
+| `ntp_offset_seconds` | Offset of the local clock, from the sample with the lowest delay: positive when the local clock is behind the server |
 | `ntp_offset_median_seconds` | Median offset of the valid samples |
 | `ntp_clock_offset_exceeded` | 1 when `abs(offset)` exceeds `max_clock_offset` |
 | `ntp_rtt_seconds` | Round-trip delay of the selected sample |
@@ -333,7 +333,7 @@ Names below use the default `ntp` namespace and no subsystem.
 | `ntp_reference_age_seconds` | Time since the server clock was last set or corrected |
 | `ntp_jitter_seconds` | RFC 5905 jitter: `sqrt(Σ(θ₀ − θᵢ)² / (n − 1))`, θ₀ being the offset of the lowest-delay sample |
 | `ntp_offset_stddev_seconds`, `ntp_rtt_stddev_seconds` | Standard deviations of the offsets and delays of the burst |
-| `ntp_samples_count` | Valid samples in the last burst |
+| `ntp_samples_count` | Valid samples in the last burst (jitter and standard deviations need 2 or more) |
 | `ntp_packet_loss_ratio` | Queries without valid response / queries sent |
 | `ntp_target_suspended{code}` | 1 while the server is not queried after `DENY` or `RSTR` |
 | `ntp_kiss_of_death_total{code}` | Kiss-o'-Death packets received |
