@@ -86,6 +86,15 @@ func (h *ProbeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	meas := h.prober.Probe(ctx, target, samples)
 	duration := time.Since(start)
 
+	if errors.Is(meas.Err, probe.ErrTargetForbidden) {
+		logger.SafeWarn("probe", "Probe request refused", map[string]interface{}{
+			"target": target,
+			"error":  meas.Err.Error(),
+		})
+		http.Error(w, meas.Err.Error(), http.StatusForbidden)
+		return
+	}
+
 	logger.SafeDebug("probe", "Probe request served", map[string]interface{}{
 		"target":   target,
 		"address":  meas.Target.Address,

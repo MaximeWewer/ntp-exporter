@@ -681,9 +681,10 @@ func TestValidate_IPFamily(t *testing.T) {
 
 func TestValidate_ProbeEndpoint(t *testing.T) {
 	cfg := DefaultConfig()
-	assert.True(t, cfg.ProbeEndpoint.IsEnabled(), "the endpoint is served by default")
+	assert.False(t, cfg.ProbeEndpoint.IsEnabled(), "the endpoint is opt-in")
 
 	cfg.ProbeEndpoint.Only = true
+	assert.True(t, cfg.ProbeEndpoint.IsEnabled(), "probe_endpoint.only implies the endpoint")
 	assert.ErrorContains(t, Validate(cfg), "excludes static servers")
 
 	cfg.NTP.Servers = nil
@@ -693,6 +694,15 @@ func TestValidate_ProbeEndpoint(t *testing.T) {
 	disabled := false
 	cfg.ProbeEndpoint.Enabled = &disabled
 	assert.ErrorContains(t, Validate(cfg), "requires probe_endpoint.enabled")
+}
+
+func TestValidate_ProbeEndpointAllowedTargets(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ProbeEndpoint.AllowedTargets = []string{"192.0.2.0/24", "2001:db8::/32", `.*\.ntp\.example\.org`}
+	assert.NoError(t, Validate(cfg))
+
+	cfg.ProbeEndpoint.AllowedTargets = []string{"time.(example"}
+	assert.ErrorContains(t, Validate(cfg), "neither a CIDR range nor a regular expression")
 }
 
 func TestValidate_ChronyAddress(t *testing.T) {

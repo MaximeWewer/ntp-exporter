@@ -27,8 +27,12 @@ chrony:
 
 # Multi-target /probe?target= endpoint (Prometheus drives the targets)
 probeEndpoint:
-  enabled: true
+  enabled: false
   only: false
+  # CIDR ranges and host name regular expressions /probe may reach
+  allowedTargets: []
+  #  - 192.0.2.0/24
+  #  - .*\.ntp\.example\.org
   # Prometheus Operator Probe resource
   probe:
     enabled: false

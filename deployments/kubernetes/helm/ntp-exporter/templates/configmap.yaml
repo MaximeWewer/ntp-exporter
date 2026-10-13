@@ -28,6 +28,12 @@ data:
     probe_endpoint:
       enabled: {{ include "ntp-exporter.probeEndpointEnabled" . | empty | not }}
       only: {{ include "ntp-exporter.probeEndpointOnly" . | empty | not }}
+      {{- with .Values.probeEndpoint.allowedTargets }}
+      allowed_targets:
+      {{- range . }}
+      - {{ . | quote }}
+      {{- end }}
+      {{- end }}
 
     ntp:
       {{- if include "ntp-exporter.probeEndpointOnly" . }}

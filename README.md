@@ -201,7 +201,10 @@ network policy opens it).
 
 Like blackbox_exporter, `/probe?target=host[:port]` measures one target on
 demand, so that Prometheus drives the targets through relabeling and probe
-replicas hold no target list:
+replicas hold no target list. The endpoint is disabled by default: enable it
+with `probe_endpoint.enabled: true` (`PROBE_ENDPOINT_ENABLED=true`, Helm
+`probeEndpoint.enabled`) and restrict its targets with
+`probe_endpoint.allowed_targets` (see [Security](#security)).
 
 ```yaml
 scrape_configs:
@@ -283,8 +286,9 @@ probe_endpoint:
 
 | Variable | Default | Description |
 |---|---|---|
-| `PROBE_ENDPOINT_ENABLED` | `true` | Serve `/probe?target=` |
-| `PROBE_ENDPOINT_ONLY` | `false` | Only measure `/probe` targets (no static servers) |
+| `PROBE_ENDPOINT_ENABLED` | `false` | Serve `/probe?target=` |
+| `PROBE_ENDPOINT_ONLY` | `false` | Only measure `/probe` targets (no static servers); implies `PROBE_ENDPOINT_ENABLED` |
+| `PROBE_ENDPOINT_ALLOWED_TARGETS` | | Comma-separated CIDR ranges and host name regular expressions `/probe` may reach |
 | `NTP_SERVERS` | `pool.ntp.org,time.google.com` (when no pool) | Comma-separated servers (`host`, `host:port` or `nts://host[:port]`) |
 | `NTP_POOLS` | | Comma-separated pools, `name[:strategy[:max_servers]]` |
 | `NTP_SCRAPE_INTERVAL` | `60s` | Interval between two cycles (5 s to 1 h) |
@@ -517,9 +521,14 @@ For the full chronyd state (every source, server statistics), run
   [GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932) at module level:
   `golang.org/x/crypto` is required (bcrypt, for basic auth) but its
   deprecated `openpgp` package is not imported nor compiled in the binary.
-- `/probe` sends NTP requests to any host given by the caller, at most
-  `max_concurrency` bursts at a time. Restrict who can reach it (network
-  policy, basic auth) or disable it with `PROBE_ENDPOINT_ENABLED=false`.
+- `/probe` is disabled by default: it sends NTP requests (and NTS key
+  exchanges) to hosts chosen by the caller, at most `max_concurrency` bursts at
+  a time. When enabled, it refuses loopback, link-local (including the cloud
+  metadata address 169.254.169.254), multicast and unspecified addresses,
+  checked on the resolved address and on the NTP server negotiated by NTS.
+  Restrict it further with `probe_endpoint.allowed_targets` (CIDR ranges and
+  name expressions) and restrict who can reach it (network policy, basic
+  auth): a refused target answers 403.
 
 ## Troubleshooting
 

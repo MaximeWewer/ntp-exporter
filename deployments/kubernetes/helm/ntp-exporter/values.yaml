@@ -34,11 +34,16 @@ chrony:
 
 # Multi-target endpoint /probe?target=host[&samples=N], like blackbox_exporter:
 # Prometheus drives the targets through relabeling, so probe replicas hold no
-# target list and no state.
+# target list. Disabled by default: anyone reaching the exporter could make it
+# query any host.
 probeEndpoint:
-  enabled: true
+  enabled: false
   # Only serve /probe: config.ntpServers are not probed in the background
+  # (implies enabled)
   only: false
+  # CIDR ranges and host name regular expressions /probe may reach; empty:
+  # any address but loopback, link-local (cloud metadata), multicast
+  allowedTargets: []
   # Prometheus Operator Probe resource scraping /probe for each target
   probe:
     enabled: false

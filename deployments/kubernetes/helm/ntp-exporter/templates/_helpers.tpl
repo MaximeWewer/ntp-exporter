@@ -128,7 +128,7 @@ config.enableKernel or deprecated hybrid mode)
 Whether the /probe endpoint is served (enabled unless explicitly disabled)
 */}}
 {{- define "ntp-exporter.probeEndpointEnabled" -}}
-{{- if or (not .Values.probeEndpoint) (ne (toString .Values.probeEndpoint.enabled) "false") -}}true{{- end -}}
+{{- if and .Values.probeEndpoint (or .Values.probeEndpoint.enabled .Values.probeEndpoint.only) -}}true{{- end -}}
 {{- end -}}
 
 {{/*
@@ -170,8 +170,8 @@ Validate mode value
 {{- fail "chrony.socketDir needs chrony.runAsUser: the uid of chronyd on the nodes (e.g. id -u _chrony), the only user allowed to write in its socket directory" -}}
 {{- end -}}
 {{- end -}}
-{{- if and (include "ntp-exporter.probeEndpointOnly" .) (not (include "ntp-exporter.probeEndpointEnabled" .)) -}}
-{{- fail "probeEndpoint.only requires probeEndpoint.enabled" -}}
+{{- if and (include "ntp-exporter.probeEndpointEnabled" .) (eq (include "ntp-exporter.mode" .) "agent") .Values.hostNetwork -}}
+{{- fail "probeEndpoint.enabled with hostNetwork exposes /probe on every node IP: disable one of them in agent mode" -}}
 {{- end -}}
 {{- end -}}
 

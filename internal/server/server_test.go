@@ -206,6 +206,8 @@ func TestServer_ProbeRoute(t *testing.T) {
 	assert.Equal(t, http.StatusOK, code)
 	assert.Equal(t, "probed time.example.org", body)
 
+	enabled := true
+	cfg.ProbeEndpoint.Enabled = &enabled
 	_, index := get(t, with.URL+"/")
 	assert.Contains(t, index, "/probe?target=")
 

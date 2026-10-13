@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +39,8 @@ type Prober struct {
 	// from the configured targets
 	probeBackoff *Backoff
 	families     *families
+	// policy restricts the addresses /probe requests may reach
+	policy *TargetPolicy
 
 	mu       sync.Mutex
 	previous map[string]*Measurement
@@ -69,6 +72,11 @@ func New(cfg *config.Config, client ntp.NTPQuerier) *Prober {
 // SetNTSClient replaces the NTS client
 func (p *Prober) SetNTSClient(c NTSQuerier) {
 	p.nts = c
+}
+
+// SetTargetPolicy sets the addresses /probe requests may reach
+func (p *Prober) SetTargetPolicy(policy *TargetPolicy) {
+	p.policy = policy
 }
 
 // SetResolver replaces the resolver used for configured servers
@@ -251,7 +259,7 @@ func (p *Prober) forget(targets []Target) {
 // suspended target, or one backing off after RATE, is not queried and the
 // measurement carries no response.
 func (p *Prober) Probe(ctx context.Context, server string, samples int) *Measurement {
-	target := Target{Server: server}
+	target := Target{Server: server, policy: p.policy}
 	key := target.key()
 
 	decision := p.probeBackoff.Allow(key)
@@ -290,6 +298,10 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 			})
 			return m
 		}
+	}
+	if err := checkAddresses(target, candidates); err != nil {
+		m.Err = err
+		return m
 	}
 
 	// A dual-stack server is reached over the first family that answers a
@@ -355,7 +367,26 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 // measureNTS sends one burst of authenticated queries to an NTS target. The
 // NTP server is the one negotiated by the key exchange.
 func (p *Prober) measureNTS(ctx context.Context, m *Measurement, samples int) {
-	res := p.nts.Burst(ctx, ntp.NTSHost(m.Target.Server), samples)
+	host := ntp.NTSHost(m.Target.Server)
+	if m.Target.policy != nil {
+		// The key exchange server, then the NTP server it negotiates
+		addrs, err := p.lookup(ctx, host)
+		if err == nil {
+			err = checkAddresses(m.Target, addrs)
+		}
+		if err != nil {
+			m.Err = err
+			return
+		}
+	}
+
+	res := p.nts.Burst(ctx, host, samples)
+	if res.State.Address != "" {
+		if err := checkAddresses(m.Target, []string{res.State.Address}); err != nil {
+			m.Err = err
+			return
+		}
+	}
 	// No key exchange state when the request gave up waiting for the server
 	if !errors.Is(res.Err, ntp.ErrNTSBusy) {
 		m.NTS = &res.State
@@ -374,6 +405,39 @@ func (p *Prober) measureNTS(ctx context.Context, m *Measurement, samples int) {
 			"error":  res.Err.Error(),
 		})
 	}
+}
+
+// checkAddresses applies the /probe target policy to the addresses of a target
+func checkAddresses(target Target, addrs []string) error {
+	if target.policy == nil {
+		return nil
+	}
+	host := strings.TrimPrefix(target.Server, ntp.NTSScheme)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	for _, addr := range addrs {
+		if err := target.policy.Check(host, addr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// lookup resolves the host of a host[:port] address, IP literals included
+func (p *Prober) lookup(ctx context.Context, hostPort string) ([]string, error) {
+	host := hostPort
+	if h, _, err := net.SplitHostPort(hostPort); err == nil {
+		host = h
+	}
+	if net.ParseIP(host) != nil {
+		return []string{host}, nil
+	}
+	addrs, err := p.resolver.LookupHost(ctx, host)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve %s: %w", host, err)
+	}
+	return addrs, nil
 }
 
 // sleep waits for d unless the context ends first

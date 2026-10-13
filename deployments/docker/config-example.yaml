@@ -53,14 +53,26 @@ server:
 # scrape timeout announced by Prometheus.
 # ----------------------------------------------------------------------------
 probe_endpoint:
-  # Serve /probe
-  # Default: true
-  enabled: true
+  # Serve /probe. Anyone reaching the exporter can then make it query any
+  # host: restrict the targets below, or the access (network policy, basic
+  # auth in the web configuration).
+  # Default: false
+  enabled: false
 
   # Only measure /probe targets: no server nor pool is probed in the
-  # background (ntp.servers and ntp.pools must then be empty)
+  # background (ntp.servers and ntp.pools must then be empty). Implies enabled.
   # Default: false
   only: false
+
+  # CIDR ranges and host name regular expressions (matched against the whole
+  # name) /probe may reach. An address in a listed range is always allowed;
+  # otherwise loopback, link-local (cloud metadata 169.254.169.254),
+  # multicast and unspecified addresses are refused, and with a non-empty
+  # list the name must match one of the expressions.
+  # Default: [] (any other address)
+  allowed_targets: []
+  #  - 192.0.2.0/24
+  #  - .*\.ntp\.example\.org
 
 # ----------------------------------------------------------------------------
 # NTP - NTP client configuration and query strategy

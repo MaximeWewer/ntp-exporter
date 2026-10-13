@@ -215,3 +215,20 @@ func TestProbeHandler_HonorsKissOfDeath(t *testing.T) {
 	assert.Contains(t, body, `ntp_target_suspended{code="DENY",server="192.0.2.10",site="lab"} 1`)
 	assert.Contains(t, body, `ntp_up{server="192.0.2.10",site="lab"} 0`)
 }
+
+func TestProbeHandler_ForbiddenTarget(t *testing.T) {
+	h, mock, _ := newProbeHandler(t)
+	policy, err := probe.NewTargetPolicy([]string{"192.0.2.0/24"})
+	require.NoError(t, err)
+	h.prober.SetTargetPolicy(policy)
+
+	for _, target := range []string{"127.0.0.1", "169.254.169.254", "203.0.113.5"} {
+		code, body := serveProbe(t, h, "target="+target, nil)
+		assert.Equal(t, http.StatusForbidden, code, "%s: %s", target, body)
+		assert.Equal(t, 0, mock.GetCallCount(target), target)
+	}
+
+	mock.SetupSuccessfulServer(probeTarget, time.Millisecond, 2)
+	code, _ := serveProbe(t, h, "target="+probeTarget, nil)
+	assert.Equal(t, http.StatusOK, code)
+}

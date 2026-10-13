@@ -30,7 +30,7 @@
 //	  - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET, NTP_MAX_ROOT_DISTANCE
 //
 //	PROBE ENDPOINT:
-//	  - PROBE_ENDPOINT_ENABLED, PROBE_ENDPOINT_ONLY
+//	  - PROBE_ENDPOINT_ENABLED, PROBE_ENDPOINT_ONLY, PROBE_ENDPOINT_ALLOWED_TARGETS
 //
 //	CONSENSUS:
 //	  - NTP_CONSENSUS_ENABLED (default: enabled with 3+ servers or pools)
@@ -74,16 +74,26 @@ type Config struct {
 // ProbeEndpointConfig controls the multi-target /probe?target= endpoint, which
 // lets Prometheus drive the targets through relabel_configs
 type ProbeEndpointConfig struct {
-	// Enabled serves the endpoint (default: true)
+	// Enabled serves the endpoint (default: false). Anyone reaching the
+	// exporter can make it send NTP queries to any host: restrict it with
+	// AllowedTargets or a network policy.
 	Enabled *bool `yaml:"enabled"`
 	// Only disables the static targets: no server nor pool is probed in the
 	// background, targets only come from /probe requests
 	Only bool `yaml:"only"`
+	// AllowedTargets lists the CIDR ranges and host name regular expressions
+	// /probe requests may reach; empty means any address but the loopback,
+	// link-local, multicast and unspecified ones
+	AllowedTargets []string `yaml:"allowed_targets"`
 }
 
-// IsEnabled tells whether the /probe endpoint is served
+// IsEnabled tells whether the /probe endpoint is served: when enabled, or
+// when only /probe targets are measured and enabled is not set
 func (c *ProbeEndpointConfig) IsEnabled() bool {
-	return c.Enabled == nil || *c.Enabled
+	if c.Enabled == nil {
+		return c.Only
+	}
+	return *c.Enabled
 }
 
 // ServerConfig contains HTTP server configuration
@@ -404,6 +414,7 @@ func applyEnvOverrides(cfg *Config) error {
 	// PROBE ENDPOINT
 	e.boolPtr("PROBE_ENDPOINT_ENABLED", &cfg.ProbeEndpoint.Enabled)
 	e.bool("PROBE_ENDPOINT_ONLY", &cfg.ProbeEndpoint.Only)
+	e.list("PROBE_ENDPOINT_ALLOWED_TARGETS", &cfg.ProbeEndpoint.AllowedTargets)
 
 	// NTP
 	e.list("NTP_SERVERS", &cfg.NTP.Servers)

@@ -111,6 +111,11 @@ func main() {
 	// Start HTTP server
 	srv := server.New(cfg, registry.GetRegistry(), exporter.Ready)
 	if cfg.ProbeEndpoint.IsEnabled() {
+		policy, err := probe.NewTargetPolicy(cfg.ProbeEndpoint.AllowedTargets)
+		if err != nil {
+			logger.Fatal("main", "Invalid /probe configuration", err)
+		}
+		prober.SetTargetPolicy(policy)
 		srv.SetProbeHandler(collector.NewProbeHandler(cfg, prober))
 	}
 	serverErrChan := make(chan error, 1)

@@ -3,7 +3,9 @@ package config
 import (
 	"errors"
 	"net"
+	"net/netip"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -118,6 +120,16 @@ func validateChronyAddress(address string) error {
 }
 
 func validateProbeEndpoint(cfg *Config) error {
+	for _, entry := range cfg.ProbeEndpoint.AllowedTargets {
+		entry = strings.TrimSpace(entry)
+		if _, err := netip.ParsePrefix(entry); err == nil || entry == "" {
+			continue
+		}
+		if _, err := regexp.Compile(entry); err != nil {
+			return errors.New("probe_endpoint.allowed_targets: " + strconv.Quote(entry) +
+				" is neither a CIDR range nor a regular expression: " + err.Error())
+		}
+	}
 	if !cfg.ProbeEndpoint.Only {
 		return nil
 	}

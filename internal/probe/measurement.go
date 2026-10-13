@@ -17,6 +17,8 @@ type Target struct {
 	// Address is the IP address (with optional port) queried during the cycle:
 	// every sample of a burst goes to the same address
 	Address string
+	// policy restricts the addresses of /probe targets
+	policy *TargetPolicy
 }
 
 // Measurement is the result of one burst of queries to a target
