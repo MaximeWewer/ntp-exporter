@@ -65,6 +65,32 @@ func TestProber_InvalidResponsesAreNotBest(t *testing.T) {
 	assert.True(t, m.Reachable())
 	assert.Nil(t, m.Best())
 	assert.Equal(t, 1.0, m.Stats().PacketLossRatio, "invalid responses count as lost")
+	assert.Equal(t, 1, mock.GetCallCount("kod.example.org"), "the burst stops at the Kiss-o'-Death")
+	assert.Equal(t, 1, m.Sent)
+}
+
+// dualStackResolver returns an IPv6 and an IPv4 address for every host
+type dualStackResolver struct{}
+
+func (dualStackResolver) LookupHost(context.Context, string) ([]string, error) {
+	return []string{"2001:db8::1", "192.0.2.1"}, nil
+}
+
+func TestProber_KissOfDeathOnFamilyProbeStopsBurst(t *testing.T) {
+	mock := ntptest.NewMockNTPClient()
+	mock.SetupKoDServer("2001:db8::1", "DENY")
+	mock.SetupSuccessfulServer("192.0.2.1", time.Millisecond, 2)
+	p := New(newTestConfig("dual.example.org"), mock)
+	p.SetResolver(dualStackResolver{})
+	p.families.hasRoute = func(string) bool { return true }
+
+	m := p.Run(context.Background()).Measurements[0]
+
+	assert.Equal(t, 1, mock.GetCallCount("2001:db8::1"), "no burst after the Kiss-o'-Death")
+	assert.Equal(t, 0, mock.GetCallCount("192.0.2.1"), "the other family is not tried either")
+	assert.Equal(t, 1, m.Sent)
+	require.Len(t, m.Responses, 1)
+	assert.Equal(t, "DENY", m.Responses[0].KissCode)
 }
 
 func TestProber_PoolMembers(t *testing.T) {
@@ -101,7 +127,7 @@ type concurrencyMock struct {
 	max      int
 }
 
-func (c *concurrencyMock) QueryMultiple(ctx context.Context, server string, count int) ([]*ntp.Response, error) {
+func (c *concurrencyMock) QueryMultiple(ctx context.Context, server string, count int) ([]*ntp.Response, int, error) {
 	c.mu.Lock()
 	c.inFlight++
 	if c.inFlight > c.max {

@@ -148,7 +148,8 @@ Every `scrape_interval` (60 s by default), the exporter runs one **cycle**:
    leap indicator 3, invalid stratum, failed RFC 5905 checks) are counted in
    `ntp_invalid_responses_total` and never published as measurements. The
    offset comes from the valid sample with the lowest delay.
-4. **Kiss-o'-Death**: `RATE` doubles the polling interval of the target (up to
+4. **Kiss-o'-Death**: the burst stops at the first Kiss-o'-Death (RFC 5905
+   §7.4). `RATE` doubles the polling interval of the target (up to
    `kod.max_backoff`), `DENY` and `RSTR` stop queries for `kod.suspend_duration`.
 5. **Consensus**: with 3 servers or more, correctness intervals
    `[offset - root distance, offset + root distance]` are intersected (Marzullo);

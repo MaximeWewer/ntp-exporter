@@ -61,30 +61,36 @@ func (m *MockNTPClient) Query(ctx context.Context, server string) (*ntp.Response
 	return nil, errors.New("server not configured in mock")
 }
 
-// QueryMultiple performs multiple mock NTP queries
-func (m *MockNTPClient) QueryMultiple(ctx context.Context, server string, count int) ([]*ntp.Response, error) {
+// QueryMultiple performs multiple mock NTP queries. Like the real client,
+// it stops at the first Kiss-o'-Death.
+func (m *MockNTPClient) QueryMultiple(ctx context.Context, server string, count int) ([]*ntp.Response, int, error) {
 	responses := make([]*ntp.Response, 0, count)
+	sent := 0
 
 	for i := 0; i < count; i++ {
 		select {
 		case <-ctx.Done():
-			return responses, ctx.Err()
+			return responses, sent, ctx.Err()
 		default:
 		}
 
+		sent++
 		resp, err := m.Query(ctx, server)
 		if err != nil {
 			continue
 		}
 
 		responses = append(responses, resp)
+		if resp.IsKissOfDeath() {
+			break
+		}
 	}
 
 	if len(responses) == 0 {
-		return nil, errors.New("all queries failed")
+		return nil, sent, errors.New("all queries failed")
 	}
 
-	return responses, nil
+	return responses, sent, nil
 }
 
 // SetupSuccessfulServer configures a successful server response

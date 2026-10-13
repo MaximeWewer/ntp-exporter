@@ -15,7 +15,10 @@ import (
 // NTPQuerier is an interface for querying NTP servers
 type NTPQuerier interface {
 	Query(ctx context.Context, server string) (*Response, error)
-	QueryMultiple(ctx context.Context, server string, count int) ([]*Response, error)
+	// QueryMultiple sends a burst of queries and returns the responses and the
+	// number of queries actually sent: the burst stops at the first
+	// Kiss-o'-Death, as required by RFC 5905
+	QueryMultiple(ctx context.Context, server string, count int) ([]*Response, int, error)
 }
 
 // Client is an enhanced NTP client with advanced features
@@ -143,18 +146,24 @@ func fromNTP(server string, r *ntp.Response) *Response {
 }
 
 // QueryMultiple performs a burst of NTP queries and returns every response
-func (c *Client) QueryMultiple(ctx context.Context, server string, count int) ([]*Response, error) {
+// and the number of queries sent. A Kiss-o'-Death ends the burst: the server
+// asked the client to slow down or stop (RFC 5905 §7.4).
+func (c *Client) QueryMultiple(ctx context.Context, server string, count int) ([]*Response, int, error) {
 	responses := make([]*Response, 0, count)
+	sent := 0
+	var lastErr error
 
 	for i := 0; i < count; i++ {
 		select {
 		case <-ctx.Done():
-			return responses, ctx.Err()
+			return responses, sent, ctx.Err()
 		default:
 		}
 
+		sent++
 		resp, err := c.Query(ctx, server)
 		if err != nil {
+			lastErr = err
 			logger.SafeDebug("ntp", "NTP query attempt failed", map[string]interface{}{
 				"server":  server,
 				"attempt": i + 1,
@@ -164,6 +173,14 @@ func (c *Client) QueryMultiple(ctx context.Context, server string, count int) ([
 		}
 
 		responses = append(responses, resp)
+		if resp.IsKissOfDeath() {
+			logger.SafeDebug("ntp", "Kiss-o'-Death received, burst stopped", map[string]interface{}{
+				"server":  server,
+				"code":    resp.KissCode,
+				"attempt": i + 1,
+			})
+			break
+		}
 
 		// Space queries out: NTP servers rate-limit clients sending packets
 		// closer than 2s (ntpd "discard minimum", chrony "ratelimit")
@@ -172,23 +189,26 @@ func (c *Client) QueryMultiple(ctx context.Context, server string, count int) ([
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				return responses, ctx.Err()
+				return responses, sent, ctx.Err()
 			case <-timer.C:
 			}
 		}
 	}
 
 	if len(responses) == 0 {
-		return nil, fmt.Errorf("all %d NTP queries failed for server %s", count, server)
+		if lastErr == nil {
+			lastErr = errors.New("no query sent")
+		}
+		return nil, sent, fmt.Errorf("all %d NTP queries failed for server %s: %w", sent, server, lastErr)
 	}
 
 	logger.SafeDebug("ntp", "Multiple NTP queries completed", map[string]interface{}{
 		"server":     server,
 		"successful": len(responses),
-		"total":      count,
+		"total":      sent,
 	})
 
-	return responses, nil
+	return responses, sent, nil
 }
 
 // IsKissOfDeath checks if the response contains a Kiss-of-Death code

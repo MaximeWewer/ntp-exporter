@@ -209,7 +209,8 @@ func TestExporter_RemovedTargetsDisappear(t *testing.T) {
 	// a pool member disappears from the DNS answer
 	h.cfg.NTP.Servers = []string{"192.0.2.1"}
 	h.cycle()
-	assert.Equal(t, 3.0, h.mustValue("ntp_kiss_of_death_total", map[string]string{"server": "192.0.2.1", "code": "RATE"}))
+	assert.Equal(t, 1.0, h.mustValue("ntp_kiss_of_death_total", map[string]string{"server": "192.0.2.1", "code": "RATE"}),
+		"the burst stops at the Kiss-o'-Death")
 
 	h.cfg.NTP.Servers = []string{"192.0.2.2"}
 	h.cycle()
@@ -227,19 +228,19 @@ type partialMock struct {
 	answered int
 }
 
-func (p *partialMock) QueryMultiple(ctx context.Context, server string, count int) ([]*ntp.Response, error) {
+func (p *partialMock) QueryMultiple(ctx context.Context, server string, count int) ([]*ntp.Response, int, error) {
 	resp, err := p.Query(ctx, server)
 	if err != nil {
-		return nil, err
+		return nil, count, err
 	}
 	out := make([]*ntp.Response, 0, count)
 	for i := 0; i < count && i < p.answered; i++ {
 		out = append(out, resp)
 	}
 	if len(out) == 0 {
-		return nil, errors.New("all queries failed")
+		return nil, count, errors.New("all queries failed")
 	}
-	return out, nil
+	return out, count, nil
 }
 
 func TestExporter_PacketLoss(t *testing.T) {
@@ -389,7 +390,7 @@ func TestExporter_KoDDenySuspension(t *testing.T) {
 
 	assert.Equal(t, 1.0, h.mustValue("ntp_target_suspended", map[string]string{"server": server, "code": "DENY"}))
 	assert.Equal(t, 0.0, h.mustValue("ntp_up", srv(server)))
-	assert.Equal(t, 3.0, h.mustValue("ntp_kiss_of_death_total", map[string]string{"server": server, "code": "DENY"}),
+	assert.Equal(t, 1.0, h.mustValue("ntp_kiss_of_death_total", map[string]string{"server": server, "code": "DENY"}),
 		"the suspended cycle sends nothing and counts nothing")
 }
 
@@ -401,7 +402,7 @@ func TestExporter_KoDRateSkippedCycleIsNotCountedTwice(t *testing.T) {
 	h.cycle()
 	h.cycle()
 
-	assert.Equal(t, 3.0, h.mustValue("ntp_kiss_of_death_total", map[string]string{"server": server, "code": "RATE"}))
+	assert.Equal(t, 1.0, h.mustValue("ntp_kiss_of_death_total", map[string]string{"server": server, "code": "RATE"}))
 	assert.Equal(t, 1.0, h.mustValue("ntp_up", srv(server)), "skipped target keeps its previous state")
 }
 
@@ -411,14 +412,14 @@ type burstMock struct {
 	samples []*ntp.Response
 }
 
-func (b *burstMock) QueryMultiple(_ context.Context, server string, _ int) ([]*ntp.Response, error) {
+func (b *burstMock) QueryMultiple(_ context.Context, server string, _ int) ([]*ntp.Response, int, error) {
 	out := make([]*ntp.Response, len(b.samples))
 	for i, s := range b.samples {
 		c := *s
 		c.Server = server
 		out[i] = &c
 	}
-	return out, nil
+	return out, len(out), nil
 }
 
 func TestExporter_OffsetFromLowestDelaySample(t *testing.T) {

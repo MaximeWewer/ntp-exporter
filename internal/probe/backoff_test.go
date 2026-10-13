@@ -99,12 +99,12 @@ func TestProber_KoDRateSkipsNextCycle(t *testing.T) {
 
 	first := p.Run(context.Background()).Measurements[0]
 	assert.False(t, first.Skipped)
-	assert.Equal(t, 3, mock.GetCallCount("rate.example.org"))
+	assert.Equal(t, 1, mock.GetCallCount("rate.example.org"), "the burst stops at the Kiss-o'-Death")
 
 	second := p.Run(context.Background()).Measurements[0]
 	assert.True(t, second.Skipped, "target is not queried while backing off")
-	assert.Equal(t, 3, mock.GetCallCount("rate.example.org"))
-	assert.Len(t, second.Responses, 3, "previous measurement is carried over")
+	assert.Equal(t, 1, mock.GetCallCount("rate.example.org"))
+	assert.Len(t, second.Responses, 1, "previous measurement is carried over")
 }
 
 func TestProber_KoDDenySuspendsTarget(t *testing.T) {
@@ -117,5 +117,5 @@ func TestProber_KoDDenySuspendsTarget(t *testing.T) {
 
 	assert.Equal(t, KoDDeny, second.SuspendCode)
 	assert.False(t, second.Reachable())
-	assert.Equal(t, 3, mock.GetCallCount("deny.example.org"), "suspended target is not queried")
+	assert.Equal(t, 1, mock.GetCallCount("deny.example.org"), "suspended target is not queried")
 }

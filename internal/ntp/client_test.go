@@ -41,10 +41,11 @@ func TestClient_QueryMultiple(t *testing.T) {
 		client := NewClient(2*time.Second, 4)
 		client.SetSampleSpacing(150 * time.Millisecond)
 
-		responses, err := client.QueryMultiple(context.Background(), server.addr(), 3)
+		responses, sent, err := client.QueryMultiple(context.Background(), server.addr(), 3)
 
 		require.NoError(t, err)
 		assert.Len(t, responses, 3)
+		assert.Equal(t, 3, sent)
 		received := server.requests()
 		require.Len(t, received, 3)
 		for i := 1; i < len(received); i++ {
@@ -60,10 +61,11 @@ func TestClient_QueryMultiple(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
 		start := time.Now()
-		responses, err := client.QueryMultiple(ctx, server.addr(), 3)
+		responses, sent, err := client.QueryMultiple(ctx, server.addr(), 3)
 
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
 		assert.Len(t, responses, 1, "samples received before cancellation are kept")
+		assert.Equal(t, 1, sent, "queries never sent are not counted")
 		assert.Less(t, time.Since(start), time.Second)
 	})
 
@@ -71,20 +73,55 @@ func TestClient_QueryMultiple(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		responses, err := client.QueryMultiple(ctx, "192.0.2.1", 5)
+		responses, sent, err := client.QueryMultiple(ctx, "192.0.2.1", 5)
 
 		assert.Error(t, err)
-		assert.LessOrEqual(t, len(responses), 5)
+		assert.Empty(t, responses)
+		assert.Equal(t, 0, sent)
 	})
 
 	t.Run("unreachable_server", func(t *testing.T) {
 		client := NewClient(200*time.Millisecond, 4)
-		responses, err := client.QueryMultiple(context.Background(), "192.0.2.1", 2)
+		responses, sent, err := client.QueryMultiple(context.Background(), "192.0.2.1", 2)
 
-		// Should fail with all queries failing
+		// Should fail with all queries failing, keeping the last error
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "all 2 NTP queries failed")
+		assert.Contains(t, err.Error(), "192.0.2.1")
 		assert.Equal(t, 0, len(responses))
+		assert.Equal(t, 2, sent)
+	})
+
+	// RFC 5905 §7.4: a Kiss-o'-Death asks the client to slow down or stop,
+	// the rest of the burst must not be sent
+	t.Run("kiss_of_death_stops_burst", func(t *testing.T) {
+		server := startFakeServer(t, "RATE")
+		client := NewClient(2*time.Second, 4)
+		client.SetSampleSpacing(10 * time.Millisecond)
+
+		responses, sent, err := client.QueryMultiple(context.Background(), server.addr(), 4)
+
+		require.NoError(t, err)
+		require.Len(t, responses, 1)
+		assert.Equal(t, "RATE", responses[0].KissCode)
+		assert.Equal(t, 1, sent)
+		assert.Len(t, server.requests(), 1, "no query after the Kiss-o'-Death")
+	})
+
+	t.Run("kiss_of_death_mid_burst", func(t *testing.T) {
+		server := startFakeServer(t, "DENY")
+		server.setKissFrom(2)
+		client := NewClient(2*time.Second, 4)
+		client.SetSampleSpacing(10 * time.Millisecond)
+
+		responses, sent, err := client.QueryMultiple(context.Background(), server.addr(), 4)
+
+		require.NoError(t, err)
+		require.Len(t, responses, 2)
+		assert.True(t, responses[0].IsValid())
+		assert.Equal(t, "DENY", responses[1].KissCode)
+		assert.Equal(t, 2, sent)
+		assert.Len(t, server.requests(), 2, "no third query after DENY")
 	})
 }
 

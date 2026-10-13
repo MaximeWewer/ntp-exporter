@@ -16,6 +16,9 @@ type fakeServer struct {
 	received []time.Time
 	stratum  uint8
 	kissCode string
+	// kissFrom is the 1-based index of the first request answered with the
+	// Kiss-o'-Death (1 when unset)
+	kissFrom int
 }
 
 const ntpEpochOffset = 2208988800
@@ -51,6 +54,7 @@ func startFakeServer(t *testing.T, kissCode string) *fakeServer {
 			now := time.Now()
 			s.mu.Lock()
 			s.received = append(s.received, now)
+			kiss := s.kissCode != "" && len(s.received) >= max(s.kissFrom, 1)
 			s.mu.Unlock()
 
 			resp := make([]byte, 48)
@@ -61,7 +65,7 @@ func startFakeServer(t *testing.T, kissCode string) *fakeServer {
 			binary.BigEndian.PutUint32(resp[4:8], 0x00000080)  // root delay ~2ms
 			binary.BigEndian.PutUint32(resp[8:12], 0x00000080) // root dispersion ~2ms
 			copy(resp[12:16], []byte{192, 0, 2, 1})
-			if s.kissCode != "" {
+			if kiss {
 				resp[0] = 3<<6 | 4<<3 | 4
 				resp[1] = 0
 				copy(resp[12:16], s.kissCode)
@@ -75,6 +79,13 @@ func startFakeServer(t *testing.T, kissCode string) *fakeServer {
 	}()
 
 	return s
+}
+
+// setKissFrom sends the Kiss-o'-Death from the n-th request on
+func (s *fakeServer) setKissFrom(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.kissFrom = n
 }
 
 func (s *fakeServer) addr() string {

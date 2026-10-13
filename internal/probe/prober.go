@@ -272,6 +272,10 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 			address = candidate
 			m.Responses = append(m.Responses, resp)
 			samples--
+			// A Kiss-o'-Death ends the burst (RFC 5905 §7.4)
+			if resp.IsKissOfDeath() {
+				samples = 0
+			}
 			break
 		}
 		logger.SafeDebug("probe", "No answer, trying the other address family", map[string]interface{}{
@@ -289,8 +293,9 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 		}
 		if err == nil {
 			var responses []*ntp.Response
-			m.Sent += samples
-			responses, err = p.client.QueryMultiple(ctx, address, samples)
+			var sent int
+			responses, sent, err = p.client.QueryMultiple(ctx, address, samples)
+			m.Sent += sent
 			m.Responses = append(m.Responses, responses...)
 		}
 	}
