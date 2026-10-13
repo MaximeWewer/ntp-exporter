@@ -1,94 +1,29 @@
-# =============================================================================
-# NTP Exporter - MODE AGENT
-# =============================================================================
-# Use case: Local agent on each machine, measures the host clock
-# Deployment: DaemonSet, systemd on each node
-# Kernel option: set NTP_KERNEL_ENABLED=true to also read the kernel clock
-# state (Linux, read-only adjtimex, no extra capability required)
-# =============================================================================
+# NTP exporter in agent mode: measures the clock of this host.
+#   docker compose -f docker-compose-agent.yml up -d
+#   curl -s localhost:9559/metrics | grep '^ntp_'
+# The host network gives access to the local time daemon (127.0.0.1) and to
+# chronyd over UDP 127.0.0.1:323; no privilege is needed.
 
 services:
-  # ---------------------------------------------------------------------------
-  # NTP Exporter Agent - Complete configuration
-  # ---------------------------------------------------------------------------
-  ntp-exporter-agent:
-    image: ntp-exporter:${VERSION:-latest}
-    container_name: ntp-exporter-agent
-    hostname: ntp-exporter-agent
-
-    ports:
-      - "${EXPORTER_PORT:-9559}:9559"
-
-    # Environment variables - Complete configuration AGENT mode
+  ntp-exporter:
+    image: ${NTP_EXPORTER_IMAGE:-ghcr.io/maximewewer/ntp-exporter:latest}
+    network_mode: host
     environment:
-      # -----------------------------------------------------------------------
-      # SERVER - Prometheus HTTP server configuration
-      # -----------------------------------------------------------------------
-      NTP_EXPORTER_ADDRESS: "${EXPORTER_ADDRESS:-0.0.0.0}"
-      NTP_EXPORTER_PORT: "${EXPORTER_PORT:-9559}"
-      SERVER_READ_TIMEOUT: "${SERVER_READ_TIMEOUT:-5s}"
-      SERVER_WRITE_TIMEOUT: "${SERVER_WRITE_TIMEOUT:-5s}"
-
-      # TLS/HTTPS
-      TLS_ENABLED: "${TLS_ENABLED:-false}"
-      TLS_CERT_FILE: "${TLS_CERT_FILE:-}"
-      TLS_KEY_FILE: "${TLS_KEY_FILE:-}"
-
-
-      # -----------------------------------------------------------------------
-      # NTP - NTP client configuration
-      # -----------------------------------------------------------------------
-      # NTP servers (prefer local server + public fallback)
-      NTP_SERVERS: "${NTP_SERVERS:-127.0.0.1,pool.ntp.org}"
-
-      # Request configuration
+      NTP_EXPORTER_PORT: "${NTP_EXPORTER_PORT:-9559}"
+      NTP_SERVERS: "${NTP_SERVERS:-pool.ntp.org}"
       NTP_TIMEOUT: "${NTP_TIMEOUT:-2s}"
-      NTP_VERSION: "${NTP_VERSION:-4}"
-      NTP_SAMPLES: "${NTP_SAMPLES:-4}"
-      NTP_MAX_CONCURRENCY: "${NTP_MAX_CONCURRENCY:-5}"
-
-      # Kernel clock state option (Linux only, unprivileged)
-      NTP_KERNEL_ENABLED: "${NTP_KERNEL_ENABLED:-false}"
-      # Only expose the error bound violation when node_exporter runs too
-      NTP_KERNEL_VIOLATION_ONLY: "${NTP_KERNEL_VIOLATION_ONLY:-false}"
-
-      # -----------------------------------------------------------------------
-      # DNS CACHE - DNS cache
-      # -----------------------------------------------------------------------
-      DNS_CACHE_MIN_TTL: "${DNS_CACHE_MIN_TTL:-10m}"
-      DNS_CACHE_MAX_TTL: "${DNS_CACHE_MAX_TTL:-60m}"
-
-      # -----------------------------------------------------------------------
-      # LOGGING - Logging configuration
-      # -----------------------------------------------------------------------
+      # Kernel clock state (Linux, read-only adjtimex)
+      NTP_KERNEL_ENABLED: "${NTP_KERNEL_ENABLED:-true}"
+      # chronyd tracking report, when chronyd runs on the host
+      NTP_CHRONY_ENABLED: "${NTP_CHRONY_ENABLED:-false}"
+      # Name of the host in the node label of the kernel and chrony metrics
+      NODE_NAME: "${NODE_NAME:-}"
+      METRICS_LABELS: "${METRICS_LABELS:-}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
-      LOG_ENABLE_FILE: "${LOG_ENABLE_FILE:-false}"
-      LOG_FILE_PATH: "${LOG_FILE_PATH:-}"
-
-      # -----------------------------------------------------------------------
-      # METRICS - Prometheus metrics configuration
-      # -----------------------------------------------------------------------
-      METRICS_NAMESPACE: "${METRICS_NAMESPACE:-ntp}"
-      METRICS_SUBSYSTEM: "${METRICS_SUBSYSTEM:-}"
-
-      # Additional labels (example)
-      NODE_NAME: "${HOSTNAME:-agent-node}"
-      DEPLOYMENT_MODE: "agent"
-
-    # Health check
     healthcheck:
       test: ["CMD", "/ntp-exporter", "--healthcheck"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
       start_period: 10s
-
-    # Restart policy
     restart: unless-stopped
-
-    # Logging configuration
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"

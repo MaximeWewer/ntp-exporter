@@ -83,9 +83,10 @@ docker run -d --name ntp-exporter -p 9559:9559 \
 ```
 
 Ready-made compose files are in [`deployments/docker/`](deployments/docker/):
-`docker-compose-probe.yml`, `docker-compose-agent.yml` (set
-`NTP_KERNEL_ENABLED=true` for the kernel option) and
-`docker-compose-with-yaml.yml`.
+`docker-compose-probe.yml`, `docker-compose-agent.yml` (host network, kernel
+option enabled) and `docker-compose-with-yaml.yml` (mounts
+`config-example.yaml`). Override the defaults in a `.env` file, see
+`.env.example`.
 
 ### Kubernetes (Helm)
 
