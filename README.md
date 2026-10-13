@@ -216,8 +216,10 @@ The response holds the per-server metrics of the target (`ntp_up`,
 `ntp_offset_seconds`, `ntp_server_info`...) plus `ntp_probe_success` and
 `ntp_probe_duration_seconds`. The burst is shortened to fit in the scrape
 timeout announced by Prometheus (minus 0.5 s): `(samples − 1) × sample_spacing`
-plus one query timeout. No Kiss-o'-Death state is kept between requests: the
-scrape interval sets the polling rate.
+plus one query timeout. Kiss-o'-Death codes are honored across requests: while
+a target is suspended (`DENY`, `RSTR`) or backing off (`RATE`), `/probe` sends
+nothing and answers `ntp_probe_success 0` (with `ntp_target_suspended` for a
+suspension).
 
 With the Prometheus Operator, the Helm chart creates the `Probe` resource
 (`probeEndpoint.probe.enabled`, `probeEndpoint.probe.targets`). Set

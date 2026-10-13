@@ -34,6 +34,9 @@ type Prober struct {
 	// cycleTimeout bounds a cycle so that it always ends before the next one
 	cycleTimeout time.Duration
 	backoff      *Backoff
+	// probeBackoff holds the Kiss-o'-Death state of /probe targets, apart
+	// from the configured targets
+	probeBackoff *Backoff
 	families     *families
 
 	mu       sync.Mutex
@@ -57,6 +60,7 @@ func New(cfg *config.Config, client ntp.NTPQuerier) *Prober {
 		resolver:     net.DefaultResolver,
 		cycleTimeout: CycleTimeout(cfg.NTP.ScrapeInterval),
 		backoff:      NewBackoff(cfg.NTP.ScrapeInterval, cfg.NTP.KoD.MaxBackoff, cfg.NTP.KoD.SuspendDuration),
+		probeBackoff: NewBackoff(cfg.NTP.ScrapeInterval, cfg.NTP.KoD.MaxBackoff, cfg.NTP.KoD.SuspendDuration),
 		families:     newFamilies(cfg.NTP.IPFamily),
 		previous:     make(map[string]*Measurement),
 	}
@@ -243,10 +247,24 @@ func (p *Prober) forget(targets []Target) {
 }
 
 // Probe measures a single target outside of the collection cycles, for the
-// /probe endpoint: no Kiss-o'-Death state is kept, the scrape interval chosen
-// in Prometheus sets the polling rate
+// /probe endpoint. Kiss-o'-Death codes are honored across requests: a
+// suspended target, or one backing off after RATE, is not queried and the
+// measurement carries no response.
 func (p *Prober) Probe(ctx context.Context, server string, samples int) *Measurement {
-	return p.measure(ctx, Target{Server: server}, samples)
+	target := Target{Server: server}
+	key := target.key()
+
+	decision := p.probeBackoff.Allow(key)
+	if decision.SuspendCode != "" {
+		return &Measurement{Target: target, Timestamp: time.Now(), SuspendCode: decision.SuspendCode}
+	}
+	if !decision.Allowed {
+		return &Measurement{Target: target, Timestamp: time.Now(), Skipped: true}
+	}
+
+	m := p.measure(ctx, target, samples)
+	p.probeBackoff.Record(key, m)
+	return m
 }
 
 // measure sends one burst of queries to a target

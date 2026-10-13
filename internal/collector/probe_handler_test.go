@@ -177,3 +177,21 @@ func TestProbeHandler_NTSTarget(t *testing.T) {
 	code, _ = serveProbe(t, h, "target="+url.QueryEscape("nts://"), nil)
 	assert.Equal(t, http.StatusBadRequest, code)
 }
+
+func TestProbeHandler_HonorsKissOfDeath(t *testing.T) {
+	h, mock, _ := newProbeHandler(t)
+	mock.SetupKoDServer(probeTarget, "DENY")
+
+	code, body := serveProbe(t, h, "target="+probeTarget, nil)
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Contains(t, body, `ntp_probe_success{site="lab"} 0`)
+	assert.Equal(t, 1, mock.GetCallCount(probeTarget))
+
+	// The next scrape sends nothing while the suspension lasts
+	code, body = serveProbe(t, h, "target="+probeTarget, nil)
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Equal(t, 1, mock.GetCallCount(probeTarget), "suspended target is not queried")
+	assert.Contains(t, body, `ntp_probe_success{site="lab"} 0`)
+	assert.Contains(t, body, `ntp_target_suspended{code="DENY",server="192.0.2.10",site="lab"} 1`)
+	assert.Contains(t, body, `ntp_up{server="192.0.2.10",site="lab"} 0`)
+}

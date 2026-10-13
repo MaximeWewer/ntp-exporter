@@ -121,6 +121,28 @@ func TestBackoff_StatesAreBounded(t *testing.T) {
 	assert.Len(t, b.states, 1)
 }
 
+func TestProber_ProbeHonorsKissOfDeath(t *testing.T) {
+	mock := ntptest.NewMockNTPClient()
+	mock.SetupKoDServer("deny.example.org", KoDDeny)
+	mock.SetupKoDServer("rate.example.org", KoDRate)
+	p := newProber(newTestConfig(), mock)
+
+	for _, server := range []string{"deny.example.org", "rate.example.org"} {
+		first := p.Probe(context.Background(), server, 4)
+		assert.Len(t, first.Responses, 1, server)
+
+		second := p.Probe(context.Background(), server, 4)
+		assert.Equal(t, 1, mock.GetCallCount(server), "%s: no query while the Kiss-o'-Death applies", server)
+		assert.False(t, second.Reachable(), server)
+		assert.Equal(t, 0, second.Sent, server)
+	}
+	assert.Equal(t, KoDDeny, p.Probe(context.Background(), "deny.example.org", 4).SuspendCode)
+	assert.True(t, p.Probe(context.Background(), "rate.example.org", 4).Skipped)
+
+	// /probe state does not touch the configured targets
+	assert.Empty(t, p.backoff.states)
+}
+
 func TestProber_KoDRateSkipsNextCycle(t *testing.T) {
 	mock := ntptest.NewMockNTPClient()
 	mock.SetupKoDServer("rate.example.org", KoDRate)

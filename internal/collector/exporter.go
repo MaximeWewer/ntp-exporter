@@ -360,6 +360,12 @@ func writeMeasurement(ch chan<- prometheus.Metric, d *descs, cfg *config.Config,
 	}
 	gauge(ch, d.up, up, server)
 
+	// Not queried (RATE backoff) and no previous measurement: nothing was
+	// sent, so nothing was lost
+	if meas.Skipped && !meas.Reachable() {
+		return nil
+	}
+
 	stats := meas.Stats()
 	gauge(ch, d.packetLoss, stats.PacketLossRatio, server)
 	gauge(ch, d.samples, float64(stats.SamplesCount), server)
