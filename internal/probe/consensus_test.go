@@ -48,7 +48,7 @@ func TestComputeConsensus_IndependentOfLocalClock(t *testing.T) {
 	assert.Equal(t, 1001*ms, c.Offset)
 }
 
-func TestComputeConsensus_NoMajorityFallsBackToMedian(t *testing.T) {
+func TestComputeConsensus_NoMajority(t *testing.T) {
 	ms := time.Millisecond
 	c := ComputeConsensus([]*Measurement{
 		serverMeasurement("a", 0, ms),
@@ -58,8 +58,96 @@ func TestComputeConsensus_NoMajorityFallsBackToMedian(t *testing.T) {
 
 	require.NotNil(t, c)
 	assert.False(t, c.Majority)
+	assert.Empty(t, c.Falsetickers, "nobody is judged without majority")
+	assert.Equal(t, 1, c.Truechimers, "no two servers agree")
+}
+
+func TestComputeConsensus_SplitIsNotAgreement(t *testing.T) {
+	ms := time.Millisecond
+	c := ComputeConsensus([]*Measurement{
+		serverMeasurement("a", 0, ms),
+		serverMeasurement("b", ms, ms),
+		serverMeasurement("c", 300*ms, ms),
+		serverMeasurement("d", 301*ms, ms),
+	})
+
+	require.NotNil(t, c)
+	assert.False(t, c.Majority, "2 against 2 is no majority")
+	assert.Equal(t, 2, c.Truechimers, "not 4 of 4")
 	assert.Empty(t, c.Falsetickers)
-	assert.Equal(t, 100*ms, c.Offset)
+}
+
+// rotations returns every rotation of the measurements and their reverse, to
+// check that the result does not depend on the order of the servers
+func rotations(ms []*Measurement) [][]*Measurement {
+	out := make([][]*Measurement, 0, 2*len(ms))
+	for i := range ms {
+		r := append(append([]*Measurement(nil), ms[i:]...), ms[:i]...)
+		out = append(out, r)
+		rev := make([]*Measurement, len(r))
+		for j := range r {
+			rev[j] = r[len(r)-1-j]
+		}
+		out = append(out, rev)
+	}
+	return out
+}
+
+func TestComputeConsensus_Selection(t *testing.T) {
+	ms := time.Millisecond
+	type srv struct {
+		name             string
+		offset, distance time.Duration
+	}
+	tests := []struct {
+		name         string
+		servers      []srv
+		majority     bool
+		falsetickers []string
+		truechimers  int
+	}{
+		{"wide server bridging two narrow ones", []srv{
+			{"a", 0, 50 * ms}, {"b", 10 * ms, 2 * ms}, {"c", -10 * ms, 2 * ms},
+		}, true, nil, 3},
+		{"interval touching the intersection is not enough", []srv{
+			{"a", 0, 5 * ms}, {"b", ms, 5 * ms}, {"c", 40 * ms, 36 * ms},
+		}, true, []string{"c"}, 2},
+		{"nested intervals", []srv{
+			{"a", 0, 100 * ms}, {"b", ms, 10 * ms}, {"c", 2 * ms, ms},
+		}, true, nil, 3},
+		{"four servers, one far", []srv{
+			{"a", 0, 5 * ms}, {"b", ms, 5 * ms}, {"c", 2 * ms, 5 * ms}, {"d", 500 * ms, 5 * ms},
+		}, true, []string{"d"}, 3},
+		{"five servers, two far", []srv{
+			{"a", 0, 5 * ms}, {"b", ms, 5 * ms}, {"c", 2 * ms, 5 * ms}, {"d", 500 * ms, 5 * ms}, {"e", -400 * ms, 5 * ms},
+		}, true, []string{"d", "e"}, 3},
+		{"three disjoint", []srv{
+			{"a", 0, ms}, {"b", 100 * ms, ms}, {"c", 200 * ms, ms},
+		}, false, nil, 1},
+		{"identical servers", []srv{
+			{"a", 5 * ms, ms}, {"b", 5 * ms, ms}, {"c", 5 * ms, ms},
+		}, true, nil, 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var ms []*Measurement
+			for _, s := range tt.servers {
+				ms = append(ms, serverMeasurement(s.name, s.offset, s.distance))
+			}
+			want := map[string]bool{}
+			for _, f := range tt.falsetickers {
+				want[f] = true
+			}
+			for _, order := range rotations(ms) {
+				c := ComputeConsensus(order)
+				require.NotNil(t, c)
+				assert.Equal(t, tt.majority, c.Majority)
+				assert.Equal(t, want, c.Falsetickers)
+				assert.Equal(t, tt.truechimers, c.Truechimers)
+			}
+		})
+	}
 }
 
 func TestComputeConsensus_NeedsThreeValidServers(t *testing.T) {

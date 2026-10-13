@@ -12,17 +12,20 @@ const MinConsensusServers = 3
 // Consensus is the agreement between servers measured during a cycle.
 // It judges servers against each other, independently of the local clock.
 type Consensus struct {
-	// Offset is the consensus offset of the local clock
+	// Offset is the consensus offset of the local clock, only meaningful with
+	// a majority
 	Offset time.Duration
 	// Servers is the number of valid servers taking part in the selection
 	Servers int
-	// Truechimers is the number of servers whose interval contains the consensus
+	// Truechimers is the number of servers whose offset lies in the selected
+	// intersection; without majority, the largest number of servers whose
+	// intervals overlap
 	Truechimers int
-	// Majority is set when the truechimers are a strict majority; without it
-	// the consensus falls back to the median and no falseticker is reported
+	// Majority is set when more than half of the servers agree; without it no
+	// consensus offset nor falseticker is reported
 	Majority bool
-	// Falsetickers lists the servers whose correctness interval does not
-	// intersect the majority intersection
+	// Falsetickers lists the servers whose offset lies outside the majority
+	// intersection
 	Falsetickers map[string]bool
 	// Offsets holds the offset of each valid server
 	Offsets map[string]time.Duration
@@ -34,12 +37,12 @@ type interval struct {
 	lo, hi time.Duration
 }
 
-// ComputeConsensus applies Marzullo's intersection algorithm (the basis of
-// the RFC 5905 selection algorithm) to the correctness intervals
-// [offset - root distance, offset + root distance] of the valid servers.
-// It returns nil with fewer than MinConsensusServers valid servers. A server
-// reached through several names (a host name and a pool member resolving to
-// the same address) votes once.
+// ComputeConsensus applies the RFC 5905 selection algorithm (§11.2.1, derived
+// from Marzullo's algorithm) to the correctness intervals
+// [offset - root distance, offset + root distance] of the valid servers, then
+// takes the median offset of the truechimers. It returns nil with fewer than MinConsensusServers valid
+// servers. A server reached through several names (a host name and a pool
+// member resolving to the same address) votes once.
 func ComputeConsensus(measurements []*Measurement) *Consensus {
 	var intervals []interval
 	voted := make(map[string]bool, len(measurements))
@@ -54,10 +57,7 @@ func ComputeConsensus(measurements []*Measurement) *Consensus {
 			}
 			voted[addr] = true
 		}
-		distance := best.RootDistance
-		if distance < 0 {
-			distance = 0
-		}
+		distance := max(best.RootDistance, 0)
 		intervals = append(intervals, interval{
 			server: m.Target.Server,
 			offset: best.Offset,
@@ -79,26 +79,106 @@ func ComputeConsensus(measurements []*Measurement) *Consensus {
 		c.Offsets[iv.server] = iv.offset
 	}
 
-	lo, hi, count := maxIntersection(intervals)
-	c.Majority = count*2 > len(intervals)
+	lo, hi, ok := selectIntersection(intervals)
+	if !ok {
+		// No majority: report how many servers agree at best, judge nobody
+		c.Truechimers = maxOverlap(intervals)
+		return c
+	}
 
+	c.Majority = true
 	var chimers []time.Duration
 	for _, iv := range intervals {
-		if c.Majority && (iv.hi < lo || iv.lo > hi) {
+		if iv.offset < lo || iv.offset > hi {
 			c.Falsetickers[iv.server] = true
 			continue
 		}
 		chimers = append(chimers, iv.offset)
 	}
-
 	c.Truechimers = len(chimers)
 	c.Offset = medianDuration(chimers)
 	return c
 }
 
-// maxIntersection returns the region covered by the largest number of
-// intervals (Marzullo's algorithm) and that number
-func maxIntersection(intervals []interval) (time.Duration, time.Duration, int) {
+func medianDuration(values []time.Duration) time.Duration {
+	sorted := append([]time.Duration(nil), values...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	n := len(sorted)
+	if n%2 == 0 {
+		return (sorted[n/2-1] + sorted[n/2]) / 2
+	}
+	return sorted[n/2]
+}
+
+// selectIntersection returns the intersection of the RFC 5905 selection
+// algorithm: for the smallest number f of falsetickers (f < n/2), the
+// interval from the lowest point covered by n - f correctness intervals to
+// the highest one, provided that at most f offsets lie outside of it.
+// The result does not depend on the order of the servers.
+func selectIntersection(intervals []interval) (time.Duration, time.Duration, bool) {
+	n := len(intervals)
+	los := make([]time.Duration, 0, n)
+	his := make([]time.Duration, 0, n)
+	for _, iv := range intervals {
+		los = append(los, iv.lo)
+		his = append(his, iv.hi)
+	}
+	sort.Slice(los, func(i, j int) bool { return los[i] < los[j] })
+	sort.Slice(his, func(i, j int) bool { return his[i] < his[j] })
+
+	for f := 0; 2*f < n; f++ {
+		need := n - f
+		lo, okLo := lowestCovered(los, his, need)
+		hi, okHi := highestCovered(los, his, need)
+		if !okLo || !okHi || lo > hi {
+			continue
+		}
+		outside := 0
+		for _, iv := range intervals {
+			if iv.offset < lo || iv.offset > hi {
+				outside++
+			}
+		}
+		if outside <= f {
+			return lo, hi, true
+		}
+	}
+	return 0, 0, false
+}
+
+// lowestCovered returns the lowest point covered by at least need intervals.
+// Coverage only rises at a lower bound: the candidates are the lower bounds.
+func lowestCovered(los, his []time.Duration, need int) (time.Duration, bool) {
+	for _, x := range los {
+		if coverage(los, his, x) >= need {
+			return x, true
+		}
+	}
+	return 0, false
+}
+
+// highestCovered returns the highest point covered by at least need
+// intervals. Coverage only falls after an upper bound: the candidates are the
+// upper bounds.
+func highestCovered(los, his []time.Duration, need int) (time.Duration, bool) {
+	for i := len(his) - 1; i >= 0; i-- {
+		if coverage(los, his, his[i]) >= need {
+			return his[i], true
+		}
+	}
+	return 0, false
+}
+
+// coverage returns the number of closed intervals containing x, from their
+// sorted lower and upper bounds
+func coverage(los, his []time.Duration, x time.Duration) int {
+	started := sort.Search(len(los), func(k int) bool { return los[k] > x })
+	ended := sort.Search(len(his), func(k int) bool { return his[k] >= x })
+	return started - ended
+}
+
+// maxOverlap returns the largest number of intervals sharing a point
+func maxOverlap(intervals []interval) int {
 	type edge struct {
 		at    time.Duration
 		delta int
@@ -107,36 +187,17 @@ func maxIntersection(intervals []interval) (time.Duration, time.Duration, int) {
 	for _, iv := range intervals {
 		edges = append(edges, edge{iv.lo, +1}, edge{iv.hi, -1})
 	}
-	// Starts before ends at the same point: touching intervals intersect
+	// Starts before ends at the same point: touching intervals overlap
 	sort.Slice(edges, func(i, j int) bool {
 		if edges[i].at != edges[j].at {
 			return edges[i].at < edges[j].at
 		}
 		return edges[i].delta > edges[j].delta
 	})
-
 	best, count := 0, 0
-	var lo, hi time.Duration
-	for i, e := range edges {
+	for _, e := range edges {
 		count += e.delta
-		if count > best {
-			best = count
-			lo = e.at
-			hi = edges[i+1].at
-		}
+		best = max(best, count)
 	}
-	return lo, hi, best
-}
-
-func medianDuration(values []time.Duration) time.Duration {
-	if len(values) == 0 {
-		return 0
-	}
-	sorted := append([]time.Duration(nil), values...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
-	n := len(sorted)
-	if n%2 == 0 {
-		return (sorted[n/2-1] + sorted[n/2]) / 2
-	}
-	return sorted[n/2]
+	return best
 }

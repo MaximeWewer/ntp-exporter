@@ -153,9 +153,13 @@ Every `scrape_interval` (60 s by default), the exporter runs one **cycle**:
 4. **Kiss-o'-Death**: the burst stops at the first Kiss-o'-Death (RFC 5905
    §7.4). `RATE` doubles the polling interval of the target (up to
    `kod.max_backoff`), `DENY` and `RSTR` stop queries for `kod.suspend_duration`.
-5. **Consensus**: with 3 servers or more, correctness intervals
-   `[offset - root distance, offset + root distance]` are intersected (Marzullo);
-   servers outside the majority intersection are falsetickers.
+5. **Consensus**: with 3 servers or more, the RFC 5905 selection algorithm
+   intersects the correctness intervals
+   `[offset - root distance, offset + root distance]`: it looks for the
+   smallest number `f` of falsetickers (`f < n/2`) such that `n - f` intervals
+   overlap and at most `f` offsets lie outside that intersection. Servers whose
+   offset lies outside it are falsetickers; the result does not depend on the
+   order of the servers.
 6. **Snapshot**: metrics are built from the last cycle at scrape time. A server
    that stops answering exposes `ntp_up 0` and no stale offset; a pool member
    gone from DNS disappears.
