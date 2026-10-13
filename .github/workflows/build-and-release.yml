@@ -307,9 +307,10 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}
           annotations: |
             type=org.opencontainers.image.description,value=Modern NTP monitoring exporter for Prometheus
+          # latest only moves on stable releases, never on a -rc pre-release
           tags: |
             type=raw,value=${{ needs.prepare.outputs.version }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ needs.prepare.outputs.is_prerelease == 'false' }}
 
       - name: Create multiarch manifest and push
         id: manifest-annotate
@@ -527,7 +528,14 @@ jobs:
           generate_release_notes: false
 
       - name: Generate release summary
+        env:
+          IS_PRERELEASE: ${{ needs.prepare.outputs.is_prerelease }}
         run: |
+          LATEST_LINE=""
+          if [ "$IS_PRERELEASE" = "false" ]; then
+            LATEST_LINE="- \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:latest\`"
+          fi
+
           cat << EOF >> "$GITHUB_STEP_SUMMARY"
           ## Release ${{ needs.prepare.outputs.version }} Created Successfully
 
@@ -535,7 +543,7 @@ jobs:
 
           #### Docker Images
           - \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}\`
-          - \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:latest\`
+          ${LATEST_LINE}
 
           #### Helm Chart
           - OCI Registry: \`oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/ntp-exporter:${{ needs.prepare.outputs.version }}\`
