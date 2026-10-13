@@ -352,7 +352,8 @@ Names below use the default `ntp` namespace and no subsystem.
 | Metric | Description |
 |---|---|
 | `ntp_consensus_offset_seconds` | Offset of the local clock against the consensus (truechimers weighted by 1/root distance) |
-| `ntp_consensus_servers` / `ntp_consensus_truechimers` | Servers taking part / agreeing with the consensus |
+| `ntp_consensus_majority` | 1 when more than half of the servers agree. Without majority, `ntp_consensus_offset_seconds`, `ntp_offset_from_consensus_seconds` and `ntp_falseticker` are not exposed |
+| `ntp_consensus_servers` / `ntp_consensus_truechimers` | Servers taking part / agreeing with the consensus (without majority: the largest group of servers agreeing with each other) |
 | `ntp_offset_from_consensus_seconds{server}` | Offset of a server against the consensus, independent of the local clock |
 | `ntp_falseticker{server}` | 1 when the server interval misses the majority intersection |
 

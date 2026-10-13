@@ -441,9 +441,15 @@ func (e *Exporter) collectConsensus(ch chan<- prometheus.Metric) {
 	d := e.descs
 	c := e.consensus
 
-	gauge(ch, d.consensusOffset, c.Offset.Seconds())
 	gauge(ch, d.consensusServers, float64(c.Servers))
 	gauge(ch, d.consensusChimers, float64(c.Truechimers))
+	if !c.Majority {
+		// Without majority there is no reference: nothing to compare with
+		gauge(ch, d.consensusMajority, 0)
+		return
+	}
+	gauge(ch, d.consensusMajority, 1)
+	gauge(ch, d.consensusOffset, c.Offset.Seconds())
 
 	for server, offset := range c.Offsets {
 		gauge(ch, d.offsetFromConsensus, (offset - c.Offset).Seconds(), server)

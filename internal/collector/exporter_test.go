@@ -573,12 +573,31 @@ func TestExporter_Consensus(t *testing.T) {
 
 	h.cycle()
 
+	assert.Equal(t, 1.0, h.mustValue("ntp_consensus_majority", nil))
 	assert.InDelta(t, 0.002, h.mustValue("ntp_consensus_offset_seconds", nil), 1e-9)
 	assert.Equal(t, 4.0, h.mustValue("ntp_consensus_servers", nil))
 	assert.Equal(t, 3.0, h.mustValue("ntp_consensus_truechimers", nil))
 	assert.Equal(t, 1.0, h.mustValue("ntp_falseticker", srv("bad.example.org")))
 	assert.Equal(t, 0.0, h.mustValue("ntp_falseticker", srv("a.example.org")))
 	assert.InDelta(t, 0.798, h.mustValue("ntp_offset_from_consensus_seconds", srv("bad.example.org")), 1e-9)
+}
+
+func TestExporter_ConsensusWithoutMajority(t *testing.T) {
+	servers := []string{"a.example.org", "b.example.org", "c.example.org", "d.example.org"}
+	h := newHarness(t, servers...)
+	h.mock.SetupSuccessfulServer("a.example.org", 0, 2)
+	h.mock.SetupSuccessfulServer("b.example.org", time.Millisecond, 2)
+	h.mock.SetupSuccessfulServer("c.example.org", 300*time.Millisecond, 2)
+	h.mock.SetupSuccessfulServer("d.example.org", 301*time.Millisecond, 2)
+
+	h.cycle()
+
+	assert.Equal(t, 0.0, h.mustValue("ntp_consensus_majority", nil))
+	assert.Equal(t, 4.0, h.mustValue("ntp_consensus_servers", nil))
+	assert.Equal(t, 2.0, h.mustValue("ntp_consensus_truechimers", nil), "a 2 against 2 split is not 4 of 4")
+	h.absent("ntp_consensus_offset_seconds", nil)
+	h.absent("ntp_falseticker", nil)
+	h.absent("ntp_offset_from_consensus_seconds", nil)
 }
 
 func TestExporter_ConsensusDisabled(t *testing.T) {

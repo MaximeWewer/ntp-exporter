@@ -49,6 +49,7 @@ type descs struct {
 	consensusOffset     *prometheus.Desc
 	consensusServers    *prometheus.Desc
 	consensusChimers    *prometheus.Desc
+	consensusMajority   *prometheus.Desc
 	offsetFromConsensus *prometheus.Desc
 	falseticker         *prometheus.Desc
 
@@ -127,9 +128,10 @@ func newDescs(namespace, subsystem string) *descs {
 		probeSuccess:  d(subsystem, "probe_success", "Whether the /probe request got a valid time measurement from the target (1) or not (0)"),
 		probeDuration: d(subsystem, "probe_duration_seconds", "Duration of the /probe request burst in seconds"),
 
-		consensusOffset:     d(subsystem, "consensus_offset_seconds", "Offset of the local clock against the consensus of the servers (median of the truechimers) in seconds"),
+		consensusOffset:     d(subsystem, "consensus_offset_seconds", "Offset of the local clock against the consensus of the servers (truechimers weighted by 1/root distance) in seconds, only with a majority"),
 		consensusServers:    d(subsystem, "consensus_servers", "Number of valid servers taking part in the consensus"),
-		consensusChimers:    d(subsystem, "consensus_truechimers", "Number of servers agreeing with the consensus"),
+		consensusChimers:    d(subsystem, "consensus_truechimers", "Number of servers agreeing with the consensus; without majority, the largest number of servers agreeing with each other"),
+		consensusMajority:   d(subsystem, "consensus_majority", "1 when more than half of the servers agree, so that the consensus offset and the falsetickers are meaningful"),
 		offsetFromConsensus: d(subsystem, "offset_from_consensus_seconds", "Offset of the server against the consensus in seconds, independent of the local clock", server...),
 		falseticker:         d(subsystem, "falseticker", "Whether the server correctness interval misses the majority intersection (1) or not (0)", server...),
 
@@ -174,7 +176,7 @@ func (d *descs) all() []*prometheus.Desc {
 		d.rootDelay, d.rootDispersion, d.rootDistance, d.precision, d.leapIndicator,
 		d.jitter, d.offsetStdDev, d.rttStdDev, d.samples, d.packetLoss,
 		d.responseValid, d.ntsKESuccess, d.ntsCertExpiry,
-		d.consensusOffset, d.consensusServers, d.consensusChimers, d.offsetFromConsensus, d.falseticker,
+		d.consensusOffset, d.consensusServers, d.consensusChimers, d.consensusMajority, d.offsetFromConsensus, d.falseticker,
 		d.poolActive, d.poolTotal, d.poolDNS, d.poolOffset,
 		d.kernelSyncStatus, d.kernelState, d.kernelOffset, d.kernelFrequency,
 		d.kernelMaxError, d.kernelEstError, d.kernelTAI, d.kernelBoundViolation,

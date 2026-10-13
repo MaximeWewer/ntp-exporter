@@ -390,17 +390,41 @@
     },
     {
       "type": "stat",
-      "title": "Truechimers",
-      "description": "Servers agreeing with the consensus.",
+      "title": "Consensus majority",
+      "description": "Whether more than half of the servers agree (RFC 5905 selection), and how many. Without majority, the consensus offset and the falsetickers are not computed.",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_consensus_truechimers",
-          "legendFormat": "",
+          "expr": "ntp_consensus_majority",
+          "legendFormat": "majority",
           "refId": "A",
+          "format": "time_series",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "ntp_consensus_truechimers",
+          "legendFormat": "agree",
+          "refId": "B",
+          "format": "time_series",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "ntp_consensus_servers",
+          "legendFormat": "servers",
+          "refId": "C",
           "format": "time_series",
           "instant": true,
           "range": false
@@ -414,13 +438,64 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "blue",
                 "value": null
               }
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "majority"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "no",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "yes",
+                        "color": "green",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "reduceOptions": {
@@ -432,7 +507,7 @@
         },
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "auto"
+        "textMode": "value_and_name"
       },
       "id": 7,
       "gridPos": {
