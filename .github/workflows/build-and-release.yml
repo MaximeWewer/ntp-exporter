@@ -13,9 +13,14 @@ on:
         required: false
         type: string
 
+# Each job declares the permissions it needs
 permissions:
-  contents: write
-  packages: write
+  contents: read
+
+# One release at a time: the release index is computed from the existing tags
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -46,6 +51,9 @@ jobs:
       is_prerelease: ${{ steps.get_version.outputs.is_prerelease }}
       image_name_lower: ${{ steps.lowercase.outputs.image_name_lower }}
       repository_owner_lower: ${{ steps.lowercase.outputs.repository_owner_lower }}
+      build_date: ${{ steps.build_date.outputs.build_date }}
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -121,6 +129,13 @@ jobs:
 
           echo "::notice::ntp-exporter ${VERSION} (tag ${TAG})"
 
+      # Commit date rather than the current date: rebuilding a commit gives
+      # the same binaries and images
+      - name: Get build date
+        id: build_date
+        run: |
+          echo "build_date=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
   # =============================================================================
   # Job 2: Build Multi-Architecture Binaries
   # =============================================================================
@@ -149,6 +164,8 @@ jobs:
             goarch: amd64
           - goos: windows
             goarch: arm64
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -182,7 +199,7 @@ jobs:
             -ldflags="-w -s \
               -X 'main.version=${{ needs.prepare.outputs.version }}' \
               -X 'main.commit=${GITHUB_SHA}' \
-              -X 'main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
+              -X 'main.buildDate=${{ needs.prepare.outputs.build_date }}'" \
             -trimpath \
             -o "${BINARY_NAME}" \
             ./cmd/ntp-exporter
@@ -192,7 +209,6 @@ jobs:
       - name: Generate checksums
         run: |
           sha256sum "${BINARY_NAME}" > "${BINARY_NAME}.sha256"
-          md5sum "${BINARY_NAME}" > "${BINARY_NAME}.md5"
 
       - name: Verify binary (Linux only)
         if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
@@ -208,7 +224,6 @@ jobs:
           path: |
             ntp-exporter-*
             *.sha256
-            *.md5
           retention-days: 5
 
   # =============================================================================
@@ -284,7 +299,7 @@ jobs:
           build-args: |
             VERSION=${{ needs.prepare.outputs.version }}
             COMMIT=${{ github.sha }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_DATE=${{ needs.prepare.outputs.build_date }}
           tags: ${{ steps.meta.outputs.tags }}
           annotations: ${{ steps.meta.outputs.annotations }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -362,6 +377,9 @@ jobs:
     name: Package Helm Chart
     runs-on: ubuntu-latest
     needs: [prepare, create-multiarch-manifest]
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -416,6 +434,8 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [prepare, build-binaries, create-multiarch-manifest, build-helm]
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -443,8 +463,10 @@ jobs:
 
       - name: Generate combined checksums file
         run: |
+          # Binaries only, not their individual checksum files
           cd binaries
-          sha256sum ntp-exporter-* > ../SHA256SUMS.txt
+          find . -maxdepth 1 -type f -name 'ntp-exporter-*' ! -name '*.sha256' -printf '%f\n' | sort |
+            xargs sha256sum > ../SHA256SUMS.txt
           cd ..
 
       - name: Generate release notes
@@ -456,7 +478,7 @@ jobs:
 
           # Binary list, built from the downloaded artifacts so that it follows
           # the build matrix: ntp-exporter-OS-ARCH[vARM][.exe]
-          BINARIES=$(find binaries -maxdepth 1 -type f -name 'ntp-exporter-*' ! -name '*.sha256' ! -name '*.md5' -printf '%f\n' | sort |
+          BINARIES=$(find binaries -maxdepth 1 -type f -name 'ntp-exporter-*' ! -name '*.sha256' -printf '%f\n' | sort |
             sed -E 's/^(ntp-exporter-([a-z]+)-([a-z0-9]+)(\.exe)?)$/- `\1` (\2\/\3)/; s/\/armv([0-9]+)\)$/\/arm\/v\1)/')
 
           # Generate changelog
@@ -526,6 +548,8 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
+          # On workflow_dispatch the tag is created on the commit that was built
+          target_commitish: ${{ github.sha }}
           name: Release ${{ needs.prepare.outputs.version }}
           body_path: release_notes.md
           draft: false
@@ -577,6 +601,9 @@ jobs:
     name: Verify Release
     runs-on: ubuntu-latest
     needs: [prepare, create-release]
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Verify Docker image
         run: |
