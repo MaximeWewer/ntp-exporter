@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -99,9 +100,9 @@ func TestLoadFromEnvVarsOnly_Defaults(t *testing.T) {
 	// Clear environment
 	os.Unsetenv("NTP_EXPORTER_ADDRESS")
 	os.Unsetenv("NTP_EXPORTER_PORT")
-	os.Unsetenv("NTP_SERVERS")
-	os.Unsetenv("LOG_LEVEL")
-	t.Setenv("NTP_SERVERS", "time.example.org")
+	os.Unsetenv("NTP_EXPORTER_SERVERS")
+	os.Unsetenv("NTP_EXPORTER_LOG_LEVEL")
+	t.Setenv("NTP_EXPORTER_SERVERS", "time.example.org")
 
 	cfg, err := LoadFromEnvVarsOnly()
 
@@ -117,14 +118,14 @@ func TestLoadFromEnvVarsOnly_WithOverrides(t *testing.T) {
 	// Set environment variables
 	os.Setenv("NTP_EXPORTER_ADDRESS", "192.168.1.1")
 	os.Setenv("NTP_EXPORTER_PORT", "8080")
-	os.Setenv("NTP_SERVERS", "time.google.com,time.cloudflare.com")
-	os.Setenv("LOG_LEVEL", "debug")
+	os.Setenv("NTP_EXPORTER_SERVERS", "time.google.com,time.cloudflare.com")
+	os.Setenv("NTP_EXPORTER_LOG_LEVEL", "debug")
 
 	defer func() {
 		os.Unsetenv("NTP_EXPORTER_ADDRESS")
 		os.Unsetenv("NTP_EXPORTER_PORT")
-		os.Unsetenv("NTP_SERVERS")
-		os.Unsetenv("LOG_LEVEL")
+		os.Unsetenv("NTP_EXPORTER_SERVERS")
+		os.Unsetenv("NTP_EXPORTER_LOG_LEVEL")
 	}()
 
 	cfg, err := LoadFromEnvVarsOnly()
@@ -194,8 +195,8 @@ func TestParseCommaSeparated(t *testing.T) {
 }
 
 func TestLoadFromEnvVarsOnly_WithServersWithSpaces(t *testing.T) {
-	os.Setenv("NTP_SERVERS", " pool.ntp.org , time.google.com , time.cloudflare.com ")
-	defer os.Unsetenv("NTP_SERVERS")
+	os.Setenv("NTP_EXPORTER_SERVERS", " pool.ntp.org , time.google.com , time.cloudflare.com ")
+	defer os.Unsetenv("NTP_EXPORTER_SERVERS")
 
 	cfg, err := LoadFromEnvVarsOnly()
 
@@ -228,13 +229,13 @@ logging:
 
 	// Set environment overrides
 	os.Setenv("NTP_EXPORTER_PORT", "8080")
-	os.Setenv("NTP_KERNEL_ENABLED", "true")
-	os.Setenv("LOG_LEVEL", "debug")
+	os.Setenv("NTP_EXPORTER_KERNEL_ENABLED", "true")
+	os.Setenv("NTP_EXPORTER_LOG_LEVEL", "debug")
 
 	defer func() {
 		os.Unsetenv("NTP_EXPORTER_PORT")
-		os.Unsetenv("NTP_KERNEL_ENABLED")
-		os.Unsetenv("LOG_LEVEL")
+		os.Unsetenv("NTP_EXPORTER_KERNEL_ENABLED")
+		os.Unsetenv("NTP_EXPORTER_LOG_LEVEL")
 	}()
 
 	cfg, err := LoadFromYamlWithEnvOverrides(configFile)
@@ -275,8 +276,8 @@ logging:
 }
 
 func BenchmarkLoadFromEnvVarsOnly(b *testing.B) {
-	os.Setenv("NTP_SERVERS", "pool.ntp.org,time.google.com")
-	defer os.Unsetenv("NTP_SERVERS")
+	os.Setenv("NTP_EXPORTER_SERVERS", "pool.ntp.org,time.google.com")
+	defer os.Unsetenv("NTP_EXPORTER_SERVERS")
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -310,16 +311,16 @@ func TestLoadFromYamlFile_UnknownKeyRejected(t *testing.T) {
 }
 
 func TestLoadFromEnvVarsOnly_InvalidValueIsFatal(t *testing.T) {
-	t.Setenv("NTP_TIMEOUT", "abc")
+	t.Setenv("NTP_EXPORTER_TIMEOUT", "abc")
 
 	cfg, err := LoadFromEnvVarsOnly()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "NTP_TIMEOUT")
+	assert.Contains(t, err.Error(), "NTP_EXPORTER_TIMEOUT")
 	assert.Nil(t, cfg)
 }
 
 func TestLoadFromEnvVarsOnly_Pools(t *testing.T) {
-	t.Setenv("NTP_POOLS", "pool.ntp.org, europe.pool.ntp.org:3")
+	t.Setenv("NTP_EXPORTER_POOLS", "pool.ntp.org, europe.pool.ntp.org:3")
 
 	cfg, err := LoadFromEnvVarsOnly()
 	require.NoError(t, err)
@@ -330,11 +331,11 @@ func TestLoadFromEnvVarsOnly_Pools(t *testing.T) {
 }
 
 func TestLoadFromEnvVarsOnly_InvalidPools(t *testing.T) {
-	t.Setenv("NTP_POOLS", "pool.ntp.org:all:x")
+	t.Setenv("NTP_EXPORTER_POOLS", "pool.ntp.org:all:x")
 
 	_, err := LoadFromEnvVarsOnly()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "NTP_POOLS")
+	assert.Contains(t, err.Error(), "NTP_EXPORTER_POOLS")
 }
 
 func TestLoadFromYamlFile_PoolDefaults(t *testing.T) {
@@ -353,8 +354,8 @@ func TestConsensusEnabled(t *testing.T) {
 	cfg.Mode = ModeAgent
 	assert.False(t, cfg.ConsensusEnabled(), "agent mode")
 
-	t.Setenv("NTP_SERVERS", "a.example.org")
-	t.Setenv("NTP_CONSENSUS_ENABLED", "false")
+	t.Setenv("NTP_EXPORTER_SERVERS", "a.example.org")
+	t.Setenv("NTP_EXPORTER_CONSENSUS_ENABLED", "false")
 	envCfg, err := LoadFromEnvVarsOnly()
 	require.NoError(t, err)
 	require.NotNil(t, envCfg.NTP.Consensus.Enabled)
@@ -362,15 +363,15 @@ func TestConsensusEnabled(t *testing.T) {
 }
 
 func TestLoadFromEnvVarsOnly_MetricsLabels(t *testing.T) {
-	t.Setenv("NTP_SERVERS", "time.example.org")
-	t.Setenv("METRICS_LABELS", "site=par1, env = prod")
+	t.Setenv("NTP_EXPORTER_SERVERS", "time.example.org")
+	t.Setenv("NTP_EXPORTER_METRICS_LABELS", "site=par1, env = prod")
 	cfg, err := LoadFromEnvVarsOnly()
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"site": "par1", "env": "prod"}, cfg.Metrics.Labels)
 
-	t.Setenv("METRICS_LABELS", "broken")
+	t.Setenv("NTP_EXPORTER_METRICS_LABELS", "broken")
 	_, err = LoadFromEnvVarsOnly()
-	assert.ErrorContains(t, err, "METRICS_LABELS")
+	assert.ErrorContains(t, err, "NTP_EXPORTER_METRICS_LABELS")
 }
 
 func TestValidate_DNSCacheTTL(t *testing.T) {
@@ -381,7 +382,7 @@ func TestValidate_DNSCacheTTL(t *testing.T) {
 }
 
 func TestLoadFromEnvVarsOnly_IPFamily(t *testing.T) {
-	t.Setenv("NTP_SERVERS", "time.example.org")
+	t.Setenv("NTP_EXPORTER_SERVERS", "time.example.org")
 	cfg, err := LoadFromEnvVarsOnly()
 	if err != nil {
 		t.Fatal(err)
@@ -390,18 +391,18 @@ func TestLoadFromEnvVarsOnly_IPFamily(t *testing.T) {
 		t.Errorf("default ip_family must be auto, got %q", cfg.NTP.IPFamily)
 	}
 
-	t.Setenv("NTP_IP_FAMILY", "ipv6")
+	t.Setenv("NTP_EXPORTER_IP_FAMILY", "ipv6")
 	cfg, err = LoadFromEnvVarsOnly()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.NTP.IPFamily != IPFamilyIPv6 {
-		t.Errorf("NTP_IP_FAMILY not applied, got %q", cfg.NTP.IPFamily)
+		t.Errorf("NTP_EXPORTER_IP_FAMILY not applied, got %q", cfg.NTP.IPFamily)
 	}
 
-	t.Setenv("NTP_IP_FAMILY", "both")
+	t.Setenv("NTP_EXPORTER_IP_FAMILY", "both")
 	if _, err := LoadFromEnvVarsOnly(); err == nil {
-		t.Error("invalid NTP_IP_FAMILY must fail")
+		t.Error("invalid NTP_EXPORTER_IP_FAMILY must fail")
 	}
 }
 
@@ -409,7 +410,7 @@ func TestLoadFromEnvVarsOnly_NoImplicitServer(t *testing.T) {
 	_, err := LoadFromEnvVarsOnly()
 	assert.ErrorContains(t, err, "nothing to probe", "no server is queried unless configured")
 
-	t.Setenv("PROBE_ENDPOINT_ENABLED", "true")
+	t.Setenv("NTP_EXPORTER_PROBE_ENDPOINT_ENABLED", "true")
 	cfg, err := LoadFromEnvVarsOnly()
 	require.NoError(t, err)
 	assert.Empty(t, cfg.NTP.Servers, "only /probe requests")
@@ -417,7 +418,7 @@ func TestLoadFromEnvVarsOnly_NoImplicitServer(t *testing.T) {
 
 func TestLoadFromEnvVarsOnly_Chrony(t *testing.T) {
 	t.Setenv("NTP_EXPORTER_MODE", "agent")
-	t.Setenv("NTP_CHRONY_ENABLED", "true")
+	t.Setenv("NTP_EXPORTER_CHRONY_ENABLED", "true")
 	cfg, err := LoadFromEnvVarsOnly()
 	if err != nil {
 		t.Fatal(err)
@@ -426,12 +427,45 @@ func TestLoadFromEnvVarsOnly_Chrony(t *testing.T) {
 		t.Errorf("unexpected chrony config %+v", cfg.NTP.Chrony)
 	}
 
-	t.Setenv("NTP_CHRONY_ADDRESS", "unix:///run/chrony/chronyd.sock")
+	t.Setenv("NTP_EXPORTER_CHRONY_ADDRESS", "unix:///run/chrony/chronyd.sock")
 	cfg, err = LoadFromEnvVarsOnly()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.NTP.Chrony.Address != "unix:///run/chrony/chronyd.sock" {
-		t.Errorf("NTP_CHRONY_ADDRESS not applied, got %q", cfg.NTP.Chrony.Address)
+		t.Errorf("NTP_EXPORTER_CHRONY_ADDRESS not applied, got %q", cfg.NTP.Chrony.Address)
 	}
+}
+
+func TestLoad_LegacyNamesAreAcceptedWithAWarning(t *testing.T) {
+	t.Setenv("NTP_SERVERS", "a.example.org")
+	t.Setenv("LOG_LEVEL", "debug")
+	t.Setenv("NTP_EXPORTER_TIMEOUT", "3s")
+	t.Setenv("NTP_TIMEOUT", "9s")
+
+	cfg, err := LoadFromEnvVarsOnly()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.example.org"}, cfg.NTP.Servers)
+	assert.Equal(t, "debug", cfg.Logging.Level)
+	assert.Equal(t, 3*time.Second, cfg.NTP.Timeout, "the prefixed name wins")
+	warnings := Warnings(cfg)
+	assert.Contains(t, warnings, "NTP_SERVERS is deprecated: use NTP_EXPORTER_SERVERS")
+	assert.Contains(t, warnings, "LOG_LEVEL is deprecated: use NTP_EXPORTER_LOG_LEVEL")
+	assert.NotContains(t, strings.Join(warnings, "\n"), "NTP_TIMEOUT")
+
+	_, err = func() (*Config, error) {
+		t.Setenv("NTP_SAMPLES", "x")
+		return LoadFromEnvVarsOnly()
+	}()
+	assert.ErrorContains(t, err, "NTP_SAMPLES", "errors name the variable actually set")
+}
+
+func TestLoad_LegacyScrapeInterval(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("mode: probe\nntp:\n  servers: [a.example.org]\n  scrape_interval: 2m\n"), 0o600))
+
+	cfg, err := LoadFromYamlWithEnvOverrides(path)
+	require.NoError(t, err)
+	assert.Equal(t, 2*time.Minute, cfg.NTP.CollectionInterval)
+	assert.Contains(t, Warnings(cfg), "ntp.scrape_interval is deprecated: use ntp.collection_interval")
 }

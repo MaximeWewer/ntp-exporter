@@ -60,83 +60,44 @@ nameOverride: ""
 fullnameOverride: ""
 
 # =============================================================================
-# NTP EXPORTER CONFIGURATION
+# EXPORTER CONFIGURATION - rendered as is in the YAML file of the exporter
+# (deployments/docker/config-example.yaml documents every key). The mode, the
+# kernel and chrony options and /probe come from the values above.
 # =============================================================================
 config:
-  # ---------------------------------------------------------------------------
-  # SERVER - Prometheus HTTP server configuration
-  # ---------------------------------------------------------------------------
-  metricsPort: 9559
-  address: "0.0.0.0"
-
-  # Timeouts
-  readTimeout: 10s
-  writeTimeout: 10s
-
-
-  # ---------------------------------------------------------------------------
-  # NTP - NTP client configuration
-  # ---------------------------------------------------------------------------
-  # List of NTP servers to query
-  # In agent mode: at most 2 reference servers, preferably inside the site
-  ntpServers:
+  server:
+    address: "0.0.0.0"
+    port: 9559
+    read_timeout: 10s
+    write_timeout: 10s
+  ntp:
+    # In agent mode: at most 2 reference servers, preferably inside the site
+    servers:
     - pool.ntp.org
-
-  # NTP query timeout
-  ntpTimeout: 5s
-
-  # NTP protocol version (2, 3, 4)
-  ntpVersion: 4
-
-  # Number of queries per server and per cycle (lowest delay sample is kept)
-  samplesPerServer: 4
-
-  # Delay between two queries of a burst to the same server
-  sampleSpacing: 2s
-
-  # Maximum number of concurrent queries
-  maxConcurrency: 10
-
-  # Address family: auto (IPv6 or IPv4, whichever answers), ipv4 or ipv6
-  ipFamily: auto
-
-  # Interval between two collection cycles (60s or more for the public pool)
-  scrapeInterval: 60s
-
-
-  # Responses whose root distance exceeds this value are invalid (MAXDIST)
-  maxRootDistance: 1.5s
-
-  # ---------------------------------------------------------------------------
-  # KISS-O'-DEATH - RATE doubles the polling interval, DENY/RSTR suspends
-  # ---------------------------------------------------------------------------
-  kod:
-    maxBackoff: 1024s
-    suspendDuration: 1h
-
-  # ---------------------------------------------------------------------------
-  # CONSENSUS - Falseticker detection (default: enabled with 3+ servers/pools)
-  # ---------------------------------------------------------------------------
-  consensus: {}
-  #  enabled: true
-
-  # ---------------------------------------------------------------------------
-  # DNS CACHE - Cache of pool DNS answers
-  # ---------------------------------------------------------------------------
-  dnsCache:
-    minTTL: 5m
-    maxTTL: 60m
-
-  # ---------------------------------------------------------------------------
-  # LOGGING - Log configuration
-  # ---------------------------------------------------------------------------
+    # Probe mode only: the first max_servers addresses of each DNS answer
+    pools: []
+    #  - name: europe.pool.ntp.org
+    #    max_servers: 4
+    timeout: 5s
+    version: 4
+    samples_per_server: 4
+    sample_spacing: 2s
+    max_concurrency: 10
+    ip_family: auto
+    collection_interval: 60s
+    max_root_distance: 1.5s
+    kod:
+      max_backoff: 1024s
+      suspend_duration: 1h
+    # Probe mode: enabled by default
+    consensus: {}
+    #  enabled: true
+    dns_cache:
+      min_ttl: 5m
+      max_ttl: 60m
   logging:
     level: info
     format: json
-
-  # ---------------------------------------------------------------------------
-  # METRICS - Prometheus metrics configuration
-  # ---------------------------------------------------------------------------
   metrics:
     labels: {}
 
@@ -345,4 +306,3 @@ terminationGracePeriodSeconds: 30
 # See separate files for pre-configured modes:
 # - values-agent.yaml: Agent mode (DaemonSet, optional kernel state)
 # - values-probe.yaml: Probe mode (Deployment, centralized monitoring)
-# - values-with-yaml-config.yaml: Configuration via YAML ConfigMap

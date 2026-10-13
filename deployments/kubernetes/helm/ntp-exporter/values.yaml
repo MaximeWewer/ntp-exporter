@@ -71,32 +71,26 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-# NTP Exporter configuration
+# Exporter configuration, rendered as is in its YAML file (see
+# deployments/docker/config-example.yaml for every key). The mode, the kernel
+# and chrony options and /probe are set by the values above.
 config:
-  # NTP servers to query
-  # Servers to query. Agent mode: at most 2 reference servers, preferably
-  # inside the site (every node queries them), or none to read the kernel and
-  # chronyd only. Probe mode: the servers to monitor (3 or more for the
-  # consensus).
-  ntpServers: []
-
-  # Port to expose metrics on
-  metricsPort: 9559
-
-  # Interval between two collection cycles (64s or more for the public NTP pool)
-  scrapeInterval: 60s
-
-  # NTP query timeout
-  ntpTimeout: 5s
-
-
-  # Responses whose root distance exceeds this value are invalid (MAXDIST)
-  maxRootDistance: 1.5s
-
-  # Logging configuration
+  server:
+    port: 9559
+  ntp:
+    # Agent mode: at most 2 reference servers, preferably inside the site
+    # (every node queries them), or none to read the kernel and chronyd only.
+    # Probe mode: the servers to monitor (3 or more for the consensus). Do not
+    # mix servers that smear leap seconds with servers that step them.
+    servers: []
+    # Interval between two collection cycles (60s or more for the public pool)
+    collection_interval: 60s
+    timeout: 5s
   logging:
     level: info
     format: json
+  metrics:
+    labels: {}
 
 # Prometheus web configuration (TLS, basic auth), see
 # https://prometheus.io/docs/prometheus/latest/configuration/https/

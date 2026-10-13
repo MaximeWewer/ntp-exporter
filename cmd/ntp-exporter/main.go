@@ -225,11 +225,11 @@ func runCollectionLoop(
 	// Initial collection
 	runCycle()
 
-	ticker := time.NewTicker(cfg.NTP.ScrapeInterval)
+	ticker := time.NewTicker(cfg.NTP.CollectionInterval)
 	defer ticker.Stop()
 
 	logger.SafeInfo("main", "Collection loop started", map[string]interface{}{
-		"scrape_interval": cfg.NTP.ScrapeInterval,
+		"collection_interval": cfg.NTP.CollectionInterval,
 	})
 
 	for {

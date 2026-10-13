@@ -14,10 +14,10 @@ PROBE MODE: a Deployment monitors the NTP servers.
 
   kubectl -n {{ .Release.Namespace }} get deployment {{ include "ntp-exporter.fullname" . }}
 {{- end }}
-{{- if .Values.config.ntpServers }}
+{{- if dig "ntp" "servers" list .Values.config }}
 
 Servers:
-{{- range .Values.config.ntpServers }}
+{{- range dig "ntp" "servers" list .Values.config }}
   - {{ . }}
 {{- end }}
 {{- end }}
@@ -27,8 +27,8 @@ Servers:
 {{- end }}
 
 Metrics:
-  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ntp-exporter.fullname" . }} {{ .Values.config.metricsPort }}
-  curl -s localhost:{{ .Values.config.metricsPort }}/metrics | grep '^ntp_'
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ntp-exporter.fullname" . }} {{ include "ntp-exporter.port" . }}
+  curl -s localhost:{{ include "ntp-exporter.port" . }}/metrics | grep '^ntp_'
 {{- if .Values.serviceMonitor.enabled }}
 
 A ServiceMonitor scrapes the pods every {{ .Values.serviceMonitor.interval }}.

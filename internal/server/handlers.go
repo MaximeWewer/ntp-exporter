@@ -72,7 +72,7 @@ var indexTemplate = template.Must(template.New("index").Parse(`<!DOCTYPE html>
 <li><a href="/probe?target=time.cloudflare.com">/probe?target=</a> - Multi-target probe, driven by Prometheus relabeling</li>
 {{- end}}
 </ul>
-<p>{{len .NTP.Servers}} server(s), {{len .NTP.Pools}} pool(s), {{.NTP.SamplesPerServer}} sample(s) per server every {{.NTP.ScrapeInterval}}</p>
+<p>{{len .NTP.Servers}} server(s), {{len .NTP.Pools}} pool(s), {{.NTP.SamplesPerServer}} sample(s) per server every {{.NTP.CollectionInterval}}</p>
 </body>
 </html>
 `))

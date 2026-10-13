@@ -151,8 +151,8 @@ Validate mode value
 {{- if and (ne .Values.mode "agent") (ne .Values.mode "probe") -}}
 {{- fail "mode must be 'agent' or 'probe' (the former 'hybrid' mode is mode=agent, whose kernel option is enabled by default)" -}}
 {{- end -}}
-{{- if and (eq .Values.mode "probe") (not .Values.config.ntpServers) (not (include "ntp-exporter.probeEndpointEnabled" .)) (not (and .Values.configYaml .Values.configYaml.enabled)) -}}
-{{- fail "mode=probe has nothing to monitor: set config.ntpServers or probeEndpoint.enabled=true" -}}
+{{- if and (eq .Values.mode "probe") (not (dig "ntp" "servers" list .Values.config)) (not (dig "ntp" "pools" list .Values.config)) (not (include "ntp-exporter.probeEndpointEnabled" .)) -}}
+{{- fail "mode=probe has nothing to monitor: set config.ntp.servers, config.ntp.pools or probeEndpoint.enabled=true" -}}
 {{- end -}}
 {{- if and (eq .Values.mode "probe") (include "ntp-exporter.kernelEnabled" .) -}}
 {{- fail "kernel.enabled only makes sense in agent mode: the kernel state describes the node the agent runs on" -}}
@@ -181,7 +181,7 @@ already scrapes the pods (both would collect every series twice)
 {{- $annotations := dict -}}
 {{- if and .Values.scrapeAnnotations (not .Values.serviceMonitor.enabled) -}}
 {{- $_ := set $annotations "prometheus.io/scrape" "true" -}}
-{{- $_ := set $annotations "prometheus.io/port" (toString (.Values.config.metricsPort | default 9559)) -}}
+{{- $_ := set $annotations "prometheus.io/port" (toString (include "ntp-exporter.port" .)) -}}
 {{- $_ := set $annotations "prometheus.io/path" "/metrics" -}}
 {{- end -}}
 {{- with .Values.podAnnotations -}}
@@ -202,4 +202,11 @@ ClusterFirstWithHostNet
 {{- else -}}
 {{ .Values.dnsPolicy }}
 {{- end -}}
+{{- end -}}
+
+{{/*
+Listen port of the exporter
+*/}}
+{{- define "ntp-exporter.port" -}}
+{{ dig "server" "port" 9559 .Values.config }}
 {{- end -}}

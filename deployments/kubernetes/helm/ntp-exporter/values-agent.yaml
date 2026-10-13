@@ -51,16 +51,13 @@ serviceMonitor:
 networkPolicy:
   enabled: true
 
-# NTP configuration optimized for agent mode
+# Exporter configuration (YAML file of the exporter, see config-example.yaml)
 config:
-  # At most 2 reference servers, preferably inside the site: every node
-  # queries them. Without server, the agent reads the kernel and chronyd only.
-  # Through the pod network, the offset to a server is only accurate to about
-  # half the round-trip delay; chronyd knows the node offset much better.
-  ntpServers: []
-  #  - ntp1.example.internal
-  metricsPort: 9559
-  scrapeInterval: 60s
-  ntpTimeout: 5s
-  logging:
-    level: info
+  ntp:
+    # At most 2 reference servers, preferably inside the site: every node
+    # queries them. Without server, the agent reads the kernel and chronyd only.
+    # Through the pod network, the offset to a server is only accurate to about
+    # half the round-trip delay; chronyd knows the node offset much better.
+    servers: []
+    #  - ntp1.example.internal
+    timeout: 2s

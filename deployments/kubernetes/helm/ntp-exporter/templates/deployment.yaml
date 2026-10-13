@@ -59,7 +59,7 @@ spec:
         {{- end }}
         ports:
         - name: metrics
-          containerPort: {{ .Values.config.metricsPort }}
+          containerPort: {{ include "ntp-exporter.port" . }}
           protocol: TCP
         {{- with .Values.livenessProbe }}
         livenessProbe:

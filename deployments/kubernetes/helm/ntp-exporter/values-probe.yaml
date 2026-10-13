@@ -55,7 +55,7 @@ networkPolicy:
   enabled: true
 
 # /probe endpoint: targets listed in a Prometheus Operator Probe resource are
-# measured on demand. Empty config.ntpServers to let Prometheus drive every
+# measured on demand. Empty config.ntp.servers to let Prometheus drive every
 # target.
 probeEndpoint:
   enabled: true
@@ -66,22 +66,18 @@ probeEndpoint:
     targets: []
     #  - ptbtime1.ptb.de
 
-# NTP configuration optimized for probe mode
+# Exporter configuration (YAML file of the exporter, see config-example.yaml)
 config:
-  # Servers that do not smear leap seconds: never mix them with smearing ones
-  # (time.google.com, time.cloudflare.com...), they differ by up to 0.5s around
-  # a leap second and the consensus would flag them. 3 servers or more enable
-  # the consensus.
-  ntpServers:
-  - ptbtime1.ptb.de
-  - ptbtime2.ptb.de
-  - ptbtime3.ptb.de
-  metricsPort: 9559
-  scrapeInterval: 60s
-  ntpTimeout: 2s
-  logging:
-    level: info
-    format: json
+  ntp:
+    # Servers that do not smear leap seconds: never mix them with smearing ones
+    # (time.google.com, time.cloudflare.com...), they differ by up to 0.5s around
+    # a leap second and the consensus would flag them. 3 servers or more enable
+    # the consensus.
+    servers:
+    - ptbtime1.ptb.de
+    - ptbtime2.ptb.de
+    - ptbtime3.ptb.de
+    timeout: 2s
 
 # Higher priority for centralized probes
 priorityClassName: ""

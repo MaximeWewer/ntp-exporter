@@ -20,8 +20,8 @@ const DefaultMaxRootDistance = 1500 * time.Millisecond
 
 // Bounds for the collection interval
 const (
-	MinScrapeInterval = 5 * time.Second
-	MaxScrapeInterval = 1 * time.Hour
+	MinCollectionInterval = 5 * time.Second
+	MaxCollectionInterval = 1 * time.Hour
 )
 
 // Address families accepted by ip_family
@@ -203,8 +203,8 @@ func validateNTP(cfg *NTPConfig, noTargetNeeded bool) error {
 		return errors.New("samples_per_server must be between 1 and 20, got " + strconv.Itoa(cfg.SamplesPerServer))
 	}
 
-	if cfg.ScrapeInterval < MinScrapeInterval || cfg.ScrapeInterval > MaxScrapeInterval {
-		return errors.New("scrape_interval must be between " + MinScrapeInterval.String() + " and " + MaxScrapeInterval.String() + ", got " + cfg.ScrapeInterval.String())
+	if cfg.CollectionInterval < MinCollectionInterval || cfg.CollectionInterval > MaxCollectionInterval {
+		return errors.New("collection_interval must be between " + MinCollectionInterval.String() + " and " + MaxCollectionInterval.String() + ", got " + cfg.CollectionInterval.String())
 	}
 
 	if cfg.SampleSpacing < 0 {
@@ -213,17 +213,17 @@ func validateNTP(cfg *NTPConfig, noTargetNeeded bool) error {
 
 	// A burst must fit in a cycle
 	samples := cfg.SamplesPerServer
-	if time.Duration(samples)*cfg.SampleSpacing >= cfg.ScrapeInterval {
+	if time.Duration(samples)*cfg.SampleSpacing >= cfg.CollectionInterval {
 		return errors.New("samples (" + strconv.Itoa(samples) + ") x sample_spacing (" + cfg.SampleSpacing.String() +
-			") must be shorter than scrape_interval (" + cfg.ScrapeInterval.String() + ")")
+			") must be shorter than collection_interval (" + cfg.CollectionInterval.String() + ")")
 	}
 
 	if cfg.MaxRootDistance < 100*time.Millisecond || cfg.MaxRootDistance > 16*time.Second {
 		return errors.New("max_root_distance must be between 100ms and 16s, got " + cfg.MaxRootDistance.String())
 	}
 
-	if cfg.KoD.MaxBackoff < cfg.ScrapeInterval {
-		return errors.New("kod.max_backoff must be at least scrape_interval, got " + cfg.KoD.MaxBackoff.String())
+	if cfg.KoD.MaxBackoff < cfg.CollectionInterval {
+		return errors.New("kod.max_backoff must be at least collection_interval, got " + cfg.KoD.MaxBackoff.String())
 	}
 
 	if cfg.KoD.SuspendDuration <= 0 {
@@ -321,16 +321,16 @@ const PublicPoolMinInterval = 60 * time.Second
 // Warnings returns non-fatal configuration issues, such as polling the
 // public NTP pool more often than its usage policy allows
 func Warnings(cfg *Config) []string {
-	var warnings []string
-	if cfg.NTP.ScrapeInterval >= PublicPoolMinInterval {
+	warnings := append([]string(nil), cfg.deprecations...)
+	if cfg.NTP.CollectionInterval >= PublicPoolMinInterval {
 		return warnings
 	}
 
 	check := func(host string) {
 		h := strings.ToLower(strings.TrimSuffix(host, "."))
 		if h == "pool.ntp.org" || strings.HasSuffix(h, ".pool.ntp.org") {
-			warnings = append(warnings, host+" is part of the public NTP pool: scrape_interval "+
-				cfg.NTP.ScrapeInterval.String()+" is below the recommended "+PublicPoolMinInterval.String())
+			warnings = append(warnings, host+" is part of the public NTP pool: collection_interval "+
+				cfg.NTP.CollectionInterval.String()+" is below the recommended "+PublicPoolMinInterval.String())
 		}
 	}
 	for _, server := range cfg.NTP.Servers {

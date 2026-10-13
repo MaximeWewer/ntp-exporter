@@ -1,4 +1,31 @@
 {{- include "ntp-exporter.validateMode" . -}}
+{{- /* The exporter configuration is .Values.config, completed with the values
+       the chart drives: /probe and, in agent mode, the kernel and chrony
+       options (the mode itself is passed in NTP_EXPORTER_MODE) */}}
+{{- $config := deepCopy (.Values.config | default dict) -}}
+{{- $probe := dict "enabled" (include "ntp-exporter.probeEndpointEnabled" . | empty | not) -}}
+{{- with .Values.probeEndpoint.allowedTargets }}
+{{- $_ := set $probe "allowed_targets" . -}}
+{{- end }}
+{{- $_ := set $config "probe_endpoint" $probe -}}
+{{- if eq (include "ntp-exporter.mode" .) "agent" }}
+{{- $ntp := deepCopy (get $config "ntp" | default dict) -}}
+{{- /* Unset options are enabled when available: kernel on Linux, chrony
+       when chronyd answers */}}
+{{- $kernel := dict -}}
+{{- if not (kindIs "invalid" .Values.kernel.enabled) }}
+{{- $_ := set $kernel "enabled" .Values.kernel.enabled -}}
+{{- end }}
+{{- $chrony := dict "address" (include "ntp-exporter.chronyAddress" .) -}}
+{{- if .Values.chrony.socketDir }}
+{{- $_ := set $chrony "enabled" true -}}
+{{- else if not (kindIs "invalid" .Values.chrony.enabled) }}
+{{- $_ := set $chrony "enabled" .Values.chrony.enabled -}}
+{{- end }}
+{{- $_ := set $ntp "kernel" $kernel -}}
+{{- $_ := set $ntp "chrony" $chrony -}}
+{{- $_ := set $config "ntp" $ntp -}}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,86 +34,5 @@ metadata:
   labels:
     {{- include "ntp-exporter.labels" . | nindent 4 }}
 data:
-  {{- if and .Values.configYaml .Values.configYaml.enabled .Values.configYaml.content }}
   config.yaml: |
-    {{- .Values.configYaml.content | nindent 4 }}
-  {{- else }}
-  config.yaml: |
-    # NTP Exporter Configuration
-    server:
-      address: {{ .Values.config.address | default "0.0.0.0" | quote }}
-      port: {{ .Values.config.metricsPort | default 9559 }}
-      read_timeout: {{ .Values.config.readTimeout | default "10s" | quote }}
-      write_timeout: {{ .Values.config.writeTimeout | default "10s" | quote }}
-
-    probe_endpoint:
-      enabled: {{ include "ntp-exporter.probeEndpointEnabled" . | empty | not }}
-      {{- with .Values.probeEndpoint.allowedTargets }}
-      allowed_targets:
-      {{- range . }}
-      - {{ . | quote }}
-      {{- end }}
-      {{- end }}
-
-    ntp:
-      servers:
-      {{- range .Values.config.ntpServers }}
-      - {{ . | quote }}
-      {{- end }}
-      timeout: {{ .Values.config.ntpTimeout | default "5s" | quote }}
-      version: {{ .Values.config.ntpVersion | default 4 }}
-      samples_per_server: {{ .Values.config.samplesPerServer | default 4 }}
-      sample_spacing: {{ .Values.config.sampleSpacing | default "2s" | quote }}
-      max_concurrency: {{ .Values.config.maxConcurrency | default 10 }}
-      ip_family: {{ .Values.config.ipFamily | default "auto" | quote }}
-      scrape_interval: {{ .Values.config.scrapeInterval | default "60s" | quote }}
-      max_root_distance: {{ .Values.config.maxRootDistance | default "1.5s" | quote }}
-      {{- if eq (include "ntp-exporter.mode" .) "agent" }}
-      # Unset options are enabled when available: kernel on Linux, chrony
-      # when chronyd answers
-      kernel:
-        {{- if include "ntp-exporter.kernelEnabled" . }}
-        enabled: true
-        {{- else if and .Values.kernel (eq (toString .Values.kernel.enabled) "false") }}
-        enabled: false
-        {{- end }}
-      chrony:
-        {{- if .Values.chrony.socketDir }}
-        enabled: true
-        {{- else if not (kindIs "invalid" .Values.chrony.enabled) }}
-        enabled: {{ .Values.chrony.enabled }}
-        {{- end }}
-        address: {{ include "ntp-exporter.chronyAddress" . | quote }}
-      {{- end }}
-
-      {{- if .Values.config.kod }}
-      kod:
-        max_backoff: {{ .Values.config.kod.maxBackoff | default "1024s" | quote }}
-        suspend_duration: {{ .Values.config.kod.suspendDuration | default "1h" | quote }}
-      {{- end }}
-
-      {{- if and .Values.config.consensus (hasKey .Values.config.consensus "enabled") }}
-      consensus:
-        enabled: {{ .Values.config.consensus.enabled }}
-      {{- end }}
-
-      {{- if .Values.config.dnsCache }}
-      dns_cache:
-        min_ttl: {{ .Values.config.dnsCache.minTTL | default "5m" | quote }}
-        max_ttl: {{ .Values.config.dnsCache.maxTTL | default "60m" | quote }}
-      {{- end }}
-
-    logging:
-      level: {{ .Values.config.logging.level | quote }}
-      format: {{ .Values.config.logging.format | quote }}
-
-    metrics:
-      {{- if .Values.config.metrics }}
-      {{- if .Values.config.metrics.labels }}
-      labels:
-        {{- range $key, $value := .Values.config.metrics.labels }}
-        {{ $key | quote }}: {{ $value | toString | quote }}
-        {{- end }}
-      {{- end }}
-      {{- end }}
-  {{- end }}
+    {{- toYaml $config | nindent 4 }}

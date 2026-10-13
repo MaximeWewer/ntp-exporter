@@ -87,7 +87,7 @@ curl -LO https://github.com/MaximeWewer/ntp-exporter/releases/latest/download/nt
 chmod +x ntp-exporter-linux-amd64
 sudo mv ntp-exporter-linux-amd64 /usr/local/bin/ntp-exporter
 
-NTP_EXPORTER_MODE=probe NTP_SERVERS=ptbtime1.ptb.de,ptbtime2.ptb.de,ptbtime3.ptb.de ntp-exporter
+NTP_EXPORTER_MODE=probe NTP_EXPORTER_SERVERS=ptbtime1.ptb.de,ptbtime2.ptb.de,ptbtime3.ptb.de ntp-exporter
 curl -s localhost:9559/metrics | grep '^ntp_'
 ```
 
@@ -96,7 +96,7 @@ curl -s localhost:9559/metrics | grep '^ntp_'
 ```bash
 docker run -d --name ntp-exporter -p 9559:9559 \
   -e NTP_EXPORTER_MODE=probe \
-  -e NTP_SERVERS=ptbtime1.ptb.de,ptbtime2.ptb.de,ptbtime3.ptb.de \
+  -e NTP_EXPORTER_SERVERS=ptbtime1.ptb.de,ptbtime2.ptb.de,ptbtime3.ptb.de \
   ghcr.io/maximewewer/ntp-exporter:latest
 ```
 
@@ -151,7 +151,7 @@ WantedBy=multi-user.target
 
 ## How a measurement works
 
-Every `scrape_interval` (60 s by default), the exporter runs one **cycle**:
+Every `collection_interval` (60 s by default), the exporter runs one **cycle**:
 
 1. **Targets**: configured servers are resolved once per cycle, so that every
    sample of a burst reaches the same server even behind a round-robin name
@@ -220,7 +220,7 @@ network policy opens it).
 Like blackbox_exporter, `/probe?target=host[:port]` measures one target on
 demand, so that Prometheus drives the targets through relabeling and probe
 replicas hold no target list. The endpoint is disabled by default: enable it
-with `probe_endpoint.enabled: true` (`PROBE_ENDPOINT_ENABLED=true`, Helm
+with `probe_endpoint.enabled: true` (`NTP_EXPORTER_PROBE_ENDPOINT_ENABLED=true`, Helm
 `probeEndpoint.enabled`) and restrict its targets with
 `probe_endpoint.allowed_targets` (see [Security](#security)).
 
@@ -276,7 +276,7 @@ ntp:
   pools:
     - name: europe.pool.ntp.org
       max_servers: 4
-  scrape_interval: 60s
+  collection_interval: 60s
   samples_per_server: 4
   ip_family: auto      # auto, ipv4 or ipv6
   kernel:
@@ -301,36 +301,42 @@ probe_endpoint:
 
 ### Environment variables
 
+Every option of the YAML file has an environment variable, prefixed with
+`NTP_EXPORTER_`. The names used before this prefix (`NTP_SERVERS`,
+`LOG_LEVEL`, `SERVER_READ_TIMEOUT`...) are still accepted for one release and
+logged as deprecated.
+
 | Variable | Default | Description |
 |---|---|---|
 | `NTP_EXPORTER_MODE` | (required) | `probe` or `agent` |
-| `PROBE_ENDPOINT_ENABLED` | `false` | Serve `/probe?target=` |
-| `PROBE_ENDPOINT_ALLOWED_TARGETS` | | Comma-separated CIDR ranges and host name regular expressions `/probe` may reach |
-| `NTP_SERVERS` | (none) | Comma-separated servers (`host`, `host:port` or `nts://host[:port]`); nothing is queried unless configured |
-| `NTP_POOLS` | | Comma-separated pools, `name[:max_servers]`: the first `max_servers` (4) addresses of each DNS answer are queried |
-| `NTP_SCRAPE_INTERVAL` | `60s` | Interval between two cycles (5 s to 1 h) |
-| `NTP_SAMPLES` | `4` | Queries per server and per cycle (1 to 20) |
-| `NTP_SAMPLE_SPACING` | `2s` | Delay between two queries to the same server |
-| `NTP_TIMEOUT` | `5s` | Timeout of one query |
-| `NTP_VERSION` | `4` | NTP protocol version (2 to 4) |
-| `NTP_MAX_CONCURRENCY` | `10` | Servers probed in parallel |
-| `NTP_IP_FAMILY` | `auto` | `auto`, `ipv4` or `ipv6` |
-| `NTP_MAX_ROOT_DISTANCE` | `1.5s` | Responses with a larger root distance are invalid (`reason="root_distance"`), like ntpd's MAXDIST (chrony uses 3 s); 100 ms to 16 s |
-| `NTP_CONSENSUS_ENABLED` | `true` in probe mode | Consensus and falseticker detection, computed as soon as 3 targets (pool members included) answer |
-| `NTP_KOD_MAX_BACKOFF` | `1024s` | Longest polling interval after repeated `RATE` |
-| `NTP_KOD_SUSPEND_DURATION` | `1h` | Suspension after `DENY` or `RSTR` |
-| `NTP_KERNEL_ENABLED` | `false` | Kernel option (agent mode, Linux) |
-| `NTP_CHRONY_ENABLED` | `false` | chrony option (agent mode) |
-| `NTP_CHRONY_ADDRESS` | `udp://127.0.0.1:323` | chronyd command address, or `unix:///run/chrony/chronyd.sock` |
-| `DNS_CACHE_MIN_TTL` / `DNS_CACHE_MAX_TTL` | `5m` / `60m` | Cache of pool DNS answers |
+| `NTP_EXPORTER_PROBE_ENDPOINT_ENABLED` | `false` | Serve `/probe?target=` |
+| `NTP_EXPORTER_PROBE_ENDPOINT_ALLOWED_TARGETS` | | Comma-separated CIDR ranges and host name regular expressions `/probe` may reach |
+| `NTP_EXPORTER_SERVERS` | (none) | Comma-separated servers (`host`, `host:port` or `nts://host[:port]`); nothing is queried unless configured |
+| `NTP_EXPORTER_POOLS` | | Comma-separated pools, `name[:max_servers]`: the first `max_servers` (4) addresses of each DNS answer are queried |
+| `NTP_EXPORTER_COLLECTION_INTERVAL` | `60s` | Interval between two cycles (5 s to 1 h) |
+| `NTP_EXPORTER_SAMPLES_PER_SERVER` | `4` | Queries per server and per cycle (1 to 20) |
+| `NTP_EXPORTER_SAMPLE_SPACING` | `2s` | Delay between two queries to the same server |
+| `NTP_EXPORTER_TIMEOUT` | `5s` | Timeout of one query |
+| `NTP_EXPORTER_NTP_VERSION` | `4` | NTP protocol version (2 to 4) |
+| `NTP_EXPORTER_MAX_CONCURRENCY` | `10` | Servers probed in parallel |
+| `NTP_EXPORTER_IP_FAMILY` | `auto` | `auto`, `ipv4` or `ipv6` |
+| `NTP_EXPORTER_MAX_ROOT_DISTANCE` | `1.5s` | Responses with a larger root distance are invalid (`reason="root_distance"`), like ntpd's MAXDIST (chrony uses 3 s); 100 ms to 16 s |
+| `NTP_EXPORTER_CONSENSUS_ENABLED` | `true` in probe mode | Consensus and falseticker detection, computed as soon as 3 targets (pool members included) answer |
+| `NTP_EXPORTER_KOD_MAX_BACKOFF` | `1024s` | Longest polling interval after repeated `RATE` |
+| `NTP_EXPORTER_KOD_SUSPEND_DURATION` | `1h` | Suspension after `DENY` or `RSTR` |
+| `NTP_EXPORTER_KERNEL_ENABLED` | agent on Linux | Kernel option (agent mode only) |
+| `NTP_EXPORTER_CHRONY_ENABLED` | agent when chronyd answers | chrony option (agent mode only) |
+| `NTP_EXPORTER_CHRONY_ADDRESS` | `udp://127.0.0.1:323` | chronyd command address, or `unix:///run/chrony/chronyd.sock` |
+| `NTP_EXPORTER_DNS_CACHE_MIN_TTL` / `NTP_EXPORTER_DNS_CACHE_MAX_TTL` | `5m` / `60m` | Cache of pool DNS answers |
 | `NTP_EXPORTER_ADDRESS` / `NTP_EXPORTER_PORT` | `0.0.0.0` / `9559` | Listen address |
-| `SERVER_READ_TIMEOUT` / `SERVER_WRITE_TIMEOUT` | `10s` | HTTP timeouts |
-| `WEB_CONFIG_FILE` | | Prometheus web configuration file |
-| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
-| `LOG_FORMAT` | `json` | `json` or `console`, on the standard output |
-| `METRICS_LABELS` | | Constant labels, `key=value,...` |
+| `NTP_EXPORTER_READ_TIMEOUT` / `NTP_EXPORTER_WRITE_TIMEOUT` | `10s` | HTTP timeouts |
+| `NTP_EXPORTER_WEB_CONFIG_FILE` | | Prometheus web configuration file |
+| `NTP_EXPORTER_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `NTP_EXPORTER_LOG_FORMAT` | `json` | `json` or `console`, on the standard output |
+| `NTP_EXPORTER_METRICS_LABELS` | | Constant labels, `key=value,...` |
+| `NODE_NAME` | hostname | `node` label of every series in agent mode (set by the Helm DaemonSet) |
 
-When querying the **public NTP pool**, keep `scrape_interval` at 60 s or more:
+When querying the **public NTP pool**, keep `collection_interval` at 60 s or more:
 the exporter logs a warning otherwise.
 
 The exporter only queries the servers it is given. Do not mix servers that
@@ -546,11 +552,11 @@ responses: check `ntp_invalid_responses_total` by `reason` (for instance
 
 **`ntp_exporter_cycle_overrun_total` increases.** Unreachable servers consume
 `samples_per_server × timeout`. Lower the timeout or the samples, raise
-`max_concurrency` or `scrape_interval`.
+`max_concurrency` or `collection_interval`.
 
 **A dual-stack server is reached over the wrong family.** In `auto` mode the
 exporter uses the family that answered last; force one with
-`NTP_IP_FAMILY=ipv4` or `ipv6`. `ntp_server_info{address}` shows the address
+`NTP_EXPORTER_IP_FAMILY=ipv4` or `ipv6`. `ntp_server_info{address}` shows the address
 used.
 
 **`ntp_nts_ke_success` is 0.** The key exchange failed: check that outgoing
@@ -564,7 +570,7 @@ exporter needs host networking, and chronyd must allow commands (`cmdport` not
 in the chronyd socket directory: the log names the directory.
 
 **No kernel metrics.** The kernel option is Linux only and must be enabled
-(`NTP_KERNEL_ENABLED=true`, Helm `kernel.enabled=true`); check the logs for
+(`NTP_EXPORTER_KERNEL_ENABLED=true`, Helm `kernel.enabled=true`); check the logs for
 `adjtimex` errors.
 
 **`/readyz` returns 503.** No cycle completed yet (the first one takes

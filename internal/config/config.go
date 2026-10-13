@@ -11,44 +11,14 @@
 //	                                            Use: Kubernetes (ConfigMap + env vars)
 //	                                            Priority: Env Vars > YAML > Defaults
 //
-// Environment variables supported:
-//
-//	MODE:
-//	  - NTP_EXPORTER_MODE (probe or agent, required)
-//
-//	SERVER:
-//	  - NTP_EXPORTER_ADDRESS, NTP_EXPORTER_PORT
-//	  - SERVER_READ_TIMEOUT, SERVER_WRITE_TIMEOUT
-//	  - WEB_CONFIG_FILE (Prometheus web configuration: TLS, basic auth)
-//
-//	NTP:
-//	  - NTP_SERVERS (comma-separated), NTP_TIMEOUT, NTP_VERSION
-//	  - NTP_POOLS (comma-separated name[:max_servers])
-//	  - NTP_SAMPLES, NTP_SAMPLE_SPACING, NTP_MAX_CONCURRENCY
-//	  - NTP_IP_FAMILY (auto, ipv4 or ipv6)
-//	  - NTP_KERNEL_ENABLED
-//	  - NTP_CHRONY_ENABLED, NTP_CHRONY_ADDRESS
-//	  - NTP_SCRAPE_INTERVAL, NTP_MAX_ROOT_DISTANCE
-//
-//	PROBE ENDPOINT:
-//	  - PROBE_ENDPOINT_ENABLED, PROBE_ENDPOINT_ALLOWED_TARGETS
-//
-//	CONSENSUS:
-//	  - NTP_CONSENSUS_ENABLED (default: enabled in probe mode)
-//
-//	KISS-O'-DEATH:
-//	  - NTP_KOD_MAX_BACKOFF, NTP_KOD_SUSPEND_DURATION
-//
-//
-//	DNS_CACHE:
-//	  - DNS_CACHE_MIN_TTL, DNS_CACHE_MAX_TTL
-//
-//	LOGGING:
-//	  - LOG_LEVEL (debug|info|warn|error)
-//	  - LOG_FORMAT (json|console)
-//
-//	METRICS:
-//	  - METRICS_LABELS (comma-separated key=value constant labels)
+// Environment variables override the YAML file. Every variable is prefixed
+// with NTP_EXPORTER_ and named after its YAML key: NTP_EXPORTER_MODE,
+// NTP_EXPORTER_SERVERS (comma-separated), NTP_EXPORTER_POOLS (comma-separated
+// name[:max_servers]), NTP_EXPORTER_COLLECTION_INTERVAL,
+// NTP_EXPORTER_SAMPLES_PER_SERVER, NTP_EXPORTER_LOG_LEVEL,
+// NTP_EXPORTER_METRICS_LABELS (comma-separated key=value)... The names used
+// before the prefix (legacyEnv) are still accepted for one release, with a
+// warning.
 package config
 
 import (
@@ -74,7 +44,9 @@ const (
 // Config represents the complete application configuration
 type Config struct {
 	// Mode is probe or agent, required
-	Mode          string              `yaml:"mode"`
+	Mode string `yaml:"mode"`
+	// deprecations lists the legacy names used by the configuration
+	deprecations  []string
 	Server        ServerConfig        `yaml:"server"`
 	ProbeEndpoint ProbeEndpointConfig `yaml:"probe_endpoint"`
 	NTP           NTPConfig           `yaml:"ntp"`
@@ -112,17 +84,19 @@ type ServerConfig struct {
 
 // NTPConfig contains NTP client configuration
 type NTPConfig struct {
-	Servers          []string      `yaml:"servers"`
-	Pools            []PoolConfig  `yaml:"pools"`
-	Timeout          time.Duration `yaml:"timeout"`
-	Version          int           `yaml:"version"`
-	SamplesPerServer int           `yaml:"samples_per_server"`
-	SampleSpacing    time.Duration `yaml:"sample_spacing"` // Delay between two samples sent to the same server
-	MaxConcurrency   int           `yaml:"max_concurrency"`
-	IPFamily         string        `yaml:"ip_family"` // auto, ipv4 or ipv6
-	Kernel           KernelConfig  `yaml:"kernel"`
-	Chrony           ChronyConfig  `yaml:"chrony"`
-	ScrapeInterval   time.Duration `yaml:"scrape_interval"` // Interval between NTP collections
+	Servers            []string      `yaml:"servers"`
+	Pools              []PoolConfig  `yaml:"pools"`
+	Timeout            time.Duration `yaml:"timeout"`
+	Version            int           `yaml:"version"`
+	SamplesPerServer   int           `yaml:"samples_per_server"`
+	SampleSpacing      time.Duration `yaml:"sample_spacing"` // Delay between two samples sent to the same server
+	MaxConcurrency     int           `yaml:"max_concurrency"`
+	IPFamily           string        `yaml:"ip_family"` // auto, ipv4 or ipv6
+	Kernel             KernelConfig  `yaml:"kernel"`
+	Chrony             ChronyConfig  `yaml:"chrony"`
+	CollectionInterval time.Duration `yaml:"collection_interval"` // Interval between two collection cycles
+	// LegacyScrapeInterval is the former name of collection_interval
+	LegacyScrapeInterval time.Duration `yaml:"scrape_interval"`
 	// MaxRootDistance rejects the responses of servers whose synchronization
 	// distance exceeds it (MAXDIST, 1.5s in ntpd)
 	MaxRootDistance time.Duration   `yaml:"max_root_distance"`
@@ -280,6 +254,54 @@ func readYamlFile(path string) (*Config, error) {
 // envReader reads typed environment variables and accumulates parse errors
 type envReader struct {
 	errs []error
+	// deprecated lists the legacy variable names that were used
+	deprecated []string
+}
+
+// legacyEnv maps the variables to their names before the NTP_EXPORTER_
+// prefix, still accepted for one release
+var legacyEnv = map[string]string{
+	"NTP_EXPORTER_READ_TIMEOUT":                   "SERVER_READ_TIMEOUT",
+	"NTP_EXPORTER_WRITE_TIMEOUT":                  "SERVER_WRITE_TIMEOUT",
+	"NTP_EXPORTER_WEB_CONFIG_FILE":                "WEB_CONFIG_FILE",
+	"NTP_EXPORTER_PROBE_ENDPOINT_ENABLED":         "PROBE_ENDPOINT_ENABLED",
+	"NTP_EXPORTER_PROBE_ENDPOINT_ALLOWED_TARGETS": "PROBE_ENDPOINT_ALLOWED_TARGETS",
+	"NTP_EXPORTER_SERVERS":                        "NTP_SERVERS",
+	"NTP_EXPORTER_POOLS":                          "NTP_POOLS",
+	"NTP_EXPORTER_KERNEL_ENABLED":                 "NTP_KERNEL_ENABLED",
+	"NTP_EXPORTER_CHRONY_ENABLED":                 "NTP_CHRONY_ENABLED",
+	"NTP_EXPORTER_CHRONY_ADDRESS":                 "NTP_CHRONY_ADDRESS",
+	"NTP_EXPORTER_TIMEOUT":                        "NTP_TIMEOUT",
+	"NTP_EXPORTER_NTP_VERSION":                    "NTP_VERSION",
+	"NTP_EXPORTER_SAMPLES_PER_SERVER":             "NTP_SAMPLES",
+	"NTP_EXPORTER_SAMPLE_SPACING":                 "NTP_SAMPLE_SPACING",
+	"NTP_EXPORTER_MAX_CONCURRENCY":                "NTP_MAX_CONCURRENCY",
+	"NTP_EXPORTER_IP_FAMILY":                      "NTP_IP_FAMILY",
+	"NTP_EXPORTER_COLLECTION_INTERVAL":            "NTP_SCRAPE_INTERVAL",
+	"NTP_EXPORTER_MAX_ROOT_DISTANCE":              "NTP_MAX_ROOT_DISTANCE",
+	"NTP_EXPORTER_CONSENSUS_ENABLED":              "NTP_CONSENSUS_ENABLED",
+	"NTP_EXPORTER_KOD_MAX_BACKOFF":                "NTP_KOD_MAX_BACKOFF",
+	"NTP_EXPORTER_KOD_SUSPEND_DURATION":           "NTP_KOD_SUSPEND_DURATION",
+	"NTP_EXPORTER_DNS_CACHE_MIN_TTL":              "DNS_CACHE_MIN_TTL",
+	"NTP_EXPORTER_DNS_CACHE_MAX_TTL":              "DNS_CACHE_MAX_TTL",
+	"NTP_EXPORTER_LOG_LEVEL":                      "LOG_LEVEL",
+	"NTP_EXPORTER_LOG_FORMAT":                     "LOG_FORMAT",
+	"NTP_EXPORTER_METRICS_LABELS":                 "METRICS_LABELS",
+}
+
+// lookup returns the value of a variable, or of its legacy name, and the
+// name actually set
+func (e *envReader) lookup(name string) (string, string, bool) {
+	if v, ok := os.LookupEnv(name); ok && v != "" {
+		return v, name, true
+	}
+	if legacy, ok := legacyEnv[name]; ok {
+		if v, ok := os.LookupEnv(legacy); ok && v != "" {
+			e.deprecated = append(e.deprecated, legacy+" is deprecated: use "+name)
+			return v, legacy, true
+		}
+	}
+	return "", name, false
 }
 
 func (e *envReader) fail(name, value string, err error) {
@@ -287,19 +309,19 @@ func (e *envReader) fail(name, value string, err error) {
 }
 
 func (e *envReader) string(name string, dst *string) {
-	if v, ok := os.LookupEnv(name); ok && v != "" {
+	if v, _, ok := e.lookup(name); ok {
 		*dst = v
 	}
 }
 
 func (e *envReader) list(name string, dst *[]string) {
-	if v, ok := os.LookupEnv(name); ok && v != "" {
+	if v, _, ok := e.lookup(name); ok {
 		*dst = parseCommaSeparated(v)
 	}
 }
 
 func (e *envReader) int(name string, dst *int) {
-	if v, ok := os.LookupEnv(name); ok && v != "" {
+	if v, name, ok := e.lookup(name); ok {
 		n, err := strconv.Atoi(v)
 		if err != nil {
 			e.fail(name, v, err)
@@ -309,27 +331,21 @@ func (e *envReader) int(name string, dst *int) {
 	}
 }
 
-func (e *envReader) bool(name string, dst *bool) {
-	if v, ok := os.LookupEnv(name); ok && v != "" {
-		b, err := strconv.ParseBool(v)
-		if err != nil {
-			e.fail(name, v, err)
-			return
-		}
-		*dst = b
-	}
-}
-
 func (e *envReader) boolPtr(name string, dst **bool) {
-	var b bool
-	if v, ok := os.LookupEnv(name); ok && v != "" {
-		e.bool(name, &b)
-		*dst = &b
+	v, used, ok := e.lookup(name)
+	if !ok {
+		return
 	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		e.fail(used, v, err)
+		return
+	}
+	*dst = &b
 }
 
 func (e *envReader) duration(name string, dst *time.Duration) {
-	if v, ok := os.LookupEnv(name); ok && v != "" {
+	if v, name, ok := e.lookup(name); ok {
 		d, err := time.ParseDuration(v)
 		if err != nil {
 			e.fail(name, v, err)
@@ -340,8 +356,8 @@ func (e *envReader) duration(name string, dst *time.Duration) {
 }
 
 func (e *envReader) labels(name string, dst *map[string]string) {
-	v, ok := os.LookupEnv(name)
-	if !ok || v == "" {
+	v, name, ok := e.lookup(name)
+	if !ok {
 		return
 	}
 	labels := make(map[string]string)
@@ -357,8 +373,8 @@ func (e *envReader) labels(name string, dst *map[string]string) {
 }
 
 func (e *envReader) pools(name string, dst *[]PoolConfig) {
-	v, ok := os.LookupEnv(name)
-	if !ok || v == "" {
+	v, name, ok := e.lookup(name)
+	if !ok {
 		return
 	}
 	pools, err := parsePools(v)
@@ -400,47 +416,48 @@ func applyEnvOverrides(cfg *Config) error {
 	// SERVER
 	e.string("NTP_EXPORTER_ADDRESS", &cfg.Server.Address)
 	e.int("NTP_EXPORTER_PORT", &cfg.Server.Port)
-	e.duration("SERVER_READ_TIMEOUT", &cfg.Server.ReadTimeout)
-	e.duration("SERVER_WRITE_TIMEOUT", &cfg.Server.WriteTimeout)
-	e.string("WEB_CONFIG_FILE", &cfg.Server.WebConfigFile)
+	e.duration("NTP_EXPORTER_READ_TIMEOUT", &cfg.Server.ReadTimeout)
+	e.duration("NTP_EXPORTER_WRITE_TIMEOUT", &cfg.Server.WriteTimeout)
+	e.string("NTP_EXPORTER_WEB_CONFIG_FILE", &cfg.Server.WebConfigFile)
 
 	// PROBE ENDPOINT
-	e.boolPtr("PROBE_ENDPOINT_ENABLED", &cfg.ProbeEndpoint.Enabled)
-	e.list("PROBE_ENDPOINT_ALLOWED_TARGETS", &cfg.ProbeEndpoint.AllowedTargets)
+	e.boolPtr("NTP_EXPORTER_PROBE_ENDPOINT_ENABLED", &cfg.ProbeEndpoint.Enabled)
+	e.list("NTP_EXPORTER_PROBE_ENDPOINT_ALLOWED_TARGETS", &cfg.ProbeEndpoint.AllowedTargets)
 
 	// NTP
-	e.list("NTP_SERVERS", &cfg.NTP.Servers)
-	e.pools("NTP_POOLS", &cfg.NTP.Pools)
-	e.boolPtr("NTP_KERNEL_ENABLED", &cfg.NTP.Kernel.Enabled)
-	e.boolPtr("NTP_CHRONY_ENABLED", &cfg.NTP.Chrony.Enabled)
-	e.string("NTP_CHRONY_ADDRESS", &cfg.NTP.Chrony.Address)
-	e.duration("NTP_TIMEOUT", &cfg.NTP.Timeout)
-	e.int("NTP_VERSION", &cfg.NTP.Version)
-	e.int("NTP_SAMPLES", &cfg.NTP.SamplesPerServer)
-	e.duration("NTP_SAMPLE_SPACING", &cfg.NTP.SampleSpacing)
-	e.int("NTP_MAX_CONCURRENCY", &cfg.NTP.MaxConcurrency)
-	e.string("NTP_IP_FAMILY", &cfg.NTP.IPFamily)
-	e.duration("NTP_SCRAPE_INTERVAL", &cfg.NTP.ScrapeInterval)
-	e.duration("NTP_MAX_ROOT_DISTANCE", &cfg.NTP.MaxRootDistance)
+	e.list("NTP_EXPORTER_SERVERS", &cfg.NTP.Servers)
+	e.pools("NTP_EXPORTER_POOLS", &cfg.NTP.Pools)
+	e.boolPtr("NTP_EXPORTER_KERNEL_ENABLED", &cfg.NTP.Kernel.Enabled)
+	e.boolPtr("NTP_EXPORTER_CHRONY_ENABLED", &cfg.NTP.Chrony.Enabled)
+	e.string("NTP_EXPORTER_CHRONY_ADDRESS", &cfg.NTP.Chrony.Address)
+	e.duration("NTP_EXPORTER_TIMEOUT", &cfg.NTP.Timeout)
+	e.int("NTP_EXPORTER_NTP_VERSION", &cfg.NTP.Version)
+	e.int("NTP_EXPORTER_SAMPLES_PER_SERVER", &cfg.NTP.SamplesPerServer)
+	e.duration("NTP_EXPORTER_SAMPLE_SPACING", &cfg.NTP.SampleSpacing)
+	e.int("NTP_EXPORTER_MAX_CONCURRENCY", &cfg.NTP.MaxConcurrency)
+	e.string("NTP_EXPORTER_IP_FAMILY", &cfg.NTP.IPFamily)
+	e.duration("NTP_EXPORTER_COLLECTION_INTERVAL", &cfg.NTP.CollectionInterval)
+	e.duration("NTP_EXPORTER_MAX_ROOT_DISTANCE", &cfg.NTP.MaxRootDistance)
 
 	// CONSENSUS
-	e.boolPtr("NTP_CONSENSUS_ENABLED", &cfg.NTP.Consensus.Enabled)
+	e.boolPtr("NTP_EXPORTER_CONSENSUS_ENABLED", &cfg.NTP.Consensus.Enabled)
 
 	// KISS-O'-DEATH
-	e.duration("NTP_KOD_MAX_BACKOFF", &cfg.NTP.KoD.MaxBackoff)
-	e.duration("NTP_KOD_SUSPEND_DURATION", &cfg.NTP.KoD.SuspendDuration)
+	e.duration("NTP_EXPORTER_KOD_MAX_BACKOFF", &cfg.NTP.KoD.MaxBackoff)
+	e.duration("NTP_EXPORTER_KOD_SUSPEND_DURATION", &cfg.NTP.KoD.SuspendDuration)
 
 	// DNS CACHE
-	e.duration("DNS_CACHE_MIN_TTL", &cfg.NTP.DNSCache.MinTTL)
-	e.duration("DNS_CACHE_MAX_TTL", &cfg.NTP.DNSCache.MaxTTL)
+	e.duration("NTP_EXPORTER_DNS_CACHE_MIN_TTL", &cfg.NTP.DNSCache.MinTTL)
+	e.duration("NTP_EXPORTER_DNS_CACHE_MAX_TTL", &cfg.NTP.DNSCache.MaxTTL)
 
 	// LOGGING
-	e.string("LOG_LEVEL", &cfg.Logging.Level)
-	e.string("LOG_FORMAT", &cfg.Logging.Format)
+	e.string("NTP_EXPORTER_LOG_LEVEL", &cfg.Logging.Level)
+	e.string("NTP_EXPORTER_LOG_FORMAT", &cfg.Logging.Format)
 
 	// METRICS
-	e.labels("METRICS_LABELS", &cfg.Metrics.Labels)
+	e.labels("NTP_EXPORTER_METRICS_LABELS", &cfg.Metrics.Labels)
 
+	cfg.deprecations = append(cfg.deprecations, e.deprecated...)
 	return errors.Join(e.errs...)
 }
 

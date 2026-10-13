@@ -50,8 +50,15 @@ func ApplyDefaults(cfg *Config) {
 	if cfg.NTP.MaxConcurrency == 0 {
 		cfg.NTP.MaxConcurrency = 10
 	}
-	if cfg.NTP.ScrapeInterval == 0 {
-		cfg.NTP.ScrapeInterval = 60 * time.Second
+	if cfg.NTP.LegacyScrapeInterval != 0 {
+		if cfg.NTP.CollectionInterval == 0 {
+			cfg.NTP.CollectionInterval = cfg.NTP.LegacyScrapeInterval
+		}
+		cfg.deprecations = append(cfg.deprecations, "ntp.scrape_interval is deprecated: use ntp.collection_interval")
+		cfg.NTP.LegacyScrapeInterval = 0
+	}
+	if cfg.NTP.CollectionInterval == 0 {
+		cfg.NTP.CollectionInterval = 60 * time.Second
 	}
 	if cfg.NTP.MaxRootDistance == 0 {
 		cfg.NTP.MaxRootDistance = DefaultMaxRootDistance

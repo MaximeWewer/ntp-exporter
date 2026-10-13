@@ -65,10 +65,10 @@ spec:
         {{- end }}
         ports:
         - name: metrics
-          containerPort: {{ .Values.config.metricsPort }}
+          containerPort: {{ include "ntp-exporter.port" . }}
           protocol: TCP
           {{- if .Values.hostNetwork }}
-          hostPort: {{ .Values.config.metricsPort }}
+          hostPort: {{ include "ntp-exporter.port" . }}
           {{- end }}
         {{- with .Values.livenessProbe }}
         livenessProbe:

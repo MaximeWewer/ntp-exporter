@@ -106,16 +106,16 @@ func TestValidateNTP_ServersOrPools(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &NTPConfig{
-				Servers:          tt.servers,
-				Pools:            tt.pools,
-				Timeout:          5 * time.Second,
-				Version:          4,
-				SamplesPerServer: 3,
-				MaxConcurrency:   10,
-				ScrapeInterval:   30 * time.Second,
-				MaxRootDistance:  DefaultMaxRootDistance,
-				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
-				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
+				Servers:            tt.servers,
+				Pools:              tt.pools,
+				Timeout:            5 * time.Second,
+				Version:            4,
+				SamplesPerServer:   3,
+				MaxConcurrency:     10,
+				CollectionInterval: 30 * time.Second,
+				MaxRootDistance:    DefaultMaxRootDistance,
+				KoD:                KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:           DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg, false)
@@ -146,15 +146,15 @@ func TestValidateNTP_Timeout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &NTPConfig{
-				Servers:          []string{"pool.ntp.org"},
-				Timeout:          tt.timeout,
-				Version:          4,
-				SamplesPerServer: 3,
-				MaxConcurrency:   10,
-				ScrapeInterval:   30 * time.Second,
-				MaxRootDistance:  DefaultMaxRootDistance,
-				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
-				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
+				Servers:            []string{"pool.ntp.org"},
+				Timeout:            tt.timeout,
+				Version:            4,
+				SamplesPerServer:   3,
+				MaxConcurrency:     10,
+				CollectionInterval: 30 * time.Second,
+				MaxRootDistance:    DefaultMaxRootDistance,
+				KoD:                KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:           DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg, false)
@@ -186,15 +186,15 @@ func TestValidateNTP_Version(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &NTPConfig{
-				Servers:          []string{"pool.ntp.org"},
-				Timeout:          5 * time.Second,
-				Version:          tt.version,
-				SamplesPerServer: 3,
-				MaxConcurrency:   10,
-				ScrapeInterval:   30 * time.Second,
-				MaxRootDistance:  DefaultMaxRootDistance,
-				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
-				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
+				Servers:            []string{"pool.ntp.org"},
+				Timeout:            5 * time.Second,
+				Version:            tt.version,
+				SamplesPerServer:   3,
+				MaxConcurrency:     10,
+				CollectionInterval: 30 * time.Second,
+				MaxRootDistance:    DefaultMaxRootDistance,
+				KoD:                KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:           DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg, false)
@@ -225,15 +225,15 @@ func TestValidateNTP_SamplesPerServer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &NTPConfig{
-				Servers:          []string{"pool.ntp.org"},
-				Timeout:          5 * time.Second,
-				Version:          4,
-				SamplesPerServer: tt.samples,
-				MaxConcurrency:   10,
-				ScrapeInterval:   30 * time.Second,
-				MaxRootDistance:  DefaultMaxRootDistance,
-				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
-				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
+				Servers:            []string{"pool.ntp.org"},
+				Timeout:            5 * time.Second,
+				Version:            4,
+				SamplesPerServer:   tt.samples,
+				MaxConcurrency:     10,
+				CollectionInterval: 30 * time.Second,
+				MaxRootDistance:    DefaultMaxRootDistance,
+				KoD:                KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:           DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg, false)
@@ -264,15 +264,15 @@ func TestValidateNTP_MaxConcurrency(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &NTPConfig{
-				Servers:          []string{"pool.ntp.org"},
-				Timeout:          5 * time.Second,
-				Version:          4,
-				SamplesPerServer: 3,
-				MaxConcurrency:   tt.concurrent,
-				ScrapeInterval:   30 * time.Second,
-				MaxRootDistance:  DefaultMaxRootDistance,
-				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
-				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
+				Servers:            []string{"pool.ntp.org"},
+				Timeout:            5 * time.Second,
+				Version:            4,
+				SamplesPerServer:   3,
+				MaxConcurrency:     tt.concurrent,
+				CollectionInterval: 30 * time.Second,
+				MaxRootDistance:    DefaultMaxRootDistance,
+				KoD:                KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:           DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg, false)
@@ -322,15 +322,15 @@ func TestValidateNTP_Pools(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &NTPConfig{
-				Pools:            []PoolConfig{tt.pool},
-				Timeout:          5 * time.Second,
-				Version:          4,
-				SamplesPerServer: 3,
-				MaxConcurrency:   10,
-				ScrapeInterval:   30 * time.Second,
-				MaxRootDistance:  DefaultMaxRootDistance,
-				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
-				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
+				Pools:              []PoolConfig{tt.pool},
+				Timeout:            5 * time.Second,
+				Version:            4,
+				SamplesPerServer:   3,
+				MaxConcurrency:     10,
+				CollectionInterval: 30 * time.Second,
+				MaxRootDistance:    DefaultMaxRootDistance,
+				KoD:                KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+				DNSCache:           DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
 
 			err := validateNTP(cfg, false)
@@ -416,15 +416,15 @@ func TestValidate_CompleteConfig(t *testing.T) {
 			WriteTimeout: 10 * time.Second,
 		},
 		NTP: NTPConfig{
-			Servers:          []string{"pool.ntp.org"},
-			Timeout:          5 * time.Second,
-			Version:          4,
-			SamplesPerServer: 3,
-			MaxConcurrency:   10,
-			ScrapeInterval:   30 * time.Second,
-			MaxRootDistance:  DefaultMaxRootDistance,
-			KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
-			DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
+			Servers:            []string{"pool.ntp.org"},
+			Timeout:            5 * time.Second,
+			Version:            4,
+			SamplesPerServer:   3,
+			MaxConcurrency:     10,
+			CollectionInterval: 30 * time.Second,
+			MaxRootDistance:    DefaultMaxRootDistance,
+			KoD:                KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
+			DNSCache:           DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 		},
 		Logging: LoggingConfig{
 			Level:  "info",
@@ -446,16 +446,16 @@ func BenchmarkValidate(b *testing.B) {
 	}
 }
 
-func TestValidate_ScrapeIntervalBounds(t *testing.T) {
+func TestValidate_CollectionIntervalBounds(t *testing.T) {
 	for _, interval := range []time.Duration{0, -time.Second, time.Second, 2 * time.Hour} {
 		cfg := validConfig()
-		cfg.NTP.ScrapeInterval = interval
+		cfg.NTP.CollectionInterval = interval
 		if err := Validate(cfg); err == nil {
 			t.Errorf("scrape_interval %s should be rejected", interval)
 		}
 	}
 	cfg := validConfig()
-	cfg.NTP.ScrapeInterval = 30 * time.Second
+	cfg.NTP.CollectionInterval = 30 * time.Second
 	if err := Validate(cfg); err != nil {
 		t.Errorf("scrape_interval 30s should be accepted: %v", err)
 	}
@@ -463,7 +463,7 @@ func TestValidate_ScrapeIntervalBounds(t *testing.T) {
 
 func TestValidate_BurstMustFitInInterval(t *testing.T) {
 	cfg := validConfig()
-	cfg.NTP.ScrapeInterval = 10 * time.Second
+	cfg.NTP.CollectionInterval = 10 * time.Second
 	cfg.NTP.SamplesPerServer = 5
 	cfg.NTP.SampleSpacing = 2 * time.Second
 	if err := Validate(cfg); err == nil {
@@ -486,14 +486,14 @@ func TestWarnings_PublicPoolEtiquette(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.NTP.Servers = []string{"0.europe.pool.ntp.org", "time.google.com"}
 	cfg.NTP.Pools = []PoolConfig{{Name: "pool.ntp.org"}}
-	cfg.NTP.ScrapeInterval = 30 * time.Second
+	cfg.NTP.CollectionInterval = 30 * time.Second
 
 	warnings := Warnings(cfg)
 	if len(warnings) != 2 {
 		t.Fatalf("expected 2 warnings, got %v", warnings)
 	}
 
-	cfg.NTP.ScrapeInterval = 60 * time.Second
+	cfg.NTP.CollectionInterval = 60 * time.Second
 	if w := Warnings(cfg); len(w) != 0 {
 		t.Errorf("no warning expected at 60s, got %v", w)
 	}
@@ -607,8 +607,8 @@ func TestValidateNTP_MaxRootDistance(t *testing.T) {
 	cfg := DefaultConfig()
 	assert.Equal(t, 1500*time.Millisecond, cfg.NTP.MaxRootDistance, "MAXDIST of ntpd by default")
 
-	t.Setenv("NTP_SERVERS", "time.example.org")
-	t.Setenv("NTP_MAX_ROOT_DISTANCE", "3s")
+	t.Setenv("NTP_EXPORTER_SERVERS", "time.example.org")
+	t.Setenv("NTP_EXPORTER_MAX_ROOT_DISTANCE", "3s")
 	loaded, err := LoadFromEnvVarsOnly()
 	require.NoError(t, err)
 	assert.Equal(t, 3*time.Second, loaded.NTP.MaxRootDistance)

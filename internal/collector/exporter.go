@@ -206,7 +206,7 @@ func (e *Exporter) Ready() error {
 	if e.last == nil {
 		return errors.New("no collection cycle completed yet")
 	}
-	if age := time.Since(e.updatedAt); age > 3*e.cfg.NTP.ScrapeInterval {
+	if age := time.Since(e.updatedAt); age > 3*e.cfg.NTP.CollectionInterval {
 		return fmt.Errorf("last collection cycle is %s old", age.Round(time.Second))
 	}
 	return nil

@@ -41,7 +41,7 @@ logging:
 }
 
 func TestLoadConfig_FromEnv(t *testing.T) {
-	t.Setenv("NTP_SERVERS", "time.example.org")
+	t.Setenv("NTP_EXPORTER_SERVERS", "time.example.org")
 	cfg, err := loadConfig("")
 	require.NoError(t, err)
 	assert.NotNil(t, cfg)

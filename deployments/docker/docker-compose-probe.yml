@@ -13,11 +13,11 @@ services:
       # Servers that do not smear leap seconds: do not mix them with smearing
       # servers (time.google.com...), they differ by up to 0.5s around a leap
       # second. 3 servers or more enable the consensus.
-      NTP_SERVERS: "${NTP_SERVERS:-ptbtime1.ptb.de,ptbtime2.ptb.de,ptbtime3.ptb.de,nts://nts.netnod.se}"
-      NTP_TIMEOUT: "${NTP_TIMEOUT:-2s}"
+      NTP_EXPORTER_SERVERS: "${NTP_EXPORTER_SERVERS:-ptbtime1.ptb.de,ptbtime2.ptb.de,ptbtime3.ptb.de,nts://nts.netnod.se}"
+      NTP_EXPORTER_TIMEOUT: "${NTP_EXPORTER_TIMEOUT:-2s}"
       # Constant labels added to every series
-      METRICS_LABELS: "${METRICS_LABELS:-}"
-      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      NTP_EXPORTER_METRICS_LABELS: "${NTP_EXPORTER_METRICS_LABELS:-}"
+      NTP_EXPORTER_LOG_LEVEL: "${NTP_EXPORTER_LOG_LEVEL:-info}"
     healthcheck:
       test: ["CMD", "/ntp-exporter", "--healthcheck"]
       interval: 30s

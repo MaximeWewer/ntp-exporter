@@ -39,9 +39,8 @@ helm install ntp-exporter deployments/kubernetes/helm/ntp-exporter \
 |---|---|---|
 | `mode` | (required) | `agent` or `probe` |
 | `kernel.enabled` / `chrony.enabled` | unset | Kernel and chrony options of the agent mode: unset, enabled when available |
-| `config.ntpServers` | none | Servers to query (agent: at most 2 reference servers) |
-| `config.scrapeInterval` | `60s` | Interval between two collection cycles |
-| `configYaml.enabled` / `configYaml.content` | `false` | Provide the full exporter YAML configuration |
+| `config` | | The YAML configuration of the exporter, rendered as is (same keys as `deployments/docker/config-example.yaml`): `config.ntp.servers`, `config.ntp.collection_interval`... The chart sets the mode, `/probe` and the kernel and chrony options from the values above |
+| `config.ntp.servers` | none | Servers to query (agent: at most 2 reference servers) |
 | `webConfig.existingSecret` | | Secret with a Prometheus web configuration (TLS, basic auth), mounted in `/etc/ntp-exporter/web` |
 | `webConfig.scheme` / `webConfig.basicAuth` | `http` / `false` | Set `https` when the web configuration enables TLS (probes and ServiceMonitor use HTTPS); set `basicAuth` when it enables basic auth (probes then only check the port) |
 | `serviceMonitor.scheme` / `tlsConfig` / `basicAuth` | | Scrape settings of the ServiceMonitor endpoint |

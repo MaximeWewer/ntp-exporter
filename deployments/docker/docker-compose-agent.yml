@@ -12,16 +12,16 @@ services:
       NTP_EXPORTER_MODE: agent
       NTP_EXPORTER_PORT: "${NTP_EXPORTER_PORT:-9559}"
       # At most 2 reference servers
-      NTP_SERVERS: "${NTP_SERVERS:-pool.ntp.org}"
-      NTP_TIMEOUT: "${NTP_TIMEOUT:-2s}"
+      NTP_EXPORTER_SERVERS: "${NTP_EXPORTER_SERVERS:-pool.ntp.org}"
+      NTP_EXPORTER_TIMEOUT: "${NTP_EXPORTER_TIMEOUT:-2s}"
       # Kernel clock state (Linux) and chronyd tracking report are enabled by
       # default, chronyd when it answers: set false to disable them
-      NTP_KERNEL_ENABLED: "${NTP_KERNEL_ENABLED:-}"
-      NTP_CHRONY_ENABLED: "${NTP_CHRONY_ENABLED:-}"
+      NTP_EXPORTER_KERNEL_ENABLED: "${NTP_EXPORTER_KERNEL_ENABLED:-}"
+      NTP_EXPORTER_CHRONY_ENABLED: "${NTP_EXPORTER_CHRONY_ENABLED:-}"
       # node label of every series (default: the hostname)
       NODE_NAME: "${NODE_NAME:-}"
-      METRICS_LABELS: "${METRICS_LABELS:-}"
-      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      NTP_EXPORTER_METRICS_LABELS: "${NTP_EXPORTER_METRICS_LABELS:-}"
+      NTP_EXPORTER_LOG_LEVEL: "${NTP_EXPORTER_LOG_LEVEL:-info}"
     healthcheck:
       test: ["CMD", "/ntp-exporter", "--healthcheck"]
       interval: 30s

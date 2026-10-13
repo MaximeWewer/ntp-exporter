@@ -37,7 +37,7 @@ server:
 
   # Prometheus web configuration file (TLS, basic auth, HTTP headers):
   # https://prometheus.io/docs/prometheus/latest/configuration/https/
-  # Also settable with --web.config.file or WEB_CONFIG_FILE
+  # Also settable with --web.config.file or NTP_EXPORTER_WEB_CONFIG_FILE
   # Default: "" (plain HTTP)
   web_config_file: ""
 
@@ -127,7 +127,7 @@ ntp:
   # before the next one. Keep 60s or more when querying the public NTP pool.
   # Values: 5s-1h
   # Default: 60s
-  scrape_interval: 60s
+  collection_interval: 60s
 
   # Responses whose root distance (upper bound of the server error) exceeds
   # this value are invalid: counted with reason="root_distance", never used as

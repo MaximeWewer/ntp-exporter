@@ -592,7 +592,7 @@ func TestExporter_Ready(t *testing.T) {
 	h.cycle()
 	assert.NoError(t, h.exporter.Ready())
 
-	h.exporter.updatedAt = time.Now().Add(-4 * h.cfg.NTP.ScrapeInterval)
+	h.exporter.updatedAt = time.Now().Add(-4 * h.cfg.NTP.CollectionInterval)
 	assert.ErrorContains(t, h.exporter.Ready(), "old")
 }
 
