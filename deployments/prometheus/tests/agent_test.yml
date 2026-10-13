@@ -1,0 +1,83 @@
+# promtool test rules deployments/prometheus/tests/*.yml
+rule_files:
+  - ../ntp-alerts-agent.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      # node1 is 300ms off against both references; node2 is fine against
+      # its best reference
+      - series: 'ntp_offset_seconds{node="node1",server="ref1"}'
+        values: '0.3x15'
+      - series: 'ntp_root_distance_seconds{node="node1",server="ref1"}'
+        values: '0.01x15'
+      - series: 'ntp_offset_seconds{node="node2",server="ref1"}'
+        values: '0.01x15'
+      - series: 'ntp_root_distance_seconds{node="node2",server="ref1"}'
+        values: '0.01x15'
+      # ref2 is down for two nodes: one alert
+      - series: 'ntp_up{node="node1",server="ref2"}'
+        values: '0x10'
+      - series: 'ntp_up{node="node2",server="ref2"}'
+        values: '0x10'
+      - series: 'ntp_kernel_sync_status{node="node3"}'
+        values: '0x15'
+      - series: 'ntp_kernel_error_bound_violated{node="node4"}'
+        values: '1x15'
+      - series: 'ntp_chrony_up{node="node5"}'
+        values: '0x15'
+      - series: 'ntp_chrony_leap_status{node="node6"}'
+        values: '3x15'
+      # Last update at t=0: more than 1h old from 61m on
+      - series: 'ntp_chrony_reference_timestamp_seconds{node="node7"}'
+        values: '0x80'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: NTPNodeClockOffset
+        exp_alerts:
+          - exp_labels: {severity: warning, node: node1}
+            exp_annotations:
+              description: "Even against its best reference server, beyond the measurement uncertainty, the clock of node1 is off by 290ms."
+              summary: "Clock of node1 is off by more than 0.1s"
+      - eval_time: 6m
+        alertname: NTPReferenceServerDown
+        exp_alerts:
+          - exp_labels: {severity: warning, server: ref2}
+            exp_annotations:
+              description: "Nodes getting no answer from their reference server ref2 for a while (2 node(s))."
+              summary: "Reference server ref2 does not answer"
+      - eval_time: 11m
+        alertname: NTPKernelUnsynchronized
+        exp_alerts:
+          - exp_labels: {severity: warning, node: node3}
+            exp_annotations:
+              description: "The time daemon of the node does not discipline the kernel clock (STA_UNSYNC)."
+              summary: "Kernel clock of node3 is not synchronized"
+      - eval_time: 11m
+        alertname: NTPKernelErrorBoundViolated
+        exp_alerts:
+          - exp_labels: {severity: critical, node: node4}
+            exp_annotations:
+              description: "The offset measured against the reference server, beyond its root distance, exceeds the maximum error announced by the kernel for 10 minutes."
+              summary: "Time daemon of node4 underestimates its error"
+      - eval_time: 11m
+        alertname: NTPChronyDown
+        exp_alerts:
+          - exp_labels: {severity: warning, node: node5}
+            exp_annotations:
+              description: "The tracking report of chronyd is not available (chronyd stopped, socket or command port not reachable)."
+              summary: "chronyd of node5 cannot be read"
+      - eval_time: 11m
+        alertname: NTPChronyUnsynchronized
+        exp_alerts:
+          - exp_labels: {severity: warning, node: node6}
+            exp_annotations:
+              description: "chronyd has no selected source (leap status 3)."
+              summary: "chronyd of node6 is not synchronized"
+      - eval_time: 75m
+        alertname: NTPChronyStale
+        exp_alerts:
+          - exp_labels: {severity: warning, node: node7}
+            exp_annotations:
+              description: "The last clock update of chronyd is 1h 15m 0s old."
+              summary: "chronyd of node7 did not update the clock for a long time"

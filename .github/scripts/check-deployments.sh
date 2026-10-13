@@ -60,6 +60,8 @@ for mode in probe agent; do
   fi
   promtool check rules --lint=all "$rules"
 done
+# Every alert fires in its scenario
+promtool test rules deployments/prometheus/tests/*.yml
 
 echo "== Compose files"
 for compose in deployments/docker/docker-compose-*.yml; do

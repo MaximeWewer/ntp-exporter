@@ -1,0 +1,169 @@
+# promtool test rules deployments/prometheus/tests/*.yml
+rule_files:
+  - ../ntp-alerts-probe.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      # Two replicas: a and b see the server down, the alert fires once
+      - series: 'ntp_up{instance="a",job="ntp",server="down.example.org"}'
+        values: '0x10'
+      - series: 'ntp_up{instance="b",job="ntp",server="down.example.org"}'
+        values: '0x10'
+      - series: 'ntp_response_valid{instance="a",job="ntp",server="bad.example.org"}'
+        values: '0x15'
+      - series: 'ntp_invalid_responses_total{instance="a",job="ntp",server="unsync.example.org",reason="unsync"}'
+        values: '0 0 4 8'
+      - series: 'ntp_packet_loss_ratio{instance="a",job="ntp",server="lossy.example.org"}'
+        values: '0.75x20'
+      - series: 'ntp_up{instance="a",job="ntp",server="lossy.example.org"}'
+        values: '1x20'
+      - series: 'ntp_target_suspended{instance="a",job="ntp",server="deny.example.org",code="DENY"}'
+        values: '1x5'
+      - series: 'ntp_falseticker{instance="a",job="ntp",server="false.example.org"}'
+        values: '1x15'
+      - series: 'ntp_consensus_majority{instance="a",job="ntp"}'
+        values: '0x20'
+      - series: 'ntp_root_distance_seconds{instance="a",job="ntp",server="far.example.org"}'
+        values: '2x20'
+      - series: 'ntp_reference_age_seconds{instance="a",job="ntp",server="old.example.org"}'
+        values: '7200x20'
+      - series: 'ntp_pool_servers_active{instance="a",job="ntp",pool="pool.example.org"}'
+        values: '1x20'
+      - series: 'ntp_nts_ke_success{instance="a",job="ntp",server="nts://nts.example.org"}'
+        values: '0x20'
+      - series: 'ntp_probe_success{instance="probed.example.org",job="ntp-probe"}'
+        values: '0x15'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: NTPServerDown
+        exp_alerts:
+          - exp_labels: {severity: warning, server: down.example.org}
+            exp_annotations:
+              description: "No response from down.example.org during the last collection cycles."
+              summary: "NTP server down.example.org does not answer"
+      - eval_time: 11m
+        alertname: NTPServerNoValidResponse
+        exp_alerts:
+          - exp_labels: {severity: warning, server: bad.example.org}
+            exp_annotations:
+              description: "The server answers but its responses cannot be used (Kiss-o'-Death, unsynchronized, invalid stratum...). See ntp_invalid_responses_total for the reason."
+              summary: "NTP server bad.example.org only returns invalid responses"
+      - eval_time: 3m
+        alertname: NTPServerUnsynchronized
+        exp_alerts:
+          - exp_labels: {severity: warning, server: unsync.example.org}
+            exp_annotations:
+              description: "The server announced leap indicator 3 (alarm condition)."
+              summary: "NTP server unsync.example.org reports it is not synchronized"
+      - eval_time: 16m
+        alertname: NTPHighPacketLoss
+        exp_alerts:
+          - exp_labels: {severity: info, server: lossy.example.org}
+            exp_annotations:
+              description: "More than half of the queries to lossy.example.org went unanswered over 15 minutes, while it still answers."
+              summary: "High packet loss towards lossy.example.org"
+      - eval_time: 1m
+        alertname: NTPKissOfDeathSuspended
+        exp_alerts:
+          - exp_labels: {severity: warning, server: deny.example.org, code: DENY}
+            exp_annotations:
+              description: "The server sent a DENY Kiss-o'-Death code; the exporter stopped querying it for a while."
+              summary: "NTP server deny.example.org refused access (DENY)"
+      - eval_time: 11m
+        alertname: NTPFalseticker
+        exp_alerts:
+          - exp_labels: {severity: warning, server: false.example.org}
+            exp_annotations:
+              description: "Its offset lies outside the intersection of the majority of servers."
+              summary: "NTP server false.example.org disagrees with the other servers"
+      - eval_time: 16m
+        alertname: NTPNoConsensusMajority
+        exp_alerts:
+          - exp_labels: {severity: warning, job: ntp}
+            exp_annotations:
+              description: "No majority of the servers agrees on the time, so no falseticker can be identified. Add servers or check them."
+              summary: "The NTP servers do not agree"
+      - eval_time: 16m
+        alertname: NTPRootDistanceHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, server: far.example.org}
+            exp_annotations:
+              description: "Its root distance (2s), the upper bound of its error, exceeds 1s."
+              summary: "NTP server far.example.org is far from its reference"
+      - eval_time: 16m
+        alertname: NTPReferenceStale
+        exp_alerts:
+          - exp_labels: {severity: warning, server: old.example.org}
+            exp_annotations:
+              description: "The last update of its clock is 2h 0m 0s old, it may run on its own oscillator (holdover)."
+              summary: "NTP server old.example.org did not update its clock for a long time"
+      - eval_time: 16m
+        alertname: NTPPoolDegraded
+        exp_alerts:
+          - exp_labels: {severity: warning, pool: pool.example.org}
+            exp_annotations:
+              description: "Only 1 member(s) of pool.example.org returned a valid time."
+              summary: "Fewer than 2 valid servers in pool pool.example.org"
+      - eval_time: 16m
+        alertname: NTPNTSKeyExchangeFailed
+        exp_alerts:
+          - exp_labels: {severity: warning, server: "nts://nts.example.org"}
+            exp_annotations:
+              description: "The NTS-KE server (TLS, port 4460) does not deliver keys; authenticated time is not available from nts://nts.example.org."
+              summary: "NTS key exchange with nts://nts.example.org fails"
+      - eval_time: 11m
+        alertname: NTPProbeFailed
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: probed.example.org, job: ntp-probe}
+            exp_annotations:
+              description: "The NTP target scraped through /probe gives no valid time for 10 minutes."
+              summary: "/probe of probed.example.org fails"
+
+  # No exporter at all
+  - interval: 1m
+    input_series:
+      - series: 'up{job="node"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: NTPExporterAbsent
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              description: "No scrape target matches job=~\".*ntp.*\", so time synchronization is not monitored."
+              summary: "No NTP exporter is scraped"
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="a",job="ntp"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: NTPExporterDown
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: a, job: ntp}
+            exp_annotations:
+              description: "Prometheus fails to scrape a (ntp) for 5 minutes."
+              summary: "NTP exporter a cannot be scraped"
+  - interval: 1m
+    input_series:
+      # Certificate expiring 1 day after the start of the test
+      - series: 'ntp_nts_cert_expiry_timestamp_seconds{instance="a",job="ntp",server="nts://nts.example.org"}'
+        values: '86400x5'
+      - series: 'ntp_exporter_cycle_overrun_total{instance="a",job="ntp"}'
+        values: '0 1 2 3'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: NTPNTSCertificateExpiringSoon
+        exp_alerts:
+          - exp_labels: {severity: warning, server: "nts://nts.example.org"}
+            exp_annotations:
+              description: "The certificate of the NTS key exchange server expires in 23h 57m 0s."
+              summary: "NTS certificate of nts://nts.example.org expires soon"
+      - eval_time: 3m
+        alertname: NTPExporterCycleOverrun
+        exp_alerts:
+          - exp_labels: {severity: info, instance: a, job: ntp}
+            exp_annotations:
+              description: "Some targets did not answer before the end of the cycle. Lower samples_per_server or the timeout, or raise collection_interval."
+              summary: "NTP exporter a cycles hit their deadline"

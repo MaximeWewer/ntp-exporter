@@ -609,8 +609,10 @@ act -W .github/workflows/quality-assurance.yml   # run the CI locally (nektos/ac
 Under act, steps uploading artifacts and SARIF reports are skipped. The
 alerting rules in `deployments/prometheus/ntp-alerts-*.yml` are generated from
 the Helm template: after changing it, run
-`.github/scripts/check-deployments.sh --update-rules`. A Go test checks that
-the dashboards and the rules only query metrics the exporter exposes.
+`.github/scripts/check-deployments.sh --update-rules`. Each alert has a
+scenario in `deployments/prometheus/tests/` (`promtool test rules`), and a Go
+test checks that the dashboards and the rules only query metrics the exporter
+exposes.
 
 Package layout:
 
