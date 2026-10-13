@@ -69,6 +69,8 @@ func (s *Server) Start(ctx context.Context) error {
 		ReadTimeout:       s.config.Server.ReadTimeout,
 		ReadHeaderTimeout: s.config.Server.ReadTimeout,
 		WriteTimeout:      s.config.Server.WriteTimeout,
+		// Requests in flight (a /probe burst) end with the exporter
+		BaseContext: func(net.Listener) context.Context { return ctx },
 	}
 
 	errChan := make(chan error, 1)

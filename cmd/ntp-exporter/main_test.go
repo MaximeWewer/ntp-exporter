@@ -131,3 +131,43 @@ func TestApplyWebFlags(t *testing.T) {
 	require.NoError(t, applyWebFlags(c, valid, ""))
 	assert.Equal(t, valid, c.Server.WebConfigFile)
 }
+
+func TestWaitAndShutdown(t *testing.T) {
+	t.Run("graceful", func(t *testing.T) {
+		signals := make(chan os.Signal, 2)
+		serverErr, collectorErr := make(chan error, 1), make(chan error, 1)
+		cancelled := make(chan struct{})
+		cancel := func() {
+			close(cancelled)
+			// Both stop once the context is cancelled
+			go func() { serverErr <- nil; collectorErr <- nil }()
+		}
+		signals <- os.Interrupt
+		assert.Equal(t, "graceful", waitAndShutdown(cancel, signals, serverErr, collectorErr, time.Second))
+		<-cancelled
+	})
+
+	t.Run("second signal forces the exit", func(t *testing.T) {
+		signals := make(chan os.Signal, 2)
+		signals <- os.Interrupt
+		signals <- os.Interrupt
+		start := time.Now()
+		reason := waitAndShutdown(func() {}, signals, make(chan error), make(chan error), time.Minute)
+		assert.Equal(t, "forced", reason)
+		assert.Less(t, time.Since(start), time.Second)
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		signals := make(chan os.Signal, 1)
+		signals <- os.Interrupt
+		reason := waitAndShutdown(func() {}, signals, make(chan error), make(chan error), 50*time.Millisecond)
+		assert.Equal(t, "timeout", reason)
+	})
+
+	t.Run("collector failure stops the server", func(t *testing.T) {
+		serverErr, collectorErr := make(chan error, 1), make(chan error, 1)
+		collectorErr <- errors.New("boom")
+		cancel := func() { serverErr <- nil }
+		assert.Equal(t, "graceful", waitAndShutdown(cancel, make(chan os.Signal), serverErr, collectorErr, time.Second))
+	})
+}

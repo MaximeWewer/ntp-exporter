@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -129,40 +130,63 @@ func main() {
 		collectorErrChan <- runCollectionLoop(ctx, cfg, prober, exporter)
 	}()
 
-	// Wait for interrupt signal
-	sigChan := make(chan os.Signal, 1)
+	sigChan := make(chan os.Signal, 2)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 
-	serverStopped := false
+	reason := waitAndShutdown(cancel, sigChan, serverErrChan, collectorErrChan, shutdownTimeout)
+	logger.Shutdown(reason)
+}
+
+// shutdownTimeout bounds the graceful shutdown
+const shutdownTimeout = 10 * time.Second
+
+// waitAndShutdown waits for a signal or for the end of the server or of the
+// collection loop, then cancels the context and waits for both to stop.
+// Cancelling the context ends the requests in flight and the current cycle; a
+// second signal, or the timeout, ends the wait. It returns the shutdown reason.
+func waitAndShutdown(cancel context.CancelFunc, signals <-chan os.Signal, serverErr, collectorErr <-chan error,
+	timeout time.Duration) string {
+	serverDone, collectorDone := false, false
 	select {
-	case sig := <-sigChan:
+	case sig := <-signals:
 		logger.SafeInfo("main", "Received shutdown signal", map[string]interface{}{"signal": sig.String()})
-	case err := <-serverErrChan:
-		serverStopped = true
+	case err := <-serverErr:
+		serverDone = true
 		if err != nil {
 			logger.Error("main", "Server error", err)
 		}
-	case err := <-collectorErrChan:
+	case err := <-collectorErr:
+		collectorDone = true
 		if err != nil {
 			logger.Error("main", "Collector error", err)
 		}
 	}
 
-	// Graceful shutdown: cancelling the context stops the collection loop and
-	// makes the server shut down gracefully
 	cancel()
-	if !serverStopped {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for !serverDone || !collectorDone {
 		select {
-		case err := <-serverErrChan:
+		case err := <-serverErr:
+			serverDone = true
 			if err != nil {
 				logger.Error("main", "Server shutdown error", err)
 			}
-		case <-time.After(15 * time.Second):
-			logger.Warn("main", "Server shutdown timed out")
+		case err := <-collectorErr:
+			collectorDone = true
+			if err != nil && !errors.Is(err, context.Canceled) {
+				logger.Error("main", "Collector error", err)
+			}
+		case sig := <-signals:
+			logger.SafeWarn("main", "Second signal, forcing shutdown", map[string]interface{}{"signal": sig.String()})
+			return "forced"
+		case <-deadline.C:
+			logger.Warn("main", "Shutdown timed out")
+			return "timeout"
 		}
 	}
-
-	logger.Shutdown("graceful")
+	return "graceful"
 }
 
 // loadConfig loads configuration based on whether a config file is specified

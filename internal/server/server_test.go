@@ -216,3 +216,49 @@ func TestServer_ProbeRoute(t *testing.T) {
 	_, index = get(t, without.URL+"/")
 	assert.NotContains(t, index, "/probe?target=")
 }
+
+func TestServer_ShutdownEndsRequestsInFlight(t *testing.T) {
+	port := freePort(t)
+	cfg := config.DefaultConfig()
+	cfg.Server.Address = "127.0.0.1"
+	cfg.Server.Port = port
+	reg := metrics.NewRegistryWithConfig("ntp", "")
+	require.NoError(t, reg.Register())
+	srv := New(cfg, reg.GetRegistry(), nil)
+	// A /probe burst lasting until its request context ends
+	srv.SetProbeHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(time.Minute):
+		}
+	}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan error, 1)
+	go func() { stopped <- srv.Start(ctx) }()
+
+	url := "http://127.0.0.1:" + strconv.Itoa(port) + "/probe?target=x"
+	require.Eventually(t, func() bool {
+		c, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(port))
+		if err == nil {
+			_ = c.Close()
+		}
+		return err == nil
+	}, 2*time.Second, 10*time.Millisecond)
+	go func() {
+		if resp, err := http.Get(url); err == nil {
+			_ = resp.Body.Close()
+		}
+	}()
+	time.Sleep(100 * time.Millisecond)
+
+	start := time.Now()
+	cancel()
+	select {
+	case err := <-stopped:
+		assert.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the server did not stop")
+	}
+	assert.Less(t, time.Since(start), 2*time.Second, "the request in flight does not hold the shutdown")
+}
