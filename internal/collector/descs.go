@@ -11,6 +11,7 @@ type descs struct {
 	up          *prometheus.Desc
 	lastSuccess *prometheus.Desc
 	suspended   *prometheus.Desc
+	backoff     *prometheus.Desc
 
 	// Server identity
 	info *prometheus.Desc
@@ -79,6 +80,7 @@ func newDescs() *descs {
 	return &descs{
 		up:          d(subsystem, "up", "Whether the NTP server answered during the last cycle (1) or not (0)", server...),
 		lastSuccess: d(subsystem, "last_success_timestamp_seconds", "Unix time of the last cycle with a valid response from the server", server...),
+		backoff:     d(subsystem, "target_backoff_factor", "Multiplier of the polling interval of the server after RATE Kiss-o'-Death codes (1: normal polling)", server...),
 		suspended:   d(subsystem, "target_suspended", "Whether the server is no longer queried after a DENY or RSTR Kiss-o'-Death (1) or not (0)", "server", "code"),
 
 		info: d(subsystem, "server_info", "Identity of the NTP server from its last valid response: queried address, pool, reference ID and NTP version of the response (value is always 1)",
@@ -133,7 +135,7 @@ func newDescs() *descs {
 // all returns every descriptor
 func (d *descs) all() []*prometheus.Desc {
 	return []*prometheus.Desc{
-		d.up, d.lastSuccess, d.suspended, d.info,
+		d.up, d.lastSuccess, d.suspended, d.backoff, d.info,
 		d.offset, d.rtt, d.stratum, d.referenceAge,
 		d.rootDelay, d.rootDispersion, d.rootDistance, d.precision, d.leapIndicator,
 		d.jitter, d.samples, d.packetLoss,

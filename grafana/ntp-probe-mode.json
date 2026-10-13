@@ -27,6 +27,35 @@
         "refresh": 1
       },
       {
+        "name": "job",
+        "label": "Job",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(ntp_exporter_build_info, job)",
+          "refId": "job"
+        },
+        "definition": "label_values(ntp_exporter_build_info, job)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0
+      },
+      {
         "name": "server",
         "label": "Server",
         "type": "query",
@@ -35,10 +64,10 @@
           "uid": "${datasource}"
         },
         "query": {
-          "query": "label_values(ntp_up, server)",
+          "query": "label_values(ntp_up{job=~\"$job\"}, server)",
           "refId": "server"
         },
-        "definition": "label_values(ntp_up, server)",
+        "definition": "label_values(ntp_up{job=~\"$job\"}, server)",
         "includeAll": true,
         "multi": true,
         "allValue": ".*",
@@ -84,7 +113,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(ntp_up{server=~\"$server\"})",
+          "expr": "sum(ntp_up{job=~\"$job\",server=~\"$server\"})",
           "legendFormat": "",
           "refId": "A",
           "format": "time_series",
@@ -146,7 +175,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count(ntp_response_valid{server=~\"$server\"} == 0) or vector(0)",
+          "expr": "count(ntp_response_valid{job=~\"$job\",server=~\"$server\"} == 0) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "format": "time_series",
@@ -208,7 +237,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(ntp_falseticker) or vector(0)",
+          "expr": "sum(ntp_falseticker{job=~\"$job\",server=~\"$server\"}) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "format": "time_series",
@@ -270,7 +299,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count(ntp_target_suspended == 1) or vector(0)",
+          "expr": "count(ntp_target_suspended{job=~\"$job\"} == 1) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "format": "time_series",
@@ -332,7 +361,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_consensus_offset_seconds",
+          "expr": "ntp_consensus_offset_seconds{job=~\"$job\"}",
           "legendFormat": "",
           "refId": "A",
           "format": "time_series",
@@ -398,7 +427,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_consensus_majority",
+          "expr": "ntp_consensus_majority{job=~\"$job\"}",
           "legendFormat": "majority",
           "refId": "A",
           "format": "time_series",
@@ -410,7 +439,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_consensus_truechimers",
+          "expr": "ntp_consensus_truechimers{job=~\"$job\"}",
           "legendFormat": "agree",
           "refId": "B",
           "format": "time_series",
@@ -422,7 +451,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_consensus_servers",
+          "expr": "ntp_consensus_servers{job=~\"$job\"}",
           "legendFormat": "servers",
           "refId": "C",
           "format": "time_series",
@@ -531,7 +560,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count(ntp_nts_ke_success == 0) or vector(0)",
+          "expr": "count(ntp_nts_ke_success{job=~\"$job\"} == 0) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "format": "time_series",
@@ -593,7 +622,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "min(ntp_nts_cert_expiry_timestamp_seconds) - time()",
+          "expr": "min(ntp_nts_cert_expiry_timestamp_seconds{job=~\"$job\"}) - time()",
           "legendFormat": "",
           "refId": "A",
           "format": "time_series",
@@ -659,7 +688,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count(ntp_probe_success == 0) or vector(0)",
+          "expr": "count(ntp_probe_success{job=~\"$job\"} == 0) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "format": "time_series",
@@ -721,7 +750,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (server) (ntp_up{server=~\"$server\"})",
+          "expr": "max by (server) (ntp_up{job=~\"$job\",server=~\"$server\"})",
           "legendFormat": "",
           "refId": "A",
           "format": "table",
@@ -733,7 +762,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (server) (ntp_response_valid{server=~\"$server\"})",
+          "expr": "max by (server) (ntp_response_valid{job=~\"$job\",server=~\"$server\"})",
           "legendFormat": "",
           "refId": "B",
           "format": "table",
@@ -745,7 +774,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (server) (ntp_stratum{server=~\"$server\"})",
+          "expr": "max by (server) (ntp_stratum{job=~\"$job\",server=~\"$server\"})",
           "legendFormat": "",
           "refId": "C",
           "format": "table",
@@ -757,7 +786,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (server) (ntp_offset_seconds{server=~\"$server\"})",
+          "expr": "max by (server) (ntp_offset_seconds{job=~\"$job\",server=~\"$server\"})",
           "legendFormat": "",
           "refId": "D",
           "format": "table",
@@ -769,7 +798,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (server) (ntp_rtt_seconds{server=~\"$server\"})",
+          "expr": "max by (server) (ntp_rtt_seconds{job=~\"$job\",server=~\"$server\"})",
           "legendFormat": "",
           "refId": "E",
           "format": "table",
@@ -781,7 +810,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (server) (ntp_root_distance_seconds{server=~\"$server\"})",
+          "expr": "max by (server) (ntp_root_distance_seconds{job=~\"$job\",server=~\"$server\"})",
           "legendFormat": "",
           "refId": "F",
           "format": "table",
@@ -793,7 +822,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (server) (ntp_reference_age_seconds{server=~\"$server\"})",
+          "expr": "max by (server) (ntp_reference_age_seconds{job=~\"$job\",server=~\"$server\"})",
           "legendFormat": "",
           "refId": "G",
           "format": "table",
@@ -805,7 +834,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (server, refid, address) (ntp_server_info{server=~\"$server\"})",
+          "expr": "max by (server, refid, address) (ntp_server_info{job=~\"$job\",server=~\"$server\"})",
           "legendFormat": "",
           "refId": "H",
           "format": "table",
@@ -938,7 +967,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_offset_from_consensus_seconds{server=~\"$server\"}",
+          "expr": "ntp_offset_from_consensus_seconds{job=~\"$job\",server=~\"$server\"}",
           "legendFormat": "{{server}}",
           "refId": "A",
           "format": "time_series"
@@ -997,7 +1026,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_offset_seconds{server=~\"$server\"}",
+          "expr": "ntp_offset_seconds{job=~\"$job\",server=~\"$server\"}",
           "legendFormat": "{{server}}",
           "refId": "A",
           "format": "time_series"
@@ -1007,7 +1036,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_consensus_offset_seconds",
+          "expr": "ntp_consensus_offset_seconds{job=~\"$job\"}",
           "legendFormat": "consensus",
           "refId": "B",
           "format": "time_series"
@@ -1066,7 +1095,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_stratum{server=~\"$server\"}",
+          "expr": "ntp_stratum{job=~\"$job\",server=~\"$server\"}",
           "legendFormat": "{{server}}",
           "refId": "A",
           "format": "time_series"
@@ -1125,7 +1154,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_pool_servers_active",
+          "expr": "ntp_pool_servers_active{job=~\"$job\"}",
           "legendFormat": "{{pool}} active",
           "refId": "A",
           "format": "time_series"
@@ -1135,7 +1164,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_pool_servers_total",
+          "expr": "ntp_pool_servers_total{job=~\"$job\"}",
           "legendFormat": "{{pool}} resolved",
           "refId": "B",
           "format": "time_series"
@@ -1208,7 +1237,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_jitter_seconds{server=~\"$server\"}",
+          "expr": "ntp_jitter_seconds{job=~\"$job\",server=~\"$server\"}",
           "legendFormat": "{{server}}",
           "refId": "A",
           "format": "time_series"
@@ -1267,7 +1296,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_rtt_seconds{server=~\"$server\"}",
+          "expr": "ntp_rtt_seconds{job=~\"$job\",server=~\"$server\"}",
           "legendFormat": "{{server}}",
           "refId": "A",
           "format": "time_series"
@@ -1326,7 +1355,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_packet_loss_ratio{server=~\"$server\"}",
+          "expr": "ntp_packet_loss_ratio{job=~\"$job\",server=~\"$server\"}",
           "legendFormat": "{{server}}",
           "refId": "A",
           "format": "time_series"
@@ -1386,7 +1415,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_root_distance_seconds{server=~\"$server\"}",
+          "expr": "ntp_root_distance_seconds{job=~\"$job\",server=~\"$server\"}",
           "legendFormat": "{{server}}",
           "refId": "A",
           "format": "time_series"
@@ -1445,7 +1474,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_reference_age_seconds{server=~\"$server\"}",
+          "expr": "ntp_reference_age_seconds{job=~\"$job\",server=~\"$server\"}",
           "legendFormat": "{{server}}",
           "refId": "A",
           "format": "time_series"
@@ -1504,7 +1533,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (server, reason) (rate(ntp_invalid_responses_total{server=~\"$server\"}[$__rate_interval]))",
+          "expr": "sum by (server, reason) (rate(ntp_invalid_responses_total{job=~\"$job\",server=~\"$server\"}[$__rate_interval]))",
           "legendFormat": "{{server}} {{reason}}",
           "refId": "A",
           "format": "time_series"
@@ -1555,6 +1584,66 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "Polling slowed down by RATE",
+      "description": "Multiplier of the polling interval of each server after RATE Kiss-o'-Death codes: 1 is the normal polling, it doubles at each RATE and goes back down while the server answers.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (server) (ntp_target_backoff_factor{job=~\"$job\",server=~\"$server\"})",
+          "legendFormat": "{{server}}",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 33,
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
       "type": "row",
       "title": "Network Time Security (nts:// servers)",
       "id": 24,
@@ -1563,7 +1652,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 58
       },
       "panels": []
     },
@@ -1577,7 +1666,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (server) (ntp_nts_ke_success{server=~\"$server\",server=~\"nts://.*\"})",
+          "expr": "max by (server) (ntp_nts_ke_success{job=~\"$job\",server=~\"$server\",server=~\"nts://.*\"})",
           "legendFormat": "",
           "refId": "A",
           "format": "table",
@@ -1589,7 +1678,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (server) (ntp_nts_cert_expiry_timestamp_seconds{server=~\"$server\",server=~\"nts://.*\"}) * 1000",
+          "expr": "max by (server) (ntp_nts_cert_expiry_timestamp_seconds{job=~\"$job\",server=~\"$server\",server=~\"nts://.*\"}) * 1000",
           "legendFormat": "",
           "refId": "B",
           "format": "table",
@@ -1601,7 +1690,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (server) (ntp_nts_cert_expiry_timestamp_seconds{server=~\"$server\",server=~\"nts://.*\"}) - time()",
+          "expr": "max by (server) (ntp_nts_cert_expiry_timestamp_seconds{job=~\"$job\",server=~\"$server\",server=~\"nts://.*\"}) - time()",
           "legendFormat": "",
           "refId": "C",
           "format": "table",
@@ -1613,7 +1702,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (server, address) (ntp_server_info{server=~\"$server\",server=~\"nts://.*\"})",
+          "expr": "max by (server, address) (ntp_server_info{job=~\"$job\",server=~\"$server\",server=~\"nts://.*\"})",
           "legendFormat": "",
           "refId": "D",
           "format": "table",
@@ -1721,7 +1810,7 @@
         "h": 8,
         "w": 14,
         "x": 0,
-        "y": 52
+        "y": 59
       },
       "datasource": {
         "type": "prometheus",
@@ -1738,7 +1827,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_nts_ke_success{server=~\"$server\",server=~\"nts://.*\"}",
+          "expr": "ntp_nts_ke_success{job=~\"$job\",server=~\"$server\",server=~\"nts://.*\"}",
           "legendFormat": "{{server}}",
           "refId": "A",
           "format": "time_series"
@@ -1781,7 +1870,7 @@
         "h": 8,
         "w": 10,
         "x": 14,
-        "y": 52
+        "y": 59
       },
       "datasource": {
         "type": "prometheus",
@@ -1797,7 +1886,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 60
+        "y": 67
       },
       "panels": []
     },
@@ -1811,7 +1900,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_probe_success",
+          "expr": "ntp_probe_success{job=~\"$job\"}",
           "legendFormat": "{{instance}}",
           "refId": "A",
           "format": "time_series"
@@ -1854,7 +1943,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 61
+        "y": 68
       },
       "datasource": {
         "type": "prometheus",
@@ -1871,7 +1960,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_probe_duration_seconds",
+          "expr": "ntp_probe_duration_seconds{job=~\"$job\"}",
           "legendFormat": "{{instance}}",
           "refId": "A",
           "format": "time_series"
@@ -1913,7 +2002,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 61
+        "y": 68
       },
       "datasource": {
         "type": "prometheus",
@@ -1929,7 +2018,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 68
+        "y": 75
       },
       "panels": []
     },
@@ -1943,7 +2032,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "ntp_exporter_cycle_duration_seconds",
+          "expr": "rate(ntp_exporter_cycle_duration_seconds_sum{job=~\"$job\"}[$__rate_interval]) / rate(ntp_exporter_cycle_duration_seconds_count{job=~\"$job\"}[$__rate_interval])",
           "legendFormat": "{{instance}}",
           "refId": "A",
           "format": "time_series"
@@ -1985,7 +2074,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 69
+        "y": 76
       },
       "datasource": {
         "type": "prometheus",
@@ -2002,7 +2091,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(increase(ntp_exporter_cycle_overrun_total[$__rate_interval]))",
+          "expr": "sum(increase(ntp_exporter_cycle_overrun_total{job=~\"$job\"}[$__rate_interval]))",
           "legendFormat": "overruns",
           "refId": "A",
           "format": "time_series"
@@ -2012,7 +2101,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (server, code) (increase(ntp_kiss_of_death_total{server=~\"$server\"}[$__rate_interval]))",
+          "expr": "sum by (server, code) (increase(ntp_kiss_of_death_total{job=~\"$job\",server=~\"$server\"}[$__rate_interval]))",
           "legendFormat": "KoD {{code}} {{server}}",
           "refId": "B",
           "format": "time_series"
@@ -2055,7 +2144,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 69
+        "y": 76
       },
       "datasource": {
         "type": "prometheus",

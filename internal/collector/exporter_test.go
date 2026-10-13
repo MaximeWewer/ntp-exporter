@@ -456,6 +456,7 @@ func TestExporter_KoDRateSkippedCycleIsNotCountedTwice(t *testing.T) {
 
 	assert.Equal(t, 1.0, h.mustValue("ntp_kiss_of_death_total", map[string]string{"server": server, "code": "RATE"}))
 	assert.Equal(t, 1.0, h.mustValue("ntp_up", srv(server)), "skipped target keeps its previous state")
+	assert.Equal(t, 2.0, h.mustValue("ntp_target_backoff_factor", srv(server)), "polling interval doubled after RATE")
 }
 
 // burstMock returns a fixed sequence of samples for each burst

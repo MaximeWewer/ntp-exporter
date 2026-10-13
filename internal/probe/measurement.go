@@ -42,6 +42,9 @@ type Measurement struct {
 	SuspendCode string
 	// NTS describes the key exchange of an NTS target (nts://host)
 	NTS *ntp.NTSState
+	// BackoffFactor multiplies the polling interval after RATE codes (1:
+	// normal polling)
+	BackoffFactor int
 }
 
 // key identifies a target across cycles

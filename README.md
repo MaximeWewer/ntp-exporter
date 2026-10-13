@@ -367,6 +367,7 @@ Every metric is prefixed with `ntp_`.
 | `ntp_samples_count` | Valid samples in the last burst (jitter and standard deviations need 2 or more) |
 | `ntp_packet_loss_ratio` | Queries left without any answer / queries sent (invalid answers are counted in `ntp_invalid_responses_total`) |
 | `ntp_target_suspended{code}` | 1 while the server is not queried after `DENY` or `RSTR` |
+| `ntp_target_backoff_factor` | Multiplier of the polling interval after `RATE` codes (1: normal) |
 | `ntp_kiss_of_death_total{code}` | Kiss-o'-Death packets received |
 | `ntp_invalid_responses_total{reason}` | Queries without valid measurement: `kod`, `unsync`, `stratum`, `root_distance`, `stale_reference`, `invalid_time` (bad transmit time, clock ticking backwards, origin timestamp mismatch), `other`, `timeout` (no answer) |
 | `ntp_nts_ke_success` | NTS servers: 1 when the last key exchange succeeded |
@@ -471,13 +472,16 @@ defaults.
 
 Import the dashboards from [`grafana/`](grafana/):
 
-- `ntp-probe-mode.json`: server health, consensus and falsetickers, quality,
-  NTS key exchange and certificate expiry, `/probe` targets
-- `ntp-agent-mode.json`: clock offset per node, kernel state and error bounds,
-  chronyd tracking report against the measured offset, server health, NTS
+- `ntp-probe-mode.json`: server health, consensus majority and falsetickers,
+  quality (jitter, root distance, reference age, `RATE` backoff), NTS key
+  exchange and certificate expiry, `/probe` targets
+- `ntp-agent-mode.json`: clock error of each node against its best reference
+  server, kernel synchronization and error bound violations, chronyd tracking
+  report against the measured offset, reference servers
 
-Both dashboards use a Prometheus data source variable and `server` (and
-`node`) filters.
+Both dashboards have a Prometheus data source variable and `job`, `server`
+(and `node`) filters, so that agents and probes sharing a Prometheus do not
+mix.
 
 ## Kernel option
 

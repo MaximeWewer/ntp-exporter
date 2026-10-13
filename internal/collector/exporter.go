@@ -355,6 +355,9 @@ func writeMeasurement(ch chan<- prometheus.Metric, d *descs, meas *probe.Measure
 		up = 1
 	}
 	gauge(ch, d.up, up, server)
+	if meas.BackoffFactor > 0 {
+		gauge(ch, d.backoff, float64(meas.BackoffFactor), server)
+	}
 
 	// Not queried (RATE backoff) and no previous measurement: nothing was
 	// sent, so nothing was lost

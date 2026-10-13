@@ -235,11 +235,13 @@ func (p *Prober) probe(ctx context.Context, target Target) *Measurement {
 		}
 		skipped := *prev
 		skipped.Skipped = true
+		skipped.BackoffFactor = p.backoff.Factor(key)
 		return &skipped
 	}
 
 	m := p.measure(ctx, target, p.cfg.NTP.SamplesPerServer)
 	p.backoff.Record(key, m)
+	m.BackoffFactor = p.backoff.Factor(key)
 
 	p.mu.Lock()
 	p.previous[key] = m
@@ -284,6 +286,7 @@ func (p *Prober) Probe(ctx context.Context, server string, samples int) *Measure
 
 	m := p.measure(ctx, target, samples)
 	p.probeBackoff.Record(key, m)
+	m.BackoffFactor = p.probeBackoff.Factor(key)
 	return m
 }
 

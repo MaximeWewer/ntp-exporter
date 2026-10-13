@@ -147,6 +147,17 @@ func (b *Backoff) Record(server string, m *Measurement) {
 	}
 }
 
+// Factor returns the multiplier of the polling interval of a target: 1
+// normally, doubled at each RATE Kiss-o'-Death
+func (b *Backoff) Factor(server string) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if st, ok := b.states[server]; ok {
+		return st.factor
+	}
+	return 1
+}
+
 // Forget drops the state of targets that are no longer probed. A target still
 // suspended or backing off is kept until its state expires: a pool member
 // leaving the DNS answer and coming back must not be queried earlier.
