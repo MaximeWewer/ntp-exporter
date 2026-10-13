@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "ntp-exporter.configMapName" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace | quote }}
   labels:
     {{- include "ntp-exporter.labels" . | nindent 4 }}
 data:
@@ -13,15 +13,15 @@ data:
   config.yaml: |
     # NTP Exporter Configuration
     server:
-      address: {{ .Values.config.address | default "0.0.0.0" }}
+      address: {{ .Values.config.address | default "0.0.0.0" | quote }}
       port: {{ .Values.config.metricsPort | default 9559 }}
-      read_timeout: {{ .Values.config.readTimeout | default "10s" }}
-      write_timeout: {{ .Values.config.writeTimeout | default "10s" }}
+      read_timeout: {{ .Values.config.readTimeout | default "10s" | quote }}
+      write_timeout: {{ .Values.config.writeTimeout | default "10s" | quote }}
       {{- if .Values.config.tls }}
       {{- if .Values.config.tls.enabled }}
       tls_enabled: {{ .Values.config.tls.enabled }}
-      tls_cert_file: {{ .Values.config.tls.certFile | default "" }}
-      tls_key_file: {{ .Values.config.tls.keyFile | default "" }}
+      tls_cert_file: {{ .Values.config.tls.certFile | default "" | quote }}
+      tls_key_file: {{ .Values.config.tls.keyFile | default "" | quote }}
       {{- end }}
       {{- end }}
 
@@ -35,18 +35,18 @@ data:
       {{- else }}
       servers:
       {{- range .Values.config.ntpServers }}
-      - {{ . }}
+      - {{ . | quote }}
       {{- end }}
       {{- end }}
-      timeout: {{ .Values.config.ntpTimeout | default "5s" }}
+      timeout: {{ .Values.config.ntpTimeout | default "5s" | quote }}
       version: {{ .Values.config.ntpVersion | default 4 }}
       samples_per_server: {{ .Values.config.samplesPerServer | default 4 }}
-      sample_spacing: {{ .Values.config.sampleSpacing | default "2s" }}
+      sample_spacing: {{ .Values.config.sampleSpacing | default "2s" | quote }}
       max_concurrency: {{ .Values.config.maxConcurrency | default 10 }}
-      ip_family: {{ .Values.config.ipFamily | default "auto" }}
-      scrape_interval: {{ .Values.config.scrapeInterval | default "60s" }}
-      max_clock_offset: {{ .Values.config.maxClockOffset | default "100ms" }}
-      max_root_distance: {{ .Values.config.maxRootDistance | default "1.5s" }}
+      ip_family: {{ .Values.config.ipFamily | default "auto" | quote }}
+      scrape_interval: {{ .Values.config.scrapeInterval | default "60s" | quote }}
+      max_clock_offset: {{ .Values.config.maxClockOffset | default "100ms" | quote }}
+      max_root_distance: {{ .Values.config.maxRootDistance | default "1.5s" | quote }}
       {{- if include "ntp-exporter.kernelEnabled" . }}
       kernel:
         enabled: true
@@ -61,8 +61,8 @@ data:
 
       {{- if .Values.config.kod }}
       kod:
-        max_backoff: {{ .Values.config.kod.maxBackoff | default "1024s" }}
-        suspend_duration: {{ .Values.config.kod.suspendDuration | default "1h" }}
+        max_backoff: {{ .Values.config.kod.maxBackoff | default "1024s" | quote }}
+        suspend_duration: {{ .Values.config.kod.suspendDuration | default "1h" | quote }}
       {{- end }}
 
       {{- if and .Values.config.consensus (hasKey .Values.config.consensus "enabled") }}
@@ -72,27 +72,27 @@ data:
 
       {{- if .Values.config.dnsCache }}
       dns_cache:
-        min_ttl: {{ .Values.config.dnsCache.minTTL | default "5m" }}
-        max_ttl: {{ .Values.config.dnsCache.maxTTL | default "60m" }}
+        min_ttl: {{ .Values.config.dnsCache.minTTL | default "5m" | quote }}
+        max_ttl: {{ .Values.config.dnsCache.maxTTL | default "60m" | quote }}
       {{- end }}
 
     logging:
-      level: {{ .Values.config.logging.level }}
-      format: {{ .Values.config.logging.format }}
-      output: {{ .Values.config.logging.output | default "stdout" }}
+      level: {{ .Values.config.logging.level | quote }}
+      format: {{ .Values.config.logging.format | quote }}
+      output: {{ .Values.config.logging.output | default "stdout" | quote }}
       {{- if .Values.config.logging.enableFile }}
       enable_file: {{ .Values.config.logging.enableFile }}
-      file_path: {{ .Values.config.logging.filePath | default "" }}
+      file_path: {{ .Values.config.logging.filePath | default "" | quote }}
       {{- end }}
 
     metrics:
       {{- if .Values.config.metrics }}
-      namespace: {{ .Values.config.metrics.namespace | default "ntp" }}
-      subsystem: {{ .Values.config.metrics.subsystem | default "" }}
+      namespace: {{ .Values.config.metrics.namespace | default "ntp" | quote }}
+      subsystem: {{ .Values.config.metrics.subsystem | default "" | quote }}
       {{- if .Values.config.metrics.labels }}
       labels:
         {{- range $key, $value := .Values.config.metrics.labels }}
-        {{ $key }}: {{ $value }}
+        {{ $key | quote }}: {{ $value | toString | quote }}
         {{- end }}
       {{- end }}
       {{- else }}
