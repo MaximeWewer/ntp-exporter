@@ -151,7 +151,7 @@ func TestValidateNTP_Timeout(t *testing.T) {
 				Version:            4,
 				SamplesPerServer:   3,
 				MaxConcurrency:     10,
-				CollectionInterval: 30 * time.Second,
+				CollectionInterval: 10 * time.Minute,
 				MaxRootDistance:    DefaultMaxRootDistance,
 				KoD:                KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:           DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
@@ -230,7 +230,7 @@ func TestValidateNTP_SamplesPerServer(t *testing.T) {
 				Version:            4,
 				SamplesPerServer:   tt.samples,
 				MaxConcurrency:     10,
-				CollectionInterval: 30 * time.Second,
+				CollectionInterval: 10 * time.Minute,
 				MaxRootDistance:    DefaultMaxRootDistance,
 				KoD:                KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:           DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
@@ -461,24 +461,45 @@ func TestValidate_CollectionIntervalBounds(t *testing.T) {
 	}
 }
 
-func TestValidate_BurstMustFitInInterval(t *testing.T) {
+func TestValidate_BurstMustFitInCycle(t *testing.T) {
+	// An unreachable server: samples x timeout + (samples - 1) x spacing
 	cfg := validConfig()
-	cfg.NTP.CollectionInterval = 10 * time.Second
-	cfg.NTP.SamplesPerServer = 5
-	cfg.NTP.SampleSpacing = 2 * time.Second
-	if err := Validate(cfg); err == nil {
-		t.Error("5 samples x 2s must not fit in a 10s interval")
-	}
-
+	cfg.NTP.CollectionInterval = 60 * time.Second
 	cfg.NTP.SamplesPerServer = 4
-	if err := Validate(cfg); err != nil {
-		t.Errorf("4 samples x 2s fit in a 10s interval: %v", err)
-	}
+	cfg.NTP.SampleSpacing = 2 * time.Second
+	cfg.NTP.Timeout = 15 * time.Second // 4 x 15s + 3 x 2s = 66s
+	err := Validate(cfg)
+	assert.ErrorContains(t, err, "4 x 15s + 3 x 2s = 1m6s, longer than the cycle (59s")
+
+	cfg.NTP.Timeout = 5 * time.Second // 26s
+	assert.NoError(t, Validate(cfg))
 
 	cfg = validConfig()
 	cfg.NTP.SampleSpacing = -time.Second
-	if err := Validate(cfg); err == nil {
-		t.Error("negative sample_spacing must be rejected")
+	assert.Error(t, Validate(cfg), "negative sample_spacing must be rejected")
+}
+
+func TestValidate_ServerTargets(t *testing.T) {
+	for server, valid := range map[string]bool{
+		"time.example.org":           true,
+		"time.example.org:1123":      true,
+		"192.0.2.1:123":              true,
+		"2001:db8::1":                true,
+		"[2001:db8::1]:123":          true,
+		"nts://nts.example.org:4460": true,
+		"time.example.org:99999":     false,
+		"time.example.org:0":         false,
+		"a:b:c":                      false,
+		"time.example.org/path":      false,
+		"nts://":                     false,
+	} {
+		cfg := validConfig()
+		cfg.NTP.Servers = []string{server}
+		if valid {
+			assert.NoError(t, Validate(cfg), server)
+		} else {
+			assert.Error(t, Validate(cfg), server)
+		}
 	}
 }
 

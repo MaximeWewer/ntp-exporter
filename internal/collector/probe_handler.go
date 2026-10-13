@@ -3,10 +3,8 @@ package collector
 import (
 	"context"
 	"errors"
-	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/config"
@@ -109,29 +107,12 @@ func (h *ProbeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	promhttp.HandlerFor(registry, promhttp.HandlerOpts{}).ServeHTTP(w, r)
 }
 
-// validateTarget accepts a host name or an IP address, with an optional port
+// validateTarget accepts the targets of configured servers
 func validateTarget(target string) error {
 	if target == "" {
 		return errors.New("target parameter is missing")
 	}
-	target = strings.TrimPrefix(target, ntp.NTSScheme)
-	if strings.ContainsAny(target, "/ ") {
-		return errors.New("target must be host, host:port or nts://host[:port]")
-	}
-
-	host, port, err := net.SplitHostPort(target)
-	if err != nil {
-		host, port = target, ""
-	}
-	if host == "" || len(host) > 253 {
-		return errors.New("invalid target host")
-	}
-	if port != "" {
-		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
-			return errors.New("invalid target port")
-		}
-	}
-	return nil
+	return ntp.ValidateTarget(target)
 }
 
 // probeTimeout returns the time budget of a request: the scrape timeout

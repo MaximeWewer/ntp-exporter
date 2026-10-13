@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,32 @@ const NTSScheme = "nts://"
 // IsNTS reports whether a configured server uses NTS
 func IsNTS(server string) bool {
 	return strings.HasPrefix(server, NTSScheme)
+}
+
+// ValidateTarget checks a server or /probe target: host, host:port (IPv6
+// literals in brackets with a port), or nts://host[:port]
+func ValidateTarget(target string) error {
+	host := strings.TrimPrefix(target, NTSScheme)
+	if host == "" || strings.ContainsAny(host, "/ ") {
+		return fmt.Errorf("invalid target %q: expected host, host:port or nts://host[:port]", target)
+	}
+	h, port, err := net.SplitHostPort(host)
+	if err != nil {
+		// No port: a host name or a bare IP address (IPv6 included)
+		if strings.Contains(host, ":") && net.ParseIP(host) == nil {
+			return fmt.Errorf("invalid target %q: put IPv6 addresses in brackets with a port, e.g. [2001:db8::1]:123", target)
+		}
+		h, port = host, ""
+	}
+	if h == "" || len(h) > 253 {
+		return fmt.Errorf("invalid target %q: invalid host", target)
+	}
+	if port != "" {
+		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+			return fmt.Errorf("invalid target %q: port must be between 1 and 65535", target)
+		}
+	}
+	return nil
 }
 
 // NTSHost returns the key exchange address of an NTS server: host or host:port

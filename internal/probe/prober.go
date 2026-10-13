@@ -101,14 +101,9 @@ func (p *Prober) SetResolver(r Resolver) {
 	}
 }
 
-// CycleTimeout returns the maximum duration of a cycle for an interval:
-// the interval minus a safety margin of 10% (at most 1s)
+// CycleTimeout returns the maximum duration of a cycle for an interval
 func CycleTimeout(interval time.Duration) time.Duration {
-	margin := interval / 10
-	if margin > time.Second {
-		margin = time.Second
-	}
-	return interval - margin
+	return config.CycleTimeout(interval)
 }
 
 // Run executes one collection cycle: targets are probed in parallel, with at

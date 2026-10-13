@@ -551,7 +551,8 @@ responses: check `ntp_invalid_responses_total` by `reason` (for instance
 `sample_spacing` is at least 2 s and that `ntp_kiss_of_death_total` stays at 0.
 
 **`ntp_exporter_cycle_overrun_total` increases.** Unreachable servers consume
-`samples_per_server × timeout`. Lower the timeout or the samples, raise
+`samples_per_server × timeout`. The exporter refuses to start when such a
+burst cannot fit in a cycle (`collection_interval` minus 10%, at most 1 s). Lower the timeout or the samples, raise
 `max_concurrency` or `collection_interval`.
 
 **A dual-stack server is reached over the wrong family.** In `auto` mode the

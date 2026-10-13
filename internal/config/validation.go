@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"net/url"
@@ -13,6 +14,12 @@ import (
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
 	"github.com/prometheus/common/model"
 )
+
+// CycleTimeout returns the maximum duration of a cycle for an interval:
+// the interval minus a safety margin of 10% (at most 1s)
+func CycleTimeout(interval time.Duration) time.Duration {
+	return interval - min(interval/10, time.Second)
+}
 
 // DefaultMaxRootDistance is the MAXDIST of ntpd: a server whose root distance
 // exceeds it is not selectable
@@ -135,15 +142,6 @@ func validateServer(cfg *ServerConfig) error {
 	return nil
 }
 
-// validateServerName accepts host, host:port and nts://host[:port]
-func validateServerName(server string) error {
-	host := strings.TrimPrefix(server, ntp.NTSScheme)
-	if host == "" || strings.ContainsAny(host, "/ ") {
-		return errors.New("invalid server " + strconv.Quote(server) + ": expected host, host:port or nts://host[:port]")
-	}
-	return nil
-}
-
 // serverKey normalizes a server for duplicate detection: host names are case
 // insensitive and the default port (123, or 4460 for NTS) is implied
 func serverKey(server string) string {
@@ -211,11 +209,12 @@ func validateNTP(cfg *NTPConfig, noTargetNeeded bool) error {
 		return errors.New("sample_spacing must not be negative, got " + cfg.SampleSpacing.String())
 	}
 
-	// A burst must fit in a cycle
-	samples := cfg.SamplesPerServer
-	if time.Duration(samples)*cfg.SampleSpacing >= cfg.CollectionInterval {
-		return errors.New("samples (" + strconv.Itoa(samples) + ") x sample_spacing (" + cfg.SampleSpacing.String() +
-			") must be shorter than collection_interval (" + cfg.CollectionInterval.String() + ")")
+	// A burst to an unreachable server must end before the cycle deadline
+	samples := time.Duration(cfg.SamplesPerServer)
+	if burst := samples*cfg.Timeout + (samples-1)*cfg.SampleSpacing; burst >= CycleTimeout(cfg.CollectionInterval) {
+		return fmt.Errorf("a burst to an unreachable server lasts samples_per_server x timeout + (samples_per_server - 1) x sample_spacing"+
+			" = %d x %s + %d x %s = %s, longer than the cycle (%s, collection_interval minus 10%%): lower the timeout or the samples, or raise collection_interval",
+			cfg.SamplesPerServer, cfg.Timeout, cfg.SamplesPerServer-1, cfg.SampleSpacing, burst, CycleTimeout(cfg.CollectionInterval))
 	}
 
 	if cfg.MaxRootDistance < 100*time.Millisecond || cfg.MaxRootDistance > 16*time.Second {
@@ -244,7 +243,7 @@ func validateNTP(cfg *NTPConfig, noTargetNeeded bool) error {
 	// series twice and query the server twice per cycle
 	servers := make(map[string]bool, len(cfg.Servers))
 	for _, server := range cfg.Servers {
-		if err := validateServerName(server); err != nil {
+		if err := ntp.ValidateTarget(server); err != nil {
 			return err
 		}
 		key := serverKey(server)
