@@ -34,6 +34,10 @@ type backoffState struct {
 	suspendCode    string
 }
 
+// maxBackoffStates bounds the number of targets remembered: /probe targets
+// come from HTTP requests
+const maxBackoffStates = 4096
+
 // NewBackoff creates a backoff for a polling interval
 func NewBackoff(interval, maxInterval, suspend time.Duration) *Backoff {
 	return &Backoff{
@@ -84,12 +88,21 @@ func (b *Backoff) Record(server string, m *Measurement) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	now := b.now()
 	st, ok := b.states[server]
 	if !ok {
+		if len(b.states) >= maxBackoffStates {
+			b.purge(now)
+		}
+		if len(b.states) >= maxBackoffStates {
+			logger.SafeWarn("probe", "Too many targets backing off, state not recorded", map[string]interface{}{
+				"server": server,
+			})
+			return
+		}
 		st = &backoffState{factor: 1}
 		b.states[server] = st
 	}
-	now := b.now()
 
 	codes := make(map[string]bool)
 	for _, resp := range m.Responses {
@@ -134,13 +147,30 @@ func (b *Backoff) Record(server string, m *Measurement) {
 	}
 }
 
-// Forget drops the state of targets that are no longer probed
+// Forget drops the state of targets that are no longer probed. A target still
+// suspended or backing off is kept until its state expires: a pool member
+// leaving the DNS answer and coming back must not be queried earlier.
 func (b *Backoff) Forget(keep map[string]bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	for server := range b.states {
-		if !keep[server] {
+	now := b.now()
+	for server, st := range b.states {
+		if !keep[server] && !st.active(now) {
 			delete(b.states, server)
 		}
 	}
+}
+
+// purge drops the states that no longer restrict their target
+func (b *Backoff) purge(now time.Time) {
+	for server, st := range b.states {
+		if !st.active(now) {
+			delete(b.states, server)
+		}
+	}
+}
+
+// active reports whether the state still restricts queries to its target
+func (st *backoffState) active(now time.Time) bool {
+	return now.Before(st.suspendedUntil) || now.Before(st.nextAllowed)
 }

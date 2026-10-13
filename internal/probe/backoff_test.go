@@ -2,6 +2,7 @@ package probe
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -82,14 +83,42 @@ func TestBackoff_DenySuspendsTarget(t *testing.T) {
 	}
 }
 
-func TestBackoff_Forget(t *testing.T) {
-	b, _ := newTestBackoff()
+func TestBackoff_ForgetKeepsActiveStates(t *testing.T) {
+	b, clock := newTestBackoff()
 	b.Record("a", kodMeasurement(KoDDeny))
 	b.Record("b", kodMeasurement(KoDDeny))
+	b.Record("c", kodMeasurement(KoDRate))
 
+	// b and c left the cycle (a pool member gone from the DNS answer): they
+	// stay suspended or backing off until their state expires
+	b.Forget(map[string]bool{"a": true})
+	assert.Equal(t, KoDDeny, b.Allow("b").SuspendCode, "a returning member is still suspended")
+	assert.False(t, b.Allow("c").Allowed, "a returning member is still backing off")
+
+	clock.advance(time.Hour)
 	b.Forget(map[string]bool{"a": true})
 	assert.Contains(t, b.states, "a")
 	assert.NotContains(t, b.states, "b")
+	assert.NotContains(t, b.states, "c")
+}
+
+func TestBackoff_StatesAreBounded(t *testing.T) {
+	b, clock := newTestBackoff()
+	for i := 0; i < maxBackoffStates; i++ {
+		b.Record(fmt.Sprintf("old-%d", i), kodMeasurement(KoDRate))
+	}
+	require.Len(t, b.states, maxBackoffStates)
+
+	// Full of active states: a new target is not recorded
+	b.Record("new", kodMeasurement(KoDDeny))
+	assert.Len(t, b.states, maxBackoffStates)
+	assert.NotContains(t, b.states, "new")
+
+	// Expired states make room
+	clock.advance(3 * time.Minute)
+	b.Record("new", kodMeasurement(KoDDeny))
+	assert.Equal(t, KoDDeny, b.Allow("new").SuspendCode)
+	assert.Len(t, b.states, 1)
 }
 
 func TestProber_KoDRateSkipsNextCycle(t *testing.T) {
