@@ -1,6 +1,6 @@
 {{- if .Values.networkPolicy.enabled }}
 {{- $np := .Values.networkPolicy }}
-apiVersion: {{ include "ntp-exporter.networkPolicy.apiVersion" . }}
+apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "ntp-exporter.fullname" . }}

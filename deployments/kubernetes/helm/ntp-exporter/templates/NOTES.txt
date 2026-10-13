@@ -1,130 +1,56 @@
-Thank you for installing {{ .Chart.Name }}!
-
-Your release is named {{ .Release.Name }}.
-
-The NTP Exporter has been deployed in {{ include "ntp-exporter.mode" . }} mode.
-
+{{ .Chart.Name }} {{ .Chart.AppVersion }} is deployed as release {{ .Release.Name }}
+in {{ include "ntp-exporter.mode" . }} mode.
 {{- if eq .Values.mode "hybrid" }}
 
-DEPRECATION WARNING:
-  mode=hybrid is deprecated and will be removed in a future release.
-  Use mode=agent with kernel.enabled=true instead.
+DEPRECATED: mode=hybrid will be removed; use mode=agent with kernel.enabled=true.
 {{- end }}
 {{- if .Values.config.enableKernel }}
 
-DEPRECATION WARNING:
-  config.enableKernel is deprecated: use kernel.enabled=true instead.
+DEPRECATED: config.enableKernel will be removed; use kernel.enabled=true.
 {{- end }}
-
 {{- if eq (include "ntp-exporter.mode" .) "agent" }}
 
-AGENT MODE (DaemonSet):
-  The NTP Exporter is running on every node in your cluster.
-  Kernel clock state: {{ if include "ntp-exporter.kernelEnabled" . }}enabled (unprivileged read-only adjtimex){{ else }}disabled (set kernel.enabled=true to enable){{ end }}
+AGENT MODE: a DaemonSet measures the clock of every node.
+  Kernel option: {{ if include "ntp-exporter.kernelEnabled" . }}enabled{{ else }}disabled (kernel.enabled=true){{ end }}
+  chrony option: {{ if .Values.chrony.enabled }}enabled{{ else }}disabled (chrony.enabled=true){{ end }}
 
-  To verify the deployment:
-    kubectl get daemonset {{ include "ntp-exporter.fullname" . }} -n {{ .Release.Namespace }}
-    kubectl get pods -l app.kubernetes.io/name={{ include "ntp-exporter.name" . }} -n {{ .Release.Namespace }}
-
+  kubectl -n {{ .Release.Namespace }} get daemonset {{ include "ntp-exporter.fullname" . }}
 {{- else }}
 
-PROBE MODE (Deployment):
-  The NTP Exporter is running with {{ .Values.replicaCount }} replica(s).
+PROBE MODE: a Deployment monitors the NTP servers.
 
-  To verify the deployment:
-    kubectl get deployment {{ include "ntp-exporter.fullname" . }} -n {{ .Release.Namespace }}
-    kubectl get pods -l app.kubernetes.io/name={{ include "ntp-exporter.name" . }} -n {{ .Release.Namespace }}
+  kubectl -n {{ .Release.Namespace }} get deployment {{ include "ntp-exporter.fullname" . }}
+{{- end }}
+{{- if not (include "ntp-exporter.probeEndpointOnly" .) }}
 
+Servers:
+{{- range .Values.config.ntpServers }}
+  - {{ . }}
+{{- end }}
+{{- end }}
+{{- if include "ntp-exporter.probeEndpointEnabled" . }}
+
+/probe?target=host is enabled: Prometheus drives the targets through relabeling.
 {{- end }}
 
-METRICS ENDPOINT:
-  The NTP Exporter exposes Prometheus metrics on port {{ .Values.config.metricsPort }}.
-
-  To access metrics locally:
-    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "ntp-exporter.fullname" . }} {{ .Values.config.metricsPort }}:{{ .Values.config.metricsPort }}
-    curl http://localhost:{{ .Values.config.metricsPort }}/metrics
-
-NTP SERVERS:
-  Configured NTP servers:
-  {{- range .Values.config.ntpServers }}
-  - {{ . }}
-  {{- end }}
-
+Metrics:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ntp-exporter.fullname" . }} {{ .Values.config.metricsPort }}
+  curl -s localhost:{{ .Values.config.metricsPort }}/metrics | grep '^ntp_'
 {{- if .Values.serviceMonitor.enabled }}
 
-PROMETHEUS SERVICEMONITOR:
-  A ServiceMonitor has been created for Prometheus Operator integration.
+A ServiceMonitor scrapes the pods every {{ .Values.serviceMonitor.interval }}.
+{{- else if .Values.scrapeAnnotations }}
 
-  To verify:
-    kubectl get servicemonitor {{ include "ntp-exporter.fullname" . }} -n {{ include "ntp-exporter.serviceMonitor.namespace" . }}
-
-  Scrape interval: {{ .Values.serviceMonitor.interval }}
-  Scrape timeout: {{ .Values.serviceMonitor.scrapeTimeout }}
-
-{{- else }}
-
-PROMETHEUS INTEGRATION:
-  To enable automatic Prometheus scraping, configure your Prometheus instance with:
-
-  scrape_configs:
-  - job_name: 'ntp-exporter'
-    kubernetes_sd_configs:
-    - role: endpoints
-      namespaces:
-        names:
-        - {{ .Release.Namespace }}
-    relabel_configs:
-    - source_labels: [__meta_kubernetes_service_name]
-      action: keep
-      regex: {{ include "ntp-exporter.fullname" . }}
-    - source_labels: [__meta_kubernetes_endpoint_port_name]
-      action: keep
-      regex: metrics
-
-  Alternatively, enable the ServiceMonitor:
-    helm upgrade {{ .Release.Name }} {{ .Chart.Name }} --set serviceMonitor.enabled=true
-
+The pods carry the prometheus.io/scrape annotations. With the Prometheus
+Operator, set serviceMonitor.enabled=true instead.
 {{- end }}
-
 {{- if .Values.networkPolicy.enabled }}
 
-NETWORK POLICY:
-  Network policies are enabled to restrict traffic.
-  Ensure your Prometheus instance can reach the metrics endpoint.
-
+A NetworkPolicy lets Prometheus in from the "{{ .Values.networkPolicy.prometheusNamespace }}" namespace
+and NTP (UDP 123) / NTS (TCP 4460) out.
 {{- end }}
 
-MONITORING:
-  Check the logs:
-    kubectl logs -l app.kubernetes.io/name={{ include "ntp-exporter.name" . }} -n {{ .Release.Namespace }}
+Dashboards and alerts: https://github.com/MaximeWewer/ntp-exporter/tree/main/grafana
 
-  Check pod status:
-    kubectl describe pods -l app.kubernetes.io/name={{ include "ntp-exporter.name" . }} -n {{ .Release.Namespace }}
-
-GRAFANA DASHBOARD:
-  Import the NTP Exporter dashboard for visualization.
-  Dashboard ID: [To be created]
-
-TROUBLESHOOTING:
-  If metrics are not being scraped:
-  1. Verify pods are running
-  2. Check network policies allow Prometheus access
-  3. Verify ServiceMonitor labels match Prometheus configuration
-  4. Check NTP servers are reachable from pods
-  5. Review logs for errors
-
-DOCUMENTATION:
-  For more information, visit:
-  https://github.com/yourusername/ntp_exporter
-
-UPGRADE:
-  To upgrade this release:
-    helm upgrade {{ .Release.Name }} {{ .Chart.Name }} -f values.yaml
-
-  To switch between agent and probe modes:
-    helm upgrade {{ .Release.Name }} {{ .Chart.Name }} -f values-agent.yaml
-    helm upgrade {{ .Release.Name }} {{ .Chart.Name }} -f values-probe.yaml
-
-UNINSTALL:
-  To uninstall this release:
-    helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+Upgrade:
+  helm upgrade {{ .Release.Name }} oci://ghcr.io/maximewewer/charts/ntp-exporter -n {{ .Release.Namespace }} --reuse-values

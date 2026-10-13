@@ -10,6 +10,25 @@ Helm chart for deploying the NTP Exporter to Kubernetes. The NTP Exporter is a P
 
 `mode: hybrid` is deprecated and behaves as `mode: agent` with `kernel.enabled=true`.
 
+## Installing
+
+Install the published chart, which pulls the image of the same release:
+
+```bash
+helm install ntp-exporter oci://ghcr.io/maximewewer/charts/ntp-exporter \
+  -n monitoring -f values-probe.yaml
+```
+
+The chart in the repository may be ahead of the last release: `appVersion` is
+the last released image, and the release workflow sets it at each release. To
+install from the sources, build the image of the same commit:
+
+```bash
+docker build -t ntp-exporter:dev .
+helm install ntp-exporter deployments/kubernetes/helm/ntp-exporter \
+  --set image.repository=ntp-exporter --set image.tag=dev
+```
+
 ## Main values
 
 | Value | Default | Description |

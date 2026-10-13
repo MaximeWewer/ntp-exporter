@@ -88,17 +88,6 @@ Create the ServiceMonitor namespace
 {{- end }}
 
 {{/*
-Return the appropriate apiVersion for NetworkPolicy
-*/}}
-{{- define "ntp-exporter.networkPolicy.apiVersion" -}}
-{{- if semverCompare ">=1.7-0" .Capabilities.KubeVersion.GitVersion -}}
-networking.k8s.io/v1
-{{- else -}}
-extensions/v1beta1
-{{- end -}}
-{{- end -}}
-
-{{/*
 Liveness or readiness probe. The web configuration applies to every path:
 with TLS the probe uses HTTPS, with basic auth (the kubelet has no password)
 it only checks that the port accepts connections.
