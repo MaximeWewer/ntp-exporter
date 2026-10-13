@@ -136,17 +136,37 @@ func TestProbeHandler_BusyReturns503(t *testing.T) {
 }
 
 func TestProbeTimeout(t *testing.T) {
+	const writeTimeout = 20 * time.Second
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
-	assert.Equal(t, defaultProbeTimeout-probeTimeoutOffset, probeTimeout(req))
+	assert.Equal(t, defaultProbeTimeout-probeTimeoutOffset, probeTimeout(req, writeTimeout), "no header")
 
 	req.Header.Set("X-Prometheus-Scrape-Timeout-Seconds", "15")
-	assert.Equal(t, 15*time.Second-probeTimeoutOffset, probeTimeout(req))
+	assert.Equal(t, 15*time.Second-probeTimeoutOffset, probeTimeout(req, writeTimeout))
 
 	req.Header.Set("X-Prometheus-Scrape-Timeout-Seconds", "0.5")
-	assert.Equal(t, 500*time.Millisecond, probeTimeout(req), "short timeouts are kept whole")
+	assert.Equal(t, 500*time.Millisecond, probeTimeout(req, writeTimeout), "short timeouts are kept whole")
 
 	req.Header.Set("X-Prometheus-Scrape-Timeout-Seconds", "nonsense")
-	assert.Equal(t, defaultProbeTimeout-probeTimeoutOffset, probeTimeout(req))
+	assert.Equal(t, defaultProbeTimeout-probeTimeoutOffset, probeTimeout(req, writeTimeout), "invalid header")
+
+	req.Header.Set("X-Prometheus-Scrape-Timeout-Seconds", "300")
+	assert.Equal(t, writeTimeout-probeTimeoutOffset, probeTimeout(req, writeTimeout), "capped by the write timeout")
+}
+
+func TestProbeHandler_AnswersWithinWriteTimeout(t *testing.T) {
+	h, mock, cfg := newProbeHandler(t)
+	cfg.Server.WriteTimeout = 2 * time.Second
+	cfg.NTP.Timeout = 10 * time.Second
+	mock.SetDelay(probeTarget, time.Minute) // never answers in time
+	mock.SetupSuccessfulServer(probeTarget, time.Millisecond, 2)
+
+	start := time.Now()
+	code, body := serveProbe(t, h, "target="+probeTarget+"&samples=1",
+		map[string]string{"X-Prometheus-Scrape-Timeout-Seconds": "30"})
+
+	require.Equal(t, http.StatusOK, code, body)
+	assert.Less(t, time.Since(start), 2*time.Second, "the response is written before the write timeout")
+	assert.Contains(t, body, `ntp_probe_success{site="lab"} 0`)
 }
 
 func TestFitSamples(t *testing.T) {

@@ -68,7 +68,7 @@ func (h *ProbeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		samples = n
 	}
 
-	timeout := probeTimeout(r)
+	timeout := probeTimeout(r, h.cfg.Server.WriteTimeout)
 	samples = fitSamples(samples, timeout, h.cfg.NTP.Timeout, h.cfg.NTP.SampleSpacing)
 
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
@@ -126,13 +126,18 @@ func validateTarget(target string) error {
 }
 
 // probeTimeout returns the time budget of a request: the scrape timeout
-// announced by Prometheus minus a small offset
-func probeTimeout(r *http.Request) time.Duration {
+// announced by Prometheus minus a small offset, capped by the write timeout of
+// the server (a later response would be lost, and a forged header would hold
+// a probe slot)
+func probeTimeout(r *http.Request, writeTimeout time.Duration) time.Duration {
 	timeout := defaultProbeTimeout
 	if v := r.Header.Get("X-Prometheus-Scrape-Timeout-Seconds"); v != "" {
 		if s, err := strconv.ParseFloat(v, 64); err == nil && s > 0 {
 			timeout = time.Duration(s * float64(time.Second))
 		}
+	}
+	if writeTimeout > 0 {
+		timeout = min(timeout, writeTimeout)
 	}
 	if timeout > 2*probeTimeoutOffset {
 		timeout -= probeTimeoutOffset
