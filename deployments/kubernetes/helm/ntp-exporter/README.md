@@ -11,7 +11,8 @@ The mode is required (`values-agent.yaml` or `values-probe.yaml`):
   servers, every series labelled with `node`.
 - `mode: probe`: Deployment monitoring NTP servers from a central place.
 
-`mode: hybrid` is deprecated and behaves as `mode: agent` with `kernel.enabled=true`.
+The former `mode: hybrid` is `mode: agent`, whose kernel option is enabled by
+default.
 
 ## Installing
 

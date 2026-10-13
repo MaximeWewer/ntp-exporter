@@ -20,7 +20,6 @@ func TestInitLogger(t *testing.T) {
 			config: Config{
 				Level:     "info",
 				Format:    "json",
-				Output:    "stdout",
 				Component: "test",
 			},
 			wantErr: false,
@@ -30,7 +29,6 @@ func TestInitLogger(t *testing.T) {
 			config: Config{
 				Level:     "debug",
 				Format:    "console",
-				Output:    "stdout",
 				Component: "test",
 			},
 			wantErr: false,
@@ -40,7 +38,6 @@ func TestInitLogger(t *testing.T) {
 			config: Config{
 				Level:     "invalid",
 				Format:    "json",
-				Output:    "stdout",
 				Component: "test",
 			},
 			wantErr: false,

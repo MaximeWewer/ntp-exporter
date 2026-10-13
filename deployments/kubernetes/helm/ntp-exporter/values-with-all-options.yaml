@@ -73,12 +73,6 @@ config:
   readTimeout: 10s
   writeTimeout: 10s
 
-  # TLS/HTTPS configuration
-  # Deprecated: use webConfig.existingSecret instead
-  tls:
-    enabled: false
-    certFile: ""
-    keyFile: ""
 
   # ---------------------------------------------------------------------------
   # NTP - NTP client configuration
@@ -139,15 +133,11 @@ config:
   logging:
     level: info
     format: json
-    enableFile: false
-    filePath: ""
 
   # ---------------------------------------------------------------------------
   # METRICS - Prometheus metrics configuration
   # ---------------------------------------------------------------------------
   metrics:
-    namespace: ntp
-    subsystem: ""
     labels: {}
 
 # =============================================================================

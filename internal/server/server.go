@@ -47,7 +47,6 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metrics", handlers.MetricsHandler)
 	mux.HandleFunc("/healthz", handlers.LivenessHandler)
-	mux.HandleFunc("/health", handlers.LivenessHandler) // kept for compatibility
 	mux.HandleFunc("/readyz", handlers.ReadinessHandler)
 	if s.probe != nil {
 		mux.Handle("/probe", s.probe)
@@ -74,28 +73,14 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	errChan := make(chan error, 1)
-	if s.config.Server.TLSEnabled && s.config.Server.WebConfigFile == "" {
-		// Deprecated tls_* options: same TLS defaults as the web config file
-		tlsConfig, err := web.ConfigToTLSConfig(&web.TLSConfig{
-			TLSCertPath: s.config.Server.TLSCertFile,
-			TLSKeyPath:  s.config.Server.TLSKeyFile,
-		})
-		if err != nil {
-			return fmt.Errorf("invalid TLS configuration: %w", err)
-		}
-		s.server.TLSConfig = tlsConfig
-		logger.Infof("server", "Starting HTTPS server on %s", addr)
-		go func() { errChan <- s.server.ListenAndServeTLS("", "") }()
-	} else {
-		// Standard Prometheus web configuration (TLS, basic auth, headers)
-		// https://prometheus.io/docs/prometheus/latest/configuration/https/
-		listen := []string{addr}
-		systemd := false
-		webConfig := s.config.Server.WebConfigFile
-		flags := &web.FlagConfig{WebListenAddresses: &listen, WebSystemdSocket: &systemd, WebConfigFile: &webConfig}
-		logger.Infof("server", "Starting HTTP server on %s", addr)
-		go func() { errChan <- web.ListenAndServe(s.server, flags, toolkitLogger) }()
-	}
+	// Standard Prometheus web configuration (TLS, basic auth, headers)
+	// https://prometheus.io/docs/prometheus/latest/configuration/https/
+	listen := []string{addr}
+	systemd := false
+	webConfig := s.config.Server.WebConfigFile
+	flags := &web.FlagConfig{WebListenAddresses: &listen, WebSystemdSocket: &systemd, WebConfigFile: &webConfig}
+	logger.Infof("server", "Starting HTTP server on %s", addr)
+	go func() { errChan <- web.ListenAndServe(s.server, flags, toolkitLogger) }()
 
 	// Wait for context cancellation or server error
 	select {

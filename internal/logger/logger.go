@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -22,12 +21,9 @@ var (
 
 // Config holds logger configuration
 type Config struct {
-	Level      string // debug, info, warn, error
-	Format     string // json, console
-	Output     string // stdout, stderr, file
-	FilePath   string // path to log file if output=file
-	Component  string // component name for structured logging
-	EnableFile bool   // enable file output
+	Level     string // debug, info, warn, error
+	Format    string // json, console
+	Component string // component name for structured logging
 }
 
 // InitLogger initializes the global logger with the provided configuration
@@ -46,26 +42,9 @@ func InitLogger(cfg Config) error {
 		}
 		Logger = zerolog.New(output).With().Timestamp().Str("component", cfg.Component).Logger()
 	} else {
-		// JSON format
-		var writer io.Writer
-		switch cfg.Output {
-		case "stderr":
-			writer = os.Stderr
-		case "file":
-			if cfg.EnableFile && cfg.FilePath != "" {
-				file, err := os.OpenFile(cfg.FilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-				if err != nil {
-					return err
-				}
-				writer = file
-			} else {
-				writer = os.Stdout
-			}
-		default:
-			writer = os.Stdout
-		}
-
-		Logger = zerolog.New(writer).With().Timestamp().Str("component", cfg.Component).Logger()
+		// JSON format on the standard output: the container runtime, journald
+		// or the service manager handle the logs
+		Logger = zerolog.New(os.Stdout).With().Timestamp().Str("component", cfg.Component).Logger()
 	}
 
 	// Set global logger

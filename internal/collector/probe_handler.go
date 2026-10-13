@@ -43,7 +43,7 @@ func NewProbeHandler(cfg *config.Config, prober *probe.Prober) *ProbeHandler {
 	return &ProbeHandler{
 		cfg:    cfg,
 		prober: prober,
-		descs:  newDescs(cfg.Metrics.Namespace, cfg.Metrics.Subsystem),
+		descs:  newDescs(),
 		slots:  make(chan struct{}, cfg.NTP.MaxConcurrency),
 	}
 }

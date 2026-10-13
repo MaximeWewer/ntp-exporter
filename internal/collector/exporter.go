@@ -65,7 +65,7 @@ func NewExporter(cfg *config.Config, m *metrics.NTPMetrics) *Exporter {
 	e := &Exporter{
 		cfg:         cfg,
 		metrics:     m,
-		descs:       newDescs(cfg.Metrics.Namespace, cfg.Metrics.Subsystem),
+		descs:       newDescs(),
 		lastSuccess: make(map[string]time.Time),
 	}
 

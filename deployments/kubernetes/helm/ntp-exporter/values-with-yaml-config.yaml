@@ -41,9 +41,6 @@ configYaml:
       port: 9559
       read_timeout: 10s
       write_timeout: 10s
-      tls_enabled: false
-      tls_cert_file: ""
-      tls_key_file: ""
 
     # ----------------------------------------------------------------------------
     # NTP - NTP client configuration and query strategy
@@ -55,12 +52,10 @@ configYaml:
       - "ptbtime1.ptb.de"
       - "ptbtime2.ptb.de"
 
-      # NTP pool configuration with selection strategy
+      # NTP pools: the first max_servers addresses of each DNS answer
       pools:
       - name: "pool.ntp.org"
-        strategy: "best_n"
         max_servers: 4
-        fallback: ""
 
       timeout: 5s
       version: 4
@@ -89,15 +84,11 @@ configYaml:
     # ----------------------------------------------------------------------------
     logging:
       level: "info"
-      enable_file: false
-      file_path: ""
 
     # ----------------------------------------------------------------------------
     # METRICS - Prometheus metrics configuration
     # ----------------------------------------------------------------------------
     metrics:
-      namespace: "ntp"
-      subsystem: ""
       labels: {}
 
 # =============================================================================

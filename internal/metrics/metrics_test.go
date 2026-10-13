@@ -22,7 +22,7 @@ func gatherNames(t *testing.T, g prometheus.Gatherer) map[string]bool {
 }
 
 func TestRegistry_Register(t *testing.T) {
-	r := NewRegistryWithConfig("ntp", "")
+	r := NewRegistry()
 	require.NoError(t, r.Register())
 	assert.Error(t, r.Register(), "registering twice must fail")
 
@@ -44,19 +44,8 @@ func TestRegistry_Register(t *testing.T) {
 	}
 }
 
-func TestNewRegistryWithConfig_Namespace(t *testing.T) {
-	r := NewRegistryWithConfig("custom", "probe")
-	require.NoError(t, r.Register())
-	r.GetMetrics().InvalidResponsesTotal.WithLabelValues("time.example.org", "kod").Inc()
-	r.GetMetrics().ExporterCyclesTotal.WithLabelValues("success").Inc()
-
-	names := gatherNames(t, r.GetRegistry())
-	assert.True(t, names["custom_probe_invalid_responses_total"])
-	assert.True(t, names["custom_exporter_cycles_total"], "exporter metrics keep the exporter subsystem")
-}
-
 func TestRegistry_ConstLabels(t *testing.T) {
-	r := NewRegistryWithConfig("ntp", "", map[string]string{"site": "par1"})
+	r := NewRegistry(map[string]string{"site": "par1"})
 	require.NoError(t, r.Register())
 	r.GetMetrics().ExporterCyclesTotal.WithLabelValues("success").Inc()
 	require.NoError(t, r.RegisterCollector(prometheus.NewGauge(prometheus.GaugeOpts{Name: "ntp_extra"})))
@@ -76,7 +65,7 @@ func TestRegistry_ConstLabels(t *testing.T) {
 }
 
 func TestNTPMetrics_Lint(t *testing.T) {
-	m := NewNTPMetricsWithConfig("ntp", "")
+	m := NewNTPMetrics()
 	m.ExporterCyclesTotal.WithLabelValues("success").Inc()
 	m.KissOfDeathTotal.WithLabelValues("time.example.org", "RATE").Inc()
 	m.InvalidResponsesTotal.WithLabelValues("time.example.org", "kod").Inc()

@@ -24,16 +24,7 @@ func ApplyDefaults(cfg *Config) {
 
 	// NTP defaults: no implicit server, the exporter only queries what it is
 	// told to
-	// Deprecated enable_kernel maps to kernel.enabled
-	if cfg.NTP.EnableKernel {
-		enabled := true
-		cfg.NTP.Kernel.Enabled = &enabled
-	}
-
 	for i := range cfg.NTP.Pools {
-		if cfg.NTP.Pools[i].Strategy == "" {
-			cfg.NTP.Pools[i].Strategy = "best_n"
-		}
 		if cfg.NTP.Pools[i].MaxServers == 0 {
 			cfg.NTP.Pools[i].MaxServers = 4
 		}
@@ -89,14 +80,8 @@ func ApplyDefaults(cfg *Config) {
 	if cfg.Logging.Format == "" {
 		cfg.Logging.Format = "json"
 	}
-	if cfg.Logging.Output == "" {
-		cfg.Logging.Output = "stdout"
-	}
 
 	// Metrics defaults
-	if cfg.Metrics.Namespace == "" {
-		cfg.Metrics.Namespace = "ntp"
-	}
 	if cfg.Metrics.Labels == nil {
 		cfg.Metrics.Labels = make(map[string]string)
 	}

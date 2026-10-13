@@ -37,7 +37,7 @@ func newHarness(t *testing.T, servers ...string) *harness {
 	cfg.NTP.SamplesPerServer = 3
 	h := &harness{t: t, cfg: cfg, mock: ntptest.NewMockNTPClient()}
 	h.client = h.mock
-	h.metrics = metrics.NewNTPMetricsWithConfig("ntp", "")
+	h.metrics = metrics.NewNTPMetrics()
 	h.exporter = NewExporter(cfg, h.metrics)
 	h.registry = prometheus.NewRegistry()
 	h.registry.MustRegister(h.metrics, h.exporter)
@@ -223,7 +223,7 @@ func TestExporter_Pool(t *testing.T) {
 	const member = "192.0.2.20"
 	h := newHarness(t)
 	h.mock.SetupSuccessfulServer(member, -3*time.Millisecond, 2)
-	h.cfg.NTP.Pools = []config.PoolConfig{{Name: member, Strategy: "all", MaxServers: 4}}
+	h.cfg.NTP.Pools = []config.PoolConfig{{Name: member, MaxServers: 4}}
 
 	h.cycle()
 
@@ -239,7 +239,7 @@ func TestExporter_Pool(t *testing.T) {
 func TestExporter_PoolMemberAlsoConfiguredIsProbedOnce(t *testing.T) {
 	const addr = "192.0.2.50"
 	h := newHarness(t, addr)
-	h.cfg.NTP.Pools = []config.PoolConfig{{Name: addr, Strategy: "all", MaxServers: 4}}
+	h.cfg.NTP.Pools = []config.PoolConfig{{Name: addr, MaxServers: 4}}
 	h.mock.SetupSuccessfulServer(addr, time.Millisecond, 2)
 
 	h.cycle()
@@ -502,7 +502,7 @@ func TestExporter_ServerInfo(t *testing.T) {
 	h := newHarness(t, "time.example.org")
 	h.mock.SetupSuccessfulServer("time.example.org", time.Millisecond, 1) // refid "NIST"
 	h.mock.SetupSuccessfulServer("192.0.2.40", time.Millisecond, 2)
-	h.cfg.NTP.Pools = []config.PoolConfig{{Name: "192.0.2.40", Strategy: "all", MaxServers: 4}}
+	h.cfg.NTP.Pools = []config.PoolConfig{{Name: "192.0.2.40", MaxServers: 4}}
 
 	h.cycle()
 

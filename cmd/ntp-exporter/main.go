@@ -63,12 +63,9 @@ func main() {
 
 	// Initialize logger
 	if err := logger.InitLogger(logger.Config{
-		Level:      cfg.Logging.Level,
-		Format:     cfg.Logging.Format,
-		Output:     cfg.Logging.Output,
-		FilePath:   cfg.Logging.FilePath,
-		Component:  "ntp-exporter",
-		EnableFile: cfg.Logging.EnableFile,
+		Level:     cfg.Logging.Level,
+		Format:    cfg.Logging.Format,
+		Component: "ntp-exporter",
 	}); err != nil {
 		os.Stderr.WriteString("Failed to initialize logger: " + err.Error() + "\n")
 		os.Exit(1)
@@ -91,7 +88,7 @@ func main() {
 	}
 
 	// Create metrics registry with custom namespace and subsystem from config
-	registry := metrics.NewRegistryWithConfig(cfg.Metrics.Namespace, cfg.Metrics.Subsystem, cfg.Metrics.Labels)
+	registry := metrics.NewRegistry(cfg.Metrics.Labels)
 	if err := registry.Register(); err != nil {
 		logger.Fatal("main", "Failed to register metrics", err)
 	}
@@ -298,7 +295,7 @@ func runHealthcheck(cfg *config.Config, cfgErr error) int {
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, //nolint:gosec // loopback health check
 	}
 	schemes := []string{"http"}
-	if cfg.Server.TLSEnabled || cfg.Server.WebConfigFile != "" {
+	if cfg.Server.WebConfigFile != "" {
 		schemes = []string{"https", "http"}
 	}
 

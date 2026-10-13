@@ -5,7 +5,6 @@
 # Deployment mode:
 #   - "agent": DaemonSet, measures the clock of every node
 #   - "probe": Deployment, monitors NTP servers from a central place
-# ("hybrid" is deprecated: use mode=agent with kernel.enabled=true)
 # Required: start from values-agent.yaml or values-probe.yaml
 mode: ""
 

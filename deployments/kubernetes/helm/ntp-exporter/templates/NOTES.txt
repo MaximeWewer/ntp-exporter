@@ -1,13 +1,5 @@
 {{ .Chart.Name }} {{ .Chart.AppVersion }} is deployed as release {{ .Release.Name }}
 in {{ include "ntp-exporter.mode" . }} mode.
-{{- if eq .Values.mode "hybrid" }}
-
-DEPRECATED: mode=hybrid will be removed; use mode=agent with kernel.enabled=true.
-{{- end }}
-{{- if .Values.config.enableKernel }}
-
-DEPRECATED: config.enableKernel will be removed; use kernel.enabled=true.
-{{- end }}
 {{- if eq (include "ntp-exporter.mode" .) "agent" }}
 
 AGENT MODE: a DaemonSet measures the clock of every node.

@@ -41,21 +41,6 @@ server:
   # Default: "" (plain HTTP)
   web_config_file: ""
 
-  # DEPRECATED: use web_config_file. Enable TLS/HTTPS
-  # Values: true, false
-  # Default: false
-  tls_enabled: false
-
-  # Path to TLS certificate file (if tls_enabled: true)
-  # Values: absolute path to .crt or .pem file
-  # Default: ""
-  tls_cert_file: ""
-
-  # Path to TLS private key file (if tls_enabled: true)
-  # Values: absolute path to .key or .pem file
-  # Default: ""
-  tls_key_file: ""
-
 # ----------------------------------------------------------------------------
 # PROBE ENDPOINT - /probe?target=host[:port][&samples=N], like blackbox_exporter.
 # Prometheus drives the targets through relabeling; the burst fits in the
@@ -92,29 +77,17 @@ ntp:
   servers:
   - "ptbtime1.ptb.de"
   - "ptbtime2.ptb.de"
-  # NTP pool configuration with selection strategy
-  # A pool resolves to multiple IPs via DNS and applies a strategy
+  # NTP pools: a DNS name resolving to several servers. The first max_servers
+  # addresses of each DNS answer are queried; public pools rotate their
+  # answers, so the members change over time. Probe mode only.
   pools:
   # Pool name (must be DNS resolvable)
   - name: "pool.ntp.org"
 
-    # Server selection strategy for the pool
-    # Available values:
-    #   - "best_n": selects the N best servers (sorted by offset)
-    #   - "round_robin": circular rotation between all servers
-    #   - "all": queries all servers in the pool
-    # Default: "best_n"
-    strategy: "best_n"
-
-    # Maximum number of servers to use from the pool (for best_n/round_robin)
-    # Values: positive integer (1-100)
+    # Number of addresses queried
+    # Values: 1-20
     # Default: 4
     max_servers: 4
-
-    # Fallback pool if the primary pool fails (optional)
-    # Values: another pool name or ""
-    # Default: ""
-    fallback: ""
   # Timeout for each individual NTP query
   # Values: valid Go duration (e.g., "5s", "500ms")
   # Default: 5s
@@ -220,41 +193,23 @@ ntp:
     max_ttl: 60m
 
 # ----------------------------------------------------------------------------
-# LOGGING - Log configuration (JSON FORMAT ONLY)
-# The zerolog library used produces ONLY structured JSON
+# LOGGING - Logs go to the standard output (container runtime, journald)
 # ----------------------------------------------------------------------------
 logging:
   # Log verbosity level
-  # Available values: "trace", "debug", "info", "warn", "error", "fatal", "panic"
+  # Available values: "debug", "info", "warn", "error"
   # Default: "info"
   level: "info"
 
-  # Enable file output (if output: "file")
-  # Values: true, false
-  # Default: false
-  enable_file: false
-
-  # Log file path (if enable_file: true)
-  # Values: absolute path to file (e.g., "/var/log/ntp-exporter.log")
-  # Default: ""
-  file_path: ""
+  # Values: "json" or "console"
+  # Default: "json"
+  format: "json"
 
 # ----------------------------------------------------------------------------
 # METRICS - Prometheus metrics configuration
 # ----------------------------------------------------------------------------
 metrics:
-  # Prometheus namespace for all metrics
-  # All metrics will be prefixed with "namespace_"
-  # Values: alphanumeric string + underscore
-  # Default: "ntp"
-  namespace: "ntp"
-
-  # Prometheus subsystem (optional, adds hierarchy level)
-  # Metrics become "namespace_subsystem_name"
-  # Values: alphanumeric string + underscore or ""
-  # Default: ""
-  subsystem: ""
-
+  # Every metric is prefixed with ntp_.
   # Additional labels to add to ALL metrics
   # Useful for multi-instance identification (e.g., datacenter, region)
   # Values: key-value map (e.g., {datacenter: "us-east-1", env: "prod"})

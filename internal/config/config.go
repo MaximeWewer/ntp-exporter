@@ -20,14 +20,13 @@
 //	  - NTP_EXPORTER_ADDRESS, NTP_EXPORTER_PORT
 //	  - SERVER_READ_TIMEOUT, SERVER_WRITE_TIMEOUT
 //	  - WEB_CONFIG_FILE (Prometheus web configuration: TLS, basic auth)
-//	  - TLS_ENABLED, TLS_CERT_FILE, TLS_KEY_FILE (deprecated)
 //
 //	NTP:
 //	  - NTP_SERVERS (comma-separated), NTP_TIMEOUT, NTP_VERSION
-//	  - NTP_POOLS (comma-separated name[:strategy[:max_servers]])
+//	  - NTP_POOLS (comma-separated name[:max_servers])
 //	  - NTP_SAMPLES, NTP_SAMPLE_SPACING, NTP_MAX_CONCURRENCY
 //	  - NTP_IP_FAMILY (auto, ipv4 or ipv6)
-//	  - NTP_KERNEL_ENABLED (NTP_ENABLE_KERNEL is deprecated)
+//	  - NTP_KERNEL_ENABLED
 //	  - NTP_CHRONY_ENABLED, NTP_CHRONY_ADDRESS
 //	  - NTP_SCRAPE_INTERVAL, NTP_MAX_ROOT_DISTANCE
 //
@@ -45,11 +44,10 @@
 //	  - DNS_CACHE_MIN_TTL, DNS_CACHE_MAX_TTL
 //
 //	LOGGING:
-//	  - LOG_LEVEL (trace|debug|info|warn|error|fatal|panic)
-//	  - LOG_FORMAT (json|console), LOG_ENABLE_FILE, LOG_FILE_PATH
+//	  - LOG_LEVEL (debug|info|warn|error)
+//	  - LOG_FORMAT (json|console)
 //
 //	METRICS:
-//	  - METRICS_NAMESPACE, METRICS_SUBSYSTEM
 //	  - METRICS_LABELS (comma-separated key=value constant labels)
 package config
 
@@ -110,10 +108,6 @@ type ServerConfig struct {
 	WriteTimeout time.Duration `yaml:"write_timeout"`
 	// WebConfigFile is a Prometheus web configuration file (TLS, basic auth)
 	WebConfigFile string `yaml:"web_config_file"`
-	// Legacy TLS options, superseded by WebConfigFile
-	TLSEnabled  bool   `yaml:"tls_enabled"`
-	TLSCertFile string `yaml:"tls_cert_file"`
-	TLSKeyFile  string `yaml:"tls_key_file"`
 }
 
 // NTPConfig contains NTP client configuration
@@ -125,8 +119,7 @@ type NTPConfig struct {
 	SamplesPerServer int           `yaml:"samples_per_server"`
 	SampleSpacing    time.Duration `yaml:"sample_spacing"` // Delay between two samples sent to the same server
 	MaxConcurrency   int           `yaml:"max_concurrency"`
-	IPFamily         string        `yaml:"ip_family"`     // auto, ipv4 or ipv6
-	EnableKernel     bool          `yaml:"enable_kernel"` // Deprecated: use kernel.enabled
+	IPFamily         string        `yaml:"ip_family"` // auto, ipv4 or ipv6
 	Kernel           KernelConfig  `yaml:"kernel"`
 	Chrony           ChronyConfig  `yaml:"chrony"`
 	ScrapeInterval   time.Duration `yaml:"scrape_interval"` // Interval between NTP collections
@@ -140,10 +133,10 @@ type NTPConfig struct {
 
 // PoolConfig represents NTP pool configuration
 type PoolConfig struct {
-	Name       string `yaml:"name"`
-	Strategy   string `yaml:"strategy"`
-	MaxServers int    `yaml:"max_servers"`
-	Fallback   string `yaml:"fallback"`
+	Name string `yaml:"name"`
+	// MaxServers is the number of addresses queried, the first of each DNS
+	// answer
+	MaxServers int `yaml:"max_servers"`
 }
 
 // KoDConfig contains the Kiss-o'-Death handling configuration (RFC 5905 §7.4)
@@ -178,13 +171,9 @@ type ConsensusConfig struct {
 	Enabled *bool `yaml:"enabled"`
 }
 
-// ConsensusEnabled tells whether the consensus must be computed
 // KernelEnabled tells whether the kernel clock state is read: explicitly
 // enabled, or by default in agent mode on Linux
 func (c *Config) KernelEnabled() bool {
-	if c.NTP.EnableKernel {
-		return true
-	}
 	if c.NTP.Kernel.Enabled != nil {
 		return *c.NTP.Kernel.Enabled
 	}
@@ -218,17 +207,14 @@ type DNSCacheConfig struct {
 
 // LoggingConfig contains logging configuration
 type LoggingConfig struct {
-	Level      string `yaml:"level"`
-	Format     string `yaml:"format"`
-	Output     string `yaml:"output"`
-	EnableFile bool   `yaml:"enable_file"`
-	FilePath   string `yaml:"file_path"`
+	// Level is debug, info, warn or error
+	Level string `yaml:"level"`
+	// Format is json or console; logs go to the standard output
+	Format string `yaml:"format"`
 }
 
 // MetricsConfig contains Prometheus metrics configuration
 type MetricsConfig struct {
-	Namespace string `yaml:"namespace"`
-	Subsystem string `yaml:"subsystem"`
 	// Labels are constant labels added to every exporter metric
 	Labels map[string]string `yaml:"labels"`
 }
@@ -383,20 +369,17 @@ func (e *envReader) pools(name string, dst *[]PoolConfig) {
 	*dst = pools
 }
 
-// parsePools parses "name[:strategy[:max_servers]]" entries separated by commas
+// parsePools parses "name[:max_servers]" entries separated by commas
 func parsePools(s string) ([]PoolConfig, error) {
 	var pools []PoolConfig
 	for _, item := range parseCommaSeparated(s) {
 		parts := strings.Split(item, ":")
-		if len(parts) > 3 || parts[0] == "" {
-			return nil, fmt.Errorf("pool entry %q must be name[:strategy[:max_servers]]", item)
+		if len(parts) > 2 || parts[0] == "" {
+			return nil, fmt.Errorf("pool entry %q must be name[:max_servers]", item)
 		}
 		pool := PoolConfig{Name: parts[0]}
 		if len(parts) > 1 {
-			pool.Strategy = parts[1]
-		}
-		if len(parts) > 2 {
-			n, err := strconv.Atoi(parts[2])
+			n, err := strconv.Atoi(parts[1])
 			if err != nil {
 				return nil, fmt.Errorf("pool entry %q: invalid max_servers: %w", item, err)
 			}
@@ -420,9 +403,6 @@ func applyEnvOverrides(cfg *Config) error {
 	e.duration("SERVER_READ_TIMEOUT", &cfg.Server.ReadTimeout)
 	e.duration("SERVER_WRITE_TIMEOUT", &cfg.Server.WriteTimeout)
 	e.string("WEB_CONFIG_FILE", &cfg.Server.WebConfigFile)
-	e.bool("TLS_ENABLED", &cfg.Server.TLSEnabled)
-	e.string("TLS_CERT_FILE", &cfg.Server.TLSCertFile)
-	e.string("TLS_KEY_FILE", &cfg.Server.TLSKeyFile)
 
 	// PROBE ENDPOINT
 	e.boolPtr("PROBE_ENDPOINT_ENABLED", &cfg.ProbeEndpoint.Enabled)
@@ -431,7 +411,6 @@ func applyEnvOverrides(cfg *Config) error {
 	// NTP
 	e.list("NTP_SERVERS", &cfg.NTP.Servers)
 	e.pools("NTP_POOLS", &cfg.NTP.Pools)
-	e.bool("NTP_ENABLE_KERNEL", &cfg.NTP.EnableKernel)
 	e.boolPtr("NTP_KERNEL_ENABLED", &cfg.NTP.Kernel.Enabled)
 	e.boolPtr("NTP_CHRONY_ENABLED", &cfg.NTP.Chrony.Enabled)
 	e.string("NTP_CHRONY_ADDRESS", &cfg.NTP.Chrony.Address)
@@ -458,12 +437,8 @@ func applyEnvOverrides(cfg *Config) error {
 	// LOGGING
 	e.string("LOG_LEVEL", &cfg.Logging.Level)
 	e.string("LOG_FORMAT", &cfg.Logging.Format)
-	e.bool("LOG_ENABLE_FILE", &cfg.Logging.EnableFile)
-	e.string("LOG_FILE_PATH", &cfg.Logging.FilePath)
 
 	// METRICS
-	e.string("METRICS_NAMESPACE", &cfg.Metrics.Namespace)
-	e.string("METRICS_SUBSYSTEM", &cfg.Metrics.Subsystem)
 	e.labels("METRICS_LABELS", &cfg.Metrics.Labels)
 
 	return errors.Join(e.errs...)

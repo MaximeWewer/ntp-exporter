@@ -21,9 +21,9 @@ func exposedMetrics(t *testing.T) map[string]bool {
 	t.Helper()
 	cfg := config.DefaultConfig()
 	ch := make(chan *prometheus.Desc, 256)
-	NewExporter(cfg, metrics.NewNTPMetricsWithConfig("ntp", "")).Describe(ch)
-	metrics.NewNTPMetricsWithConfig("ntp", "").Describe(ch)
-	d := newDescs("ntp", "")
+	NewExporter(cfg, metrics.NewNTPMetrics()).Describe(ch)
+	metrics.NewNTPMetrics().Describe(ch)
+	d := newDescs()
 	ch <- d.probeSuccess
 	ch <- d.probeDuration
 	close(ch)

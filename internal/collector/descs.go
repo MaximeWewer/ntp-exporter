@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"github.com/maximewewer/ntp-exporter/internal/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -67,10 +68,11 @@ type descs struct {
 	chronyRootDispersion *prometheus.Desc
 }
 
-func newDescs(namespace, subsystem string) *descs {
+func newDescs() *descs {
 	d := func(sub, name, help string, labels ...string) *prometheus.Desc {
-		return prometheus.NewDesc(prometheus.BuildFQName(namespace, sub, name), help, labels, nil)
+		return prometheus.NewDesc(prometheus.BuildFQName(metrics.Namespace, sub, name), help, labels, nil)
 	}
+	const subsystem = ""
 	server := []string{"server"}
 	pool := []string{"pool"}
 

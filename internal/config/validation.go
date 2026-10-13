@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/maximewewer/ntp-exporter/internal/ntp"
+	"github.com/prometheus/common/model"
 )
 
 // DefaultMaxRootDistance is the MAXDIST of ntpd: a server whose root distance
@@ -129,15 +130,6 @@ func validateServer(cfg *ServerConfig) error {
 
 	if cfg.WriteTimeout < 1*time.Second || cfg.WriteTimeout > 60*time.Second {
 		return errors.New("write_timeout must be between 1s and 60s")
-	}
-
-	if cfg.TLSEnabled {
-		if cfg.TLSCertFile == "" {
-			return errors.New("tls_cert_file is required when tls_enabled is true")
-		}
-		if cfg.TLSKeyFile == "" {
-			return errors.New("tls_key_file is required when tls_enabled is true")
-		}
 	}
 
 	return nil
@@ -276,9 +268,6 @@ func validateNTP(cfg *NTPConfig, noTargetNeeded bool) error {
 		if strings.Contains(pool.Name, "://") {
 			return errors.New("pool[" + strconv.Itoa(i) + "]: name must be a DNS name (NTS is only supported for servers)")
 		}
-		if pool.Strategy != "" && pool.Strategy != "best_n" && pool.Strategy != "round_robin" && pool.Strategy != "all" {
-			return errors.New("pool[" + strconv.Itoa(i) + "]: invalid strategy (must be best_n, round_robin, or all)")
-		}
 		if pool.MaxServers < 1 || pool.MaxServers > 20 {
 			return errors.New("pool[" + strconv.Itoa(i) + "]: max_servers must be between 1 and 20, got " + strconv.Itoa(pool.MaxServers))
 		}
@@ -293,17 +282,14 @@ func validateNTP(cfg *NTPConfig, noTargetNeeded bool) error {
 
 func validateLogging(cfg *LoggingConfig) error {
 	validLevels := map[string]bool{
-		"trace": true,
 		"debug": true,
 		"info":  true,
 		"warn":  true,
 		"error": true,
-		"fatal": true,
-		"panic": true,
 	}
 
 	if !validLevels[cfg.Level] {
-		return errors.New("invalid log level (must be trace, debug, info, warn, error, fatal, or panic)")
+		return errors.New("invalid log level " + strconv.Quote(cfg.Level) + " (must be debug, info, warn or error)")
 	}
 
 	validFormats := map[string]bool{
@@ -315,18 +301,15 @@ func validateLogging(cfg *LoggingConfig) error {
 		return errors.New("invalid log format (must be json or console)")
 	}
 
-	if cfg.EnableFile && cfg.FilePath == "" {
-		return errors.New("file_path is required when enable_file is true")
-	}
-
 	return nil
 }
 
 func validateMetrics(cfg *MetricsConfig) error {
-	if cfg.Namespace == "" {
-		return errors.New("namespace is required")
+	for name := range cfg.Labels {
+		if !model.LegacyValidation.IsValidLabelName(name) {
+			return errors.New("metrics.labels: invalid label name " + strconv.Quote(name))
+		}
 	}
-
 	return nil
 }
 
@@ -339,12 +322,6 @@ const PublicPoolMinInterval = 60 * time.Second
 // public NTP pool more often than its usage policy allows
 func Warnings(cfg *Config) []string {
 	var warnings []string
-	if cfg.Server.TLSEnabled {
-		warnings = append(warnings, "tls_enabled, tls_cert_file and tls_key_file are deprecated: use web_config_file (--web.config.file)")
-	}
-	if cfg.NTP.EnableKernel {
-		warnings = append(warnings, "enable_kernel (NTP_ENABLE_KERNEL) is deprecated: use kernel.enabled (NTP_KERNEL_ENABLED)")
-	}
 	if cfg.NTP.ScrapeInterval >= PublicPoolMinInterval {
 		return warnings
 	}

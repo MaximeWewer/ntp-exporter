@@ -83,9 +83,8 @@ type PoolResult struct {
 	// Members are the addresses selected for querying
 	Members []string
 	// Total is the number of addresses returned by the resolution
-	Total       int
-	DNSDuration time.Duration
-	Err         error
+	Total int
+	Err   error
 }
 
 // CycleResult gathers every measurement taken during one collection cycle

@@ -34,8 +34,6 @@ logging:
   level: "info"
   format: "json"
 
-metrics:
-  namespace: "ntp"
 `
 
 	err := os.WriteFile(configFile, []byte(configContent), 0644)
@@ -50,7 +48,6 @@ metrics:
 	assert.Equal(t, 5*time.Second, cfg.NTP.Timeout)
 	assert.Equal(t, 4, cfg.NTP.Version)
 	assert.Equal(t, "info", cfg.Logging.Level)
-	assert.Equal(t, "ntp", cfg.Metrics.Namespace)
 }
 
 func TestLoadFromYamlFile_FileNotFound(t *testing.T) {
@@ -222,7 +219,6 @@ ntp:
   servers:
     - "pool.ntp.org"
   timeout: 5s
-  enable_kernel: false
 logging:
   level: "info"
 `
@@ -232,12 +228,12 @@ logging:
 
 	// Set environment overrides
 	os.Setenv("NTP_EXPORTER_PORT", "8080")
-	os.Setenv("NTP_ENABLE_KERNEL", "true")
+	os.Setenv("NTP_KERNEL_ENABLED", "true")
 	os.Setenv("LOG_LEVEL", "debug")
 
 	defer func() {
 		os.Unsetenv("NTP_EXPORTER_PORT")
-		os.Unsetenv("NTP_ENABLE_KERNEL")
+		os.Unsetenv("NTP_KERNEL_ENABLED")
 		os.Unsetenv("LOG_LEVEL")
 	}()
 
@@ -250,7 +246,7 @@ logging:
 	assert.Contains(t, cfg.NTP.Servers, "pool.ntp.org")
 	// Environment overrides
 	assert.Equal(t, 8080, cfg.Server.Port)
-	assert.True(t, cfg.NTP.EnableKernel)
+	assert.True(t, cfg.KernelEnabled())
 	assert.Equal(t, "debug", cfg.Logging.Level)
 }
 
@@ -267,8 +263,6 @@ ntp:
   version: 4
 logging:
   level: "info"
-metrics:
-  namespace: "ntp"
 `
 
 	err := os.WriteFile(configFile, []byte(configContent), 0644)
@@ -325,13 +319,13 @@ func TestLoadFromEnvVarsOnly_InvalidValueIsFatal(t *testing.T) {
 }
 
 func TestLoadFromEnvVarsOnly_Pools(t *testing.T) {
-	t.Setenv("NTP_POOLS", "pool.ntp.org, europe.pool.ntp.org:all:3")
+	t.Setenv("NTP_POOLS", "pool.ntp.org, europe.pool.ntp.org:3")
 
 	cfg, err := LoadFromEnvVarsOnly()
 	require.NoError(t, err)
 	require.Len(t, cfg.NTP.Pools, 2)
-	assert.Equal(t, PoolConfig{Name: "pool.ntp.org", Strategy: "best_n", MaxServers: 4}, cfg.NTP.Pools[0])
-	assert.Equal(t, PoolConfig{Name: "europe.pool.ntp.org", Strategy: "all", MaxServers: 3}, cfg.NTP.Pools[1])
+	assert.Equal(t, PoolConfig{Name: "pool.ntp.org", MaxServers: 4}, cfg.NTP.Pools[0])
+	assert.Equal(t, PoolConfig{Name: "europe.pool.ntp.org", MaxServers: 3}, cfg.NTP.Pools[1])
 	assert.Empty(t, cfg.NTP.Servers, "default servers must not be added when pools are configured")
 }
 
@@ -350,7 +344,6 @@ func TestLoadFromYamlFile_PoolDefaults(t *testing.T) {
 	cfg, err := LoadFromYamlWithEnvOverrides(configFile)
 	require.NoError(t, err)
 	assert.Equal(t, 4, cfg.NTP.Pools[0].MaxServers)
-	assert.Equal(t, "best_n", cfg.NTP.Pools[0].Strategy)
 }
 
 func TestConsensusEnabled(t *testing.T) {
@@ -366,14 +359,6 @@ func TestConsensusEnabled(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, envCfg.NTP.Consensus.Enabled)
 	assert.False(t, envCfg.ConsensusEnabled())
-}
-
-func TestKernelConfig_DeprecatedEnableKernel(t *testing.T) {
-	t.Setenv("NTP_EXPORTER_MODE", "agent")
-	t.Setenv("NTP_ENABLE_KERNEL", "true")
-	cfg, err := LoadFromEnvVarsOnly()
-	require.NoError(t, err)
-	assert.True(t, cfg.KernelEnabled())
 }
 
 func TestLoadFromEnvVarsOnly_MetricsLabels(t *testing.T) {

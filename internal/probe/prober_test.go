@@ -98,7 +98,7 @@ func TestProber_PoolMembers(t *testing.T) {
 	mock.SetupSuccessfulServer("192.0.2.10", time.Millisecond, 2)
 
 	cfg := newTestConfig()
-	cfg.NTP.Pools = []config.PoolConfig{{Name: "192.0.2.10", Strategy: "best_n", MaxServers: 4}}
+	cfg.NTP.Pools = []config.PoolConfig{{Name: "192.0.2.10", MaxServers: 4}}
 
 	result := newProber(cfg, mock).Run(context.Background())
 

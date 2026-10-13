@@ -12,9 +12,9 @@ type Registry struct {
 	ntpMetrics *NTPMetrics
 }
 
-// NewRegistryWithConfig creates a new metrics registry with custom namespace
-// and subsystem. Optional constant labels are added to every exporter metric.
-func NewRegistryWithConfig(namespace, subsystem string, constLabels ...map[string]string) *Registry {
+// NewRegistry creates the metrics registry. Optional constant labels are
+// added to every exporter metric.
+func NewRegistry(constLabels ...map[string]string) *Registry {
 	registry := prometheus.NewRegistry()
 
 	labels := prometheus.Labels{}
@@ -32,7 +32,7 @@ func NewRegistryWithConfig(namespace, subsystem string, constLabels ...map[strin
 	return &Registry{
 		registry:   registry,
 		registerer: registerer,
-		ntpMetrics: NewNTPMetricsWithConfig(namespace, subsystem),
+		ntpMetrics: NewNTPMetrics(),
 	}
 }
 

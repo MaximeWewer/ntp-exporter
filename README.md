@@ -275,7 +275,6 @@ ntp:
   servers: [ptbtime1.ptb.de, ptbtime2.ptb.de, ptbtime3.ptb.de]
   pools:
     - name: europe.pool.ntp.org
-      strategy: best_n   # best_n, all or round_robin
       max_servers: 4
   scrape_interval: 60s
   samples_per_server: 4
@@ -308,7 +307,7 @@ probe_endpoint:
 | `PROBE_ENDPOINT_ENABLED` | `false` | Serve `/probe?target=` |
 | `PROBE_ENDPOINT_ALLOWED_TARGETS` | | Comma-separated CIDR ranges and host name regular expressions `/probe` may reach |
 | `NTP_SERVERS` | (none) | Comma-separated servers (`host`, `host:port` or `nts://host[:port]`); nothing is queried unless configured |
-| `NTP_POOLS` | | Comma-separated pools, `name[:strategy[:max_servers]]` |
+| `NTP_POOLS` | | Comma-separated pools, `name[:max_servers]`: the first `max_servers` (4) addresses of each DNS answer are queried |
 | `NTP_SCRAPE_INTERVAL` | `60s` | Interval between two cycles (5 s to 1 h) |
 | `NTP_SAMPLES` | `4` | Queries per server and per cycle (1 to 20) |
 | `NTP_SAMPLE_SPACING` | `2s` | Delay between two queries to the same server |
@@ -327,14 +326,9 @@ probe_endpoint:
 | `NTP_EXPORTER_ADDRESS` / `NTP_EXPORTER_PORT` | `0.0.0.0` / `9559` | Listen address |
 | `SERVER_READ_TIMEOUT` / `SERVER_WRITE_TIMEOUT` | `10s` | HTTP timeouts |
 | `WEB_CONFIG_FILE` | | Prometheus web configuration file |
-| `LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn`, `error` |
-| `LOG_FORMAT` | `json` | `json` or `console` |
-| `LOG_ENABLE_FILE` / `LOG_FILE_PATH` | `false` | Also log to a file |
-| `METRICS_NAMESPACE` / `METRICS_SUBSYSTEM` | `ntp` / | Metric name prefix |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `LOG_FORMAT` | `json` | `json` or `console`, on the standard output |
 | `METRICS_LABELS` | | Constant labels, `key=value,...` |
-
-Deprecated but still accepted: `NTP_ENABLE_KERNEL`, `TLS_ENABLED`,
-`TLS_CERT_FILE`, `TLS_KEY_FILE` (a warning is logged at startup).
 
 When querying the **public NTP pool**, keep `scrape_interval` at 60 s or more:
 the exporter logs a warning otherwise.
@@ -347,7 +341,7 @@ consensus would flag one group as falsetickers.
 
 ## Metrics reference
 
-Names below use the default `ntp` namespace and no subsystem.
+Every metric is prefixed with `ntp_`.
 
 ### Per server (`server` label)
 
@@ -424,7 +418,7 @@ Go runtime and process metrics (`go_*`, `process_*`) are also exposed.
 | Path | Description |
 |---|---|
 | `/metrics` | Prometheus metrics |
-| `/healthz` | Liveness (`/health` is kept as an alias) |
+| `/healthz` | Liveness |
 | `/readyz` | 503 until a cycle completed, or when the last cycle is older than 3 intervals |
 | `/probe?target=[nts://]host[:port][&samples=N]` | Measures one target on demand (see [Multi-target probing](#multi-target-probing)) |
 

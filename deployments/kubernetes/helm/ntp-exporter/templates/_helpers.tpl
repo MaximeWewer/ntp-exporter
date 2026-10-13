@@ -110,18 +110,17 @@ it only checks that the port accepts connections.
 {{- end -}}
 
 {{/*
-Effective deployment mode: the deprecated "hybrid" mode is "agent" with the kernel option
+Deployment mode: agent or probe
 */}}
 {{- define "ntp-exporter.mode" -}}
-{{- if eq .Values.mode "hybrid" -}}agent{{- else -}}{{ .Values.mode }}{{- end -}}
+{{ .Values.mode }}
 {{- end -}}
 
 {{/*
-Whether the kernel clock state option is enabled (kernel.enabled, deprecated
-config.enableKernel or deprecated hybrid mode)
+Whether the kernel clock state option is explicitly enabled
 */}}
 {{- define "ntp-exporter.kernelEnabled" -}}
-{{- if or (and .Values.kernel .Values.kernel.enabled) .Values.config.enableKernel (eq .Values.mode "hybrid") -}}true{{- end -}}
+{{- if and .Values.kernel .Values.kernel.enabled -}}true{{- end -}}
 {{- end -}}
 
 {{/*
@@ -149,8 +148,8 @@ Validate mode value
 {{- if not .Values.mode -}}
 {{- fail "mode is required: --set mode=probe (monitor NTP servers from one Deployment, see values-probe.yaml) or --set mode=agent (measure the clock of every node, see values-agent.yaml)" -}}
 {{- end -}}
-{{- if and (ne .Values.mode "agent") (ne .Values.mode "probe") (ne .Values.mode "hybrid") -}}
-{{- fail "mode must be 'agent' or 'probe' ('hybrid' is deprecated: use mode=agent with kernel.enabled=true)" -}}
+{{- if and (ne .Values.mode "agent") (ne .Values.mode "probe") -}}
+{{- fail "mode must be 'agent' or 'probe' (the former 'hybrid' mode is mode=agent, whose kernel option is enabled by default)" -}}
 {{- end -}}
 {{- if and (eq .Values.mode "probe") (not .Values.config.ntpServers) (not (include "ntp-exporter.probeEndpointEnabled" .)) (not (and .Values.configYaml .Values.configYaml.enabled)) -}}
 {{- fail "mode=probe has nothing to monitor: set config.ntpServers or probeEndpoint.enabled=true" -}}

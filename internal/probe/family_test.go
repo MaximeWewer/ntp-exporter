@@ -180,7 +180,7 @@ func TestProber_PoolMembersFilteredByFamily(t *testing.T) {
 	mock.SetupSuccessfulServer(v4, time.Millisecond, 2)
 	cfg := newTestConfig()
 	cfg.NTP.IPFamily = config.IPFamilyIPv4
-	cfg.NTP.Pools = []config.PoolConfig{{Name: "pool.example.org", Strategy: "all", MaxServers: 4}}
+	cfg.NTP.Pools = []config.PoolConfig{{Name: "pool.example.org", MaxServers: 4}}
 	p := New(cfg, mock)
 
 	members := p.families.filter([]string{v6, v4})

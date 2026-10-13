@@ -41,7 +41,6 @@ func TestApplyDefaults_WithPools(t *testing.T) {
 			Pools: []PoolConfig{
 				{
 					Name:       "pool.ntp.org",
-					Strategy:   "best_n",
 					MaxServers: 4,
 				},
 			},
@@ -67,7 +66,6 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, 9559, cfg.Server.Port)
 	assert.Empty(t, cfg.NTP.Servers, "no implicit server")
 	assert.Equal(t, "info", cfg.Logging.Level)
-	assert.Equal(t, "ntp", cfg.Metrics.Namespace)
 }
 
 func TestApplyDefaults_ZeroTimeouts(t *testing.T) {
@@ -109,7 +107,6 @@ func TestApplyDefaults_LoggingEmptyStrings(t *testing.T) {
 		Logging: LoggingConfig{
 			Level:  "",
 			Format: "",
-			Output: "",
 		},
 	}
 
@@ -117,20 +114,17 @@ func TestApplyDefaults_LoggingEmptyStrings(t *testing.T) {
 
 	assert.Equal(t, "info", cfg.Logging.Level)
 	assert.Equal(t, "json", cfg.Logging.Format)
-	assert.Equal(t, "stdout", cfg.Logging.Output)
 }
 
 func TestApplyDefaults_MetricsNilLabels(t *testing.T) {
 	cfg := &Config{
 		Metrics: MetricsConfig{
-			Namespace: "",
-			Labels:    nil,
+			Labels: nil,
 		},
 	}
 
 	ApplyDefaults(cfg)
 
-	assert.Equal(t, "ntp", cfg.Metrics.Namespace)
 	assert.NotNil(t, cfg.Metrics.Labels)
 	assert.Empty(t, cfg.Metrics.Labels)
 }

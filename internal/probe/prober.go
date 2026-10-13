@@ -54,8 +54,8 @@ type Prober struct {
 func New(cfg *config.Config, client ntp.NTPQuerier) *Prober {
 	pools := make([]*ntp.Pool, 0, len(cfg.NTP.Pools))
 	for _, pc := range cfg.NTP.Pools {
-		pools = append(pools, ntp.NewPool(pc.Name, pc.Strategy, pc.MaxServers, pc.Fallback,
-			ntp.DNSCacheConfig{MinTTL: cfg.NTP.DNSCache.MinTTL, MaxTTL: cfg.NTP.DNSCache.MaxTTL}))
+		pools = append(pools, ntp.NewPool(pc.Name, pc.MaxServers,
+			ntp.DNSCacheConfig{MinTTL: cfg.NTP.DNSCache.MinTTL, MaxTTL: cfg.NTP.DNSCache.MaxTTL}, nil))
 	}
 
 	return &Prober{
@@ -93,9 +93,12 @@ func (p *Prober) SetTargetPolicy(policy *TargetPolicy) {
 	p.policy = policy
 }
 
-// SetResolver replaces the resolver used for configured servers
+// SetResolver replaces the resolver of the configured servers and pools
 func (p *Prober) SetResolver(r Resolver) {
 	p.resolver = r
+	for _, pool := range p.pools {
+		pool.SetResolver(r)
+	}
 }
 
 // CycleTimeout returns the maximum duration of a cycle for an interval:
@@ -159,13 +162,12 @@ func (p *Prober) resolveTargets(ctx context.Context, result *CycleResult) []Targ
 	}
 
 	for _, pool := range p.pools {
-		members, total, dnsDuration, err := pool.Members(ctx)
+		members, total, err := pool.Members(ctx)
 		result.Pools = append(result.Pools, PoolResult{
-			Name:        pool.Name(),
-			Members:     members,
-			Total:       total,
-			DNSDuration: dnsDuration,
-			Err:         err,
+			Name:    pool.Name(),
+			Members: members,
+			Total:   total,
+			Err:     err,
 		})
 		if err != nil {
 			logger.SafeWarn("probe", "Pool resolution failed", map[string]interface{}{

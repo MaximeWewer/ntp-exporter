@@ -18,13 +18,6 @@ data:
       port: {{ .Values.config.metricsPort | default 9559 }}
       read_timeout: {{ .Values.config.readTimeout | default "10s" | quote }}
       write_timeout: {{ .Values.config.writeTimeout | default "10s" | quote }}
-      {{- if .Values.config.tls }}
-      {{- if .Values.config.tls.enabled }}
-      tls_enabled: {{ .Values.config.tls.enabled }}
-      tls_cert_file: {{ .Values.config.tls.certFile | default "" | quote }}
-      tls_key_file: {{ .Values.config.tls.keyFile | default "" | quote }}
-      {{- end }}
-      {{- end }}
 
     probe_endpoint:
       enabled: {{ include "ntp-exporter.probeEndpointEnabled" . | empty | not }}
@@ -86,24 +79,14 @@ data:
     logging:
       level: {{ .Values.config.logging.level | quote }}
       format: {{ .Values.config.logging.format | quote }}
-      output: {{ .Values.config.logging.output | default "stdout" | quote }}
-      {{- if .Values.config.logging.enableFile }}
-      enable_file: {{ .Values.config.logging.enableFile }}
-      file_path: {{ .Values.config.logging.filePath | default "" | quote }}
-      {{- end }}
 
     metrics:
       {{- if .Values.config.metrics }}
-      namespace: {{ .Values.config.metrics.namespace | default "ntp" | quote }}
-      subsystem: {{ .Values.config.metrics.subsystem | default "" | quote }}
       {{- if .Values.config.metrics.labels }}
       labels:
         {{- range $key, $value := .Values.config.metrics.labels }}
         {{ $key | quote }}: {{ $value | toString | quote }}
         {{- end }}
       {{- end }}
-      {{- else }}
-      namespace: ntp
-      subsystem: ""
       {{- end }}
   {{- end }}

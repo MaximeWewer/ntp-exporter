@@ -23,11 +23,12 @@ type DNSCache struct {
 	cache    map[string]*DNSCacheEntry
 	minTTL   time.Duration
 	maxTTL   time.Duration
-	resolver hostResolver
+	resolver HostResolver
+	now      func() time.Time
 }
 
-// hostResolver resolves host names (net.Resolver in production)
-type hostResolver interface {
+// HostResolver resolves host names (net.Resolver in production)
+type HostResolver interface {
 	LookupHost(ctx context.Context, host string) ([]string, error)
 }
 
@@ -47,12 +48,11 @@ func NewDNSCache(config DNSCacheConfig) *DNSCache {
 	}
 
 	return &DNSCache{
-		cache:  make(map[string]*DNSCacheEntry),
-		minTTL: config.MinTTL,
-		maxTTL: config.MaxTTL,
-		resolver: &net.Resolver{
-			PreferGo: true,
-		},
+		cache:    make(map[string]*DNSCacheEntry),
+		minTTL:   config.MinTTL,
+		maxTTL:   config.MaxTTL,
+		resolver: net.DefaultResolver,
+		now:      time.Now,
 	}
 }
 
@@ -69,7 +69,7 @@ func (c *DNSCache) ResolveCached(ctx context.Context, hostname string) ([]string
 	entry, exists := c.cache[hostname]
 	c.mu.RUnlock()
 
-	if exists && time.Now().Before(entry.ExpiresAt) {
+	if exists && c.now().Before(entry.ExpiresAt) {
 		logger.SafeDebug("dns", "DNS cache hit", map[string]interface{}{
 			"hostname": hostname,
 			"ips":      len(entry.IPs),
@@ -108,7 +108,7 @@ func (c *DNSCache) ResolveCached(ctx context.Context, hostname string) ([]string
 	c.mu.Lock()
 	c.cache[hostname] = &DNSCacheEntry{
 		IPs:        ips,
-		ExpiresAt:  time.Now().Add(ttl),
+		ExpiresAt:  c.now().Add(ttl),
 		TTL:        ttl,
 		ErrorCount: 0,
 	}

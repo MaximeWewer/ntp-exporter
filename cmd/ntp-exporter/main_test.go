@@ -65,7 +65,7 @@ func TestRunCollectionLoop_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := runCollectionLoop(ctx, cfg, prober, collector.NewExporter(cfg, metrics.NewNTPMetricsWithConfig("ntp", "")))
+	err := runCollectionLoop(ctx, cfg, prober, collector.NewExporter(cfg, metrics.NewNTPMetrics()))
 	assert.NoError(t, err, "Collection loop should stop gracefully on context cancellation")
 }
 
@@ -75,7 +75,7 @@ func TestRunCollectionLoop_WithTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
-	err := runCollectionLoop(ctx, cfg, prober, collector.NewExporter(cfg, metrics.NewNTPMetricsWithConfig("ntp", "")))
+	err := runCollectionLoop(ctx, cfg, prober, collector.NewExporter(cfg, metrics.NewNTPMetrics()))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, mock.GetCallCount("time.example.org"), "initial cycle queries the server once")
 }

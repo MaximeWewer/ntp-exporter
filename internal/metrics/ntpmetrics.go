@@ -20,13 +20,16 @@ type NTPMetrics struct {
 	ExporterCycleOverrunTotal prometheus.Counter
 }
 
-// NewNTPMetricsWithConfig creates and initializes the exporter metrics with custom namespace and subsystem
-func NewNTPMetricsWithConfig(namespace, subsystem string) *NTPMetrics {
+// Namespace prefixes every metric of the exporter
+const Namespace = "ntp"
+
+// NewNTPMetrics creates the counters and operational metrics of the exporter
+func NewNTPMetrics() *NTPMetrics {
+	namespace := Namespace
 	return &NTPMetrics{
 		KissOfDeathTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
-				Subsystem: subsystem,
 				Name:      "kiss_of_death_total",
 				Help:      "Total number of Kiss-of-Death packets received",
 			},
@@ -35,7 +38,6 @@ func NewNTPMetricsWithConfig(namespace, subsystem string) *NTPMetrics {
 		InvalidResponsesTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Namespace: namespace,
-				Subsystem: subsystem,
 				Name:      "invalid_responses_total",
 				Help:      "Total number of queries without a valid time measurement, by reason (kod, unsync, stratum, root_distance, stale_reference, invalid_time, other, timeout)",
 			},

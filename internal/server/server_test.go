@@ -22,7 +22,7 @@ import (
 
 func newTestServer(t *testing.T, readiness ReadinessFunc) *httptest.Server {
 	t.Helper()
-	reg := metrics.NewRegistryWithConfig("ntp", "")
+	reg := metrics.NewRegistry()
 	require.NoError(t, reg.Register())
 	reg.GetMetrics().ExporterCyclesTotal.WithLabelValues("success").Inc()
 
@@ -55,11 +55,12 @@ func TestServer_Metrics(t *testing.T) {
 func TestServer_Liveness(t *testing.T) {
 	ts := newTestServer(t, func() error { return errors.New("not ready") })
 
-	for _, path := range []string{"/healthz", "/health"} {
-		code, body := get(t, ts.URL+path)
-		assert.Equal(t, http.StatusOK, code, path)
-		assert.Contains(t, body, "alive")
-	}
+	code, body := get(t, ts.URL+"/healthz")
+	assert.Equal(t, http.StatusOK, code)
+	assert.Contains(t, body, "alive")
+
+	code, _ = get(t, ts.URL+"/health")
+	assert.Equal(t, http.StatusNotFound, code, "the /health alias is removed")
 }
 
 func TestServer_Readiness(t *testing.T) {
@@ -117,7 +118,7 @@ func TestServer_StartAndShutdown(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Address = "127.0.0.1"
 	cfg.Server.Port = port
-	reg := metrics.NewRegistryWithConfig("ntp", "")
+	reg := metrics.NewRegistry()
 	require.NoError(t, reg.Register())
 	srv := New(cfg, reg.GetRegistry(), nil)
 
@@ -161,7 +162,7 @@ func TestServer_WebConfigBasicAuth(t *testing.T) {
 	cfg.Server.Address = "127.0.0.1"
 	cfg.Server.Port = freePort(t)
 	cfg.Server.WebConfigFile = webConfig
-	reg := metrics.NewRegistryWithConfig("ntp", "")
+	reg := metrics.NewRegistry()
 	require.NoError(t, reg.Register())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -187,7 +188,7 @@ func TestServer_WebConfigBasicAuth(t *testing.T) {
 }
 
 func TestServer_ProbeRoute(t *testing.T) {
-	reg := metrics.NewRegistryWithConfig("ntp", "")
+	reg := metrics.NewRegistry()
 	cfg := config.DefaultConfig()
 
 	without := httptest.NewServer(New(cfg, reg.GetRegistry(), nil).Handler())
@@ -222,7 +223,7 @@ func TestServer_ShutdownEndsRequestsInFlight(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Address = "127.0.0.1"
 	cfg.Server.Port = port
-	reg := metrics.NewRegistryWithConfig("ntp", "")
+	reg := metrics.NewRegistry()
 	require.NoError(t, reg.Register())
 	srv := New(cfg, reg.GetRegistry(), nil)
 	// A /probe burst lasting until its request context ends

@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -83,45 +82,6 @@ func TestValidateServer_Timeouts(t *testing.T) {
 
 			if tt.wantErr {
 				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestValidateServer_TLSConfig(t *testing.T) {
-	tests := []struct {
-		name        string
-		tlsEnabled  bool
-		certFile    string
-		keyFile     string
-		wantErr     bool
-		errContains string
-	}{
-		{"tls_disabled", false, "", "", false, ""},
-		{"tls_with_files", true, "/path/to/cert.pem", "/path/to/key.pem", false, ""},
-		{"tls_without_cert", true, "", "/path/to/key.pem", true, "tls_cert_file"},
-		{"tls_without_key", true, "/path/to/cert.pem", "", true, "tls_key_file"},
-		{"tls_without_both", true, "", "", true, "tls_cert_file"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &ServerConfig{
-				Port:         9559,
-				ReadTimeout:  10 * time.Second,
-				WriteTimeout: 10 * time.Second,
-				TLSEnabled:   tt.tlsEnabled,
-				TLSCertFile:  tt.certFile,
-				TLSKeyFile:   tt.keyFile,
-			}
-
-			err := validateServer(cfg)
-
-			if tt.wantErr {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errContains)
 			} else {
 				assert.NoError(t, err)
 			}
@@ -336,30 +296,24 @@ func TestValidateNTP_Pools(t *testing.T) {
 	}{
 		{
 			name:    "valid_pool",
-			pool:    PoolConfig{Name: "pool.ntp.org", Strategy: "best_n", MaxServers: 4},
+			pool:    PoolConfig{Name: "pool.ntp.org", MaxServers: 4},
 			wantErr: false,
 		},
 		{
 			name:    "empty_name",
-			pool:    PoolConfig{Name: "", Strategy: "best_n", MaxServers: 4},
+			pool:    PoolConfig{Name: "", MaxServers: 4},
 			wantErr: true,
 			errMsg:  "name is required",
 		},
 		{
-			name:    "invalid_strategy",
-			pool:    PoolConfig{Name: "pool.ntp.org", Strategy: "invalid", MaxServers: 4},
-			wantErr: true,
-			errMsg:  "invalid strategy",
-		},
-		{
 			name:    "max_servers_too_low",
-			pool:    PoolConfig{Name: "pool.ntp.org", Strategy: "best_n", MaxServers: 0},
+			pool:    PoolConfig{Name: "pool.ntp.org", MaxServers: 0},
 			wantErr: true,
 			errMsg:  "max_servers",
 		},
 		{
 			name:    "max_servers_too_high",
-			pool:    PoolConfig{Name: "pool.ntp.org", Strategy: "best_n", MaxServers: 21},
+			pool:    PoolConfig{Name: "pool.ntp.org", MaxServers: 21},
 			wantErr: true,
 			errMsg:  "max_servers",
 		},
@@ -391,42 +345,8 @@ func TestValidateNTP_Pools(t *testing.T) {
 	}
 }
 
-func TestValidateNTP_PoolStrategies(t *testing.T) {
-	strategies := []string{"best_n", "round_robin", "all", ""}
-
-	for _, strategy := range strategies {
-		t.Run("strategy_"+strategy, func(t *testing.T) {
-			pool := PoolConfig{
-				Name:       "pool.ntp.org",
-				Strategy:   strategy,
-				MaxServers: 4,
-			}
-
-			cfg := &NTPConfig{
-				Pools:            []PoolConfig{pool},
-				Timeout:          5 * time.Second,
-				Version:          4,
-				SamplesPerServer: 3,
-				MaxConcurrency:   10,
-				ScrapeInterval:   30 * time.Second,
-				MaxRootDistance:  DefaultMaxRootDistance,
-				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
-				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
-			}
-
-			err := validateNTP(cfg, false)
-
-			if strategy == "" || strategy == "best_n" || strategy == "round_robin" || strategy == "all" {
-				assert.NoError(t, err)
-			} else {
-				assert.Error(t, err)
-			}
-		})
-	}
-}
-
 func TestValidateLogging_Level(t *testing.T) {
-	validLevels := []string{"trace", "debug", "info", "warn", "error", "fatal", "panic"}
+	validLevels := []string{"debug", "info", "warn", "error"}
 	invalidLevels := []string{"invalid", "INFO", "warning", ""}
 
 	for _, level := range validLevels {
@@ -486,68 +406,6 @@ func TestValidateLogging_Format(t *testing.T) {
 	}
 }
 
-func TestValidateLogging_FileConfig(t *testing.T) {
-	tests := []struct {
-		name       string
-		enableFile bool
-		filePath   string
-		wantErr    bool
-	}{
-		{"file_disabled", false, "", false},
-		{"file_enabled_with_path", true, "/var/log/ntp.log", false},
-		{"file_enabled_no_path", true, "", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &LoggingConfig{
-				Level:      "info",
-				Format:     "json",
-				EnableFile: tt.enableFile,
-				FilePath:   tt.filePath,
-			}
-
-			err := validateLogging(cfg)
-
-			if tt.wantErr {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "file_path")
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestValidateMetrics_Namespace(t *testing.T) {
-	tests := []struct {
-		name      string
-		namespace string
-		wantErr   bool
-	}{
-		{"valid", "ntp", false},
-		{"custom", "my_metrics", false},
-		{"empty", "", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &MetricsConfig{
-				Namespace: tt.namespace,
-			}
-
-			err := validateMetrics(cfg)
-
-			if tt.wantErr {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "namespace")
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
 func TestValidate_CompleteConfig(t *testing.T) {
 	cfg := &Config{
 		Mode: ModeProbe,
@@ -572,9 +430,7 @@ func TestValidate_CompleteConfig(t *testing.T) {
 			Level:  "info",
 			Format: "json",
 		},
-		Metrics: MetricsConfig{
-			Namespace: "ntp",
-		},
+		Metrics: MetricsConfig{},
 	}
 
 	err := Validate(cfg)
@@ -640,14 +496,6 @@ func TestWarnings_PublicPoolEtiquette(t *testing.T) {
 	cfg.NTP.ScrapeInterval = 60 * time.Second
 	if w := Warnings(cfg); len(w) != 0 {
 		t.Errorf("no warning expected at 60s, got %v", w)
-	}
-}
-
-func TestWarnings_DeprecatedEnableKernel(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.NTP.EnableKernel = true
-	if w := Warnings(cfg); len(w) != 1 || !strings.Contains(w[0], "deprecated") {
-		t.Errorf("expected a deprecation warning, got %v", w)
 	}
 }
 
@@ -742,7 +590,7 @@ func TestValidateNTP_DuplicateTargets(t *testing.T) {
 			cfg := DefaultConfig()
 			cfg.NTP.Servers = tt.servers
 			for _, p := range tt.pools {
-				cfg.NTP.Pools = append(cfg.NTP.Pools, PoolConfig{Name: p, Strategy: "all", MaxServers: 4})
+				cfg.NTP.Pools = append(cfg.NTP.Pools, PoolConfig{Name: p, MaxServers: 4})
 			}
 
 			err := Validate(cfg)
@@ -804,7 +652,7 @@ func TestValidate_AgentMode(t *testing.T) {
 	assert.ErrorContains(t, Validate(cfg), "at most 2 reference servers")
 
 	cfg.NTP.Servers = []string{"ntp1.example.org"}
-	cfg.NTP.Pools = []PoolConfig{{Name: "pool.ntp.org", Strategy: "all", MaxServers: 4}}
+	cfg.NTP.Pools = []PoolConfig{{Name: "pool.ntp.org", MaxServers: 4}}
 	assert.ErrorContains(t, Validate(cfg), "does not query pools")
 
 	cfg.NTP.Pools = nil
