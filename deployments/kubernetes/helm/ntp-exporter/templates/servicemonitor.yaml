@@ -34,7 +34,12 @@ spec:
     {{- if .Values.serviceMonitor.honorLabels }}
     honorLabels: true
     {{- end }}
-    {{- with .Values.serviceMonitor.relabelings }}
+    {{- $relabelings := .Values.serviceMonitor.relabelings | default list }}
+    {{- if eq (include "ntp-exporter.mode" .) "agent" }}
+    {{- /* The node of the pod on every series, the up series included */}}
+    {{- $relabelings = prepend $relabelings (dict "sourceLabels" (list "__meta_kubernetes_pod_node_name") "targetLabel" "node") }}
+    {{- end }}
+    {{- with $relabelings }}
     relabelings:
     {{- toYaml . | nindent 4 }}
     {{- end }}
