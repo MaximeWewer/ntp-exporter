@@ -58,9 +58,10 @@ type ntsSession interface {
 }
 
 // ntsTarget holds the session of one NTS server. A session holds cookies
-// consumed by each query: queries of a server are serialized.
+// consumed by each query: queries of a server are serialized by slot, a
+// semaphore that a caller stops waiting for when its context ends.
 type ntsTarget struct {
-	mu      sync.Mutex
+	slot    chan struct{}
 	session ntsSession
 	state   NTSState
 }
@@ -116,6 +117,22 @@ func keyExchange(host string, timeout time.Duration) (ntsSession, time.Time, err
 	return session, expiry, nil
 }
 
+// acquire takes the slot of the server, waiting for it until the context
+// ends. A free slot is always taken, even with an expired context.
+func (t *ntsTarget) acquire(ctx context.Context) bool {
+	select {
+	case t.slot <- struct{}{}:
+		return true
+	default:
+	}
+	select {
+	case t.slot <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 // target returns the state of an NTS server
 func (c *NTSClient) target(host string) *ntsTarget {
 	c.mu.Lock()
@@ -125,11 +142,15 @@ func (c *NTSClient) target(host string) *ntsTarget {
 		if len(c.targets) >= maxNTSSessions {
 			clear(c.targets)
 		}
-		t = &ntsTarget{}
+		t = &ntsTarget{slot: make(chan struct{}, 1)}
 		c.targets[host] = t
 	}
 	return t
 }
+
+// ErrNTSBusy is returned when the context ends while another burst or key
+// exchange of the same server is in progress
+var ErrNTSBusy = errors.New("NTS server busy")
 
 // NTSResult is the result of a burst to an NTS server
 type NTSResult struct {
@@ -146,8 +167,11 @@ type NTSResult struct {
 // exchange when needed. Without a session, no query is sent.
 func (c *NTSClient) Burst(ctx context.Context, host string, count int) NTSResult {
 	t := c.target(host)
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	if !t.acquire(ctx) {
+		// Another burst or key exchange of this server is in progress
+		return NTSResult{Err: fmt.Errorf("%w: %s: %w", ErrNTSBusy, host, ctx.Err())}
+	}
+	defer func() { <-t.slot }()
 
 	if t.session == nil || c.now().Sub(t.state.KETime) >= ntsKeyExchangeInterval {
 		c.renew(ctx, t, host)

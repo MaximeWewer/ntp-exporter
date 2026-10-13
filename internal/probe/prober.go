@@ -356,7 +356,10 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 // NTP server is the one negotiated by the key exchange.
 func (p *Prober) measureNTS(ctx context.Context, m *Measurement, samples int) {
 	res := p.nts.Burst(ctx, ntp.NTSHost(m.Target.Server), samples)
-	m.NTS = &res.State
+	// No key exchange state when the request gave up waiting for the server
+	if !errors.Is(res.Err, ntp.ErrNTSBusy) {
+		m.NTS = &res.State
+	}
 	m.Target.Address = res.State.Address
 	m.Sent = res.Sent
 	m.Responses = res.Responses

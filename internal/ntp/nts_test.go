@@ -181,3 +181,27 @@ func TestKeyExchange_Unreachable(t *testing.T) {
 	_, _, err := keyExchange("127.0.0.1:1", 500*time.Millisecond)
 	assert.Error(t, err)
 }
+
+func TestNTSClient_BusyServerHonorsContext(t *testing.T) {
+	c := newTestNTSClient(func(string, time.Duration) (ntsSession, time.Time, error) {
+		return &fakeSession{delay: time.Second}, time.Time{}, nil
+	})
+
+	// A 1s burst holds the server
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.Burst(context.Background(), "nts.example.org", 1)
+	}()
+	time.Sleep(50 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	res := c.Burst(ctx, "nts.example.org", 1)
+
+	assert.Less(t, time.Since(start), 200*time.Millisecond, "does not wait for the burst in progress")
+	assert.ErrorIs(t, res.Err, context.DeadlineExceeded)
+	assert.Equal(t, 0, res.Sent)
+	<-done
+}
