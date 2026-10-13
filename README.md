@@ -538,6 +538,16 @@ For the full chronyd state (every source, server statistics), run
 - Containers run as non-root on a distroless image, with all capabilities
   dropped, a read-only root filesystem and no host network, in both modes
   (the chrony option over UDP is the only case needing host networking).
+- Release images and Helm charts are signed with cosign (keyless, by the
+  release workflow) and carry an SBOM and a SLSA provenance attestation:
+
+  ```bash
+  cosign verify ghcr.io/maximewewer/ntp-exporter:<version> \
+    --certificate-identity-regexp '^https://github.com/MaximeWewer/ntp-exporter/.github/workflows/build-and-release.yml@' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+  docker buildx imagetools inspect ghcr.io/maximewewer/ntp-exporter:<version> --format '{{json .Provenance}}'
+  ```
+
 - TLS and basic authentication use the standard
   [Prometheus web configuration file](https://prometheus.io/docs/prometheus/latest/configuration/https/)
   (`--web.config.file`, Helm `webConfig.existingSecret`).
