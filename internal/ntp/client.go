@@ -248,6 +248,18 @@ func (r *Response) ReferenceIDString() string {
 	return net.IPv4(b[0], b[1], b[2], b[3]).String()
 }
 
+// ErrRootDistanceExceeded flags a response whose root distance exceeds the
+// configured maximum (MAXDIST): the server time is too uncertain to be used
+var ErrRootDistanceExceeded = errors.New("root distance exceeds the maximum")
+
+// CheckRootDistance marks a valid response as invalid when its root distance
+// exceeds max
+func (r *Response) CheckRootDistance(max time.Duration) {
+	if r.ValidateError == nil && max > 0 && r.RootDistance > max {
+		r.ValidateError = fmt.Errorf("%w: %s > %s", ErrRootDistanceExceeded, r.RootDistance, max)
+	}
+}
+
 // Reasons for which a response is not a valid time measurement
 const (
 	ReasonKoD            = "kod"
@@ -273,7 +285,8 @@ func (r *Response) InvalidReason() string {
 		return ReasonUnsync
 	case r.Stratum < 1 || r.Stratum > 15 || errors.Is(r.ValidateError, ntp.ErrInvalidStratum):
 		return ReasonStratum
-	case errors.Is(r.ValidateError, ntp.ErrInvalidDispersion):
+	case errors.Is(r.ValidateError, ntp.ErrInvalidDispersion),
+		errors.Is(r.ValidateError, ErrRootDistanceExceeded):
 		return ReasonRootDistance
 	case errors.Is(r.ValidateError, ntp.ErrServerClockFreshness):
 		return ReasonStaleReference

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidate_ValidConfig(t *testing.T) {
@@ -150,6 +151,7 @@ func TestValidateNTP_ServersOrPools(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
@@ -189,6 +191,7 @@ func TestValidateNTP_Timeout(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
@@ -229,6 +232,7 @@ func TestValidateNTP_Version(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
@@ -268,6 +272,7 @@ func TestValidateNTP_SamplesPerServer(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
@@ -307,6 +312,7 @@ func TestValidateNTP_MaxConcurrency(t *testing.T) {
 				MaxConcurrency:   tt.concurrent,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
@@ -371,6 +377,7 @@ func TestValidateNTP_Pools(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
@@ -406,6 +413,7 @@ func TestValidateNTP_PoolStrategies(t *testing.T) {
 				MaxConcurrency:   10,
 				ScrapeInterval:   30 * time.Second,
 				MaxClockOffset:   100 * time.Millisecond,
+				MaxRootDistance:  DefaultMaxRootDistance,
 				KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 				DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 			}
@@ -560,6 +568,7 @@ func TestValidate_CompleteConfig(t *testing.T) {
 			MaxConcurrency:   10,
 			ScrapeInterval:   30 * time.Second,
 			MaxClockOffset:   100 * time.Millisecond,
+			MaxRootDistance:  DefaultMaxRootDistance,
 			KoD:              KoDConfig{MaxBackoff: 1024 * time.Second, SuspendDuration: time.Hour},
 			DNSCache:         DNSCacheConfig{MinTTL: 5 * time.Minute, MaxTTL: time.Hour},
 		},
@@ -748,5 +757,21 @@ func TestValidateNTP_DuplicateTargets(t *testing.T) {
 				assert.ErrorContains(t, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestValidateNTP_MaxRootDistance(t *testing.T) {
+	cfg := DefaultConfig()
+	assert.Equal(t, 1500*time.Millisecond, cfg.NTP.MaxRootDistance, "MAXDIST of ntpd by default")
+
+	t.Setenv("NTP_MAX_ROOT_DISTANCE", "3s")
+	loaded, err := LoadFromEnvVarsOnly()
+	require.NoError(t, err)
+	assert.Equal(t, 3*time.Second, loaded.NTP.MaxRootDistance)
+
+	for _, d := range []time.Duration{50 * time.Millisecond, 17 * time.Second} {
+		cfg := DefaultConfig()
+		cfg.NTP.MaxRootDistance = d
+		assert.ErrorContains(t, Validate(cfg), "max_root_distance must be between 100ms and 16s")
 	}
 }

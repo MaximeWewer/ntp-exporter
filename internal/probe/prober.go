@@ -336,6 +336,7 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 	// Responses are labelled with the configured server name
 	for _, resp := range m.Responses {
 		resp.Server = target.Server
+		resp.CheckRootDistance(p.cfg.NTP.MaxRootDistance)
 	}
 
 	if err != nil && len(m.Responses) == 0 {
@@ -361,6 +362,7 @@ func (p *Prober) measureNTS(ctx context.Context, m *Measurement, samples int) {
 	m.Responses = res.Responses
 	for _, resp := range m.Responses {
 		resp.Server = m.Target.Server
+		resp.CheckRootDistance(p.cfg.NTP.MaxRootDistance)
 	}
 	if res.Err != nil && len(m.Responses) == 0 {
 		m.Err = res.Err

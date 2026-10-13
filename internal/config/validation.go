@@ -9,6 +9,10 @@ import (
 	"time"
 )
 
+// DefaultMaxRootDistance is the MAXDIST of ntpd: a server whose root distance
+// exceeds it is not selectable
+const DefaultMaxRootDistance = 1500 * time.Millisecond
+
 // Bounds for the collection interval
 const (
 	MinScrapeInterval = 5 * time.Second
@@ -160,6 +164,10 @@ func validateNTP(cfg *NTPConfig, probeOnly bool) error {
 
 	if cfg.MaxClockOffset <= 0 {
 		return errors.New("max_clock_offset must be positive, got " + cfg.MaxClockOffset.String())
+	}
+
+	if cfg.MaxRootDistance < 100*time.Millisecond || cfg.MaxRootDistance > 16*time.Second {
+		return errors.New("max_root_distance must be between 100ms and 16s, got " + cfg.MaxRootDistance.String())
 	}
 
 	if cfg.KoD.MaxBackoff < cfg.ScrapeInterval {

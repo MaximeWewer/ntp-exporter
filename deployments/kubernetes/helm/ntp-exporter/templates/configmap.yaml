@@ -46,6 +46,7 @@ data:
       ip_family: {{ .Values.config.ipFamily | default "auto" }}
       scrape_interval: {{ .Values.config.scrapeInterval | default "60s" }}
       max_clock_offset: {{ .Values.config.maxClockOffset | default "100ms" }}
+      max_root_distance: {{ .Values.config.maxRootDistance | default "1.5s" }}
       {{- if include "ntp-exporter.kernelEnabled" . }}
       kernel:
         enabled: true

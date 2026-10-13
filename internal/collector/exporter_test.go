@@ -165,6 +165,28 @@ func TestExporter_InvalidResponsesAreNotPublished(t *testing.T) {
 	}
 }
 
+func TestExporter_RootDistanceAboveMaximumIsInvalid(t *testing.T) {
+	const server = "freerun.example.org"
+	h := newHarness(t, server)
+	h.mock.SetupSuccessfulServer(server, 5*time.Millisecond, 2)
+	resp, _ := h.mock.Query(context.Background(), server)
+	adrift := *resp
+	adrift.RootDistance = 2 * time.Second // free-running for hours
+	h.mock.SetResponse(server, &adrift)
+
+	h.cycle()
+
+	assert.Equal(t, 0.0, h.mustValue("ntp_response_valid", srv(server)))
+	assert.Equal(t, 3.0, h.mustValue("ntp_invalid_responses_total", map[string]string{"server": server, "reason": "root_distance"}))
+	h.absent("ntp_offset_seconds", srv(server))
+
+	// Below the maximum the same server is valid
+	h.cfg.NTP.MaxRootDistance = 3 * time.Second
+	adrift.ValidateError = nil
+	h.cycle()
+	assert.Equal(t, 1.0, h.mustValue("ntp_response_valid", srv(server)))
+}
+
 func TestExporter_UnreachableServerHasNoStaleMeasurement(t *testing.T) {
 	const server = "flaky.example.org"
 	h := newHarness(t, server)

@@ -142,6 +142,13 @@ ntp:
   # Default: 100ms
   max_clock_offset: 100ms
 
+  # Responses whose root distance (upper bound of the server error) exceeds
+  # this value are invalid: counted with reason="root_distance", never used as
+  # a measurement nor by the consensus. ntpd uses 1.5s (MAXDIST), chrony 3s.
+  # Values: 100ms-16s
+  # Default: 1.5s
+  max_root_distance: 1.5s
+
   # ----------------------------------------------------------------------------
   # KERNEL - Kernel clock state (agent mode, Linux only)
   # Read with an unprivileged read-only adjtimex call

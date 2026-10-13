@@ -65,6 +65,9 @@ func ApplyDefaults(cfg *Config) {
 	if cfg.NTP.MaxClockOffset == 0 {
 		cfg.NTP.MaxClockOffset = 100 * time.Millisecond
 	}
+	if cfg.NTP.MaxRootDistance == 0 {
+		cfg.NTP.MaxRootDistance = DefaultMaxRootDistance
+	}
 
 	// Kiss-o'-Death defaults
 	if cfg.NTP.KoD.MaxBackoff == 0 {

@@ -107,6 +107,9 @@ config:
   # Maximum clock offset threshold
   maxClockOffset: 100ms
 
+  # Responses whose root distance exceeds this value are invalid (MAXDIST)
+  maxRootDistance: 1.5s
+
   # ---------------------------------------------------------------------------
   # KISS-O'-DEATH - RATE doubles the polling interval, DENY/RSTR suspends
   # ---------------------------------------------------------------------------

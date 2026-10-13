@@ -27,7 +27,7 @@
 //	  - NTP_IP_FAMILY (auto, ipv4 or ipv6)
 //	  - NTP_KERNEL_ENABLED, NTP_KERNEL_VIOLATION_ONLY (NTP_ENABLE_KERNEL is deprecated)
 //	  - NTP_CHRONY_ENABLED, NTP_CHRONY_ADDRESS
-//	  - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET
+//	  - NTP_SCRAPE_INTERVAL, NTP_MAX_CLOCK_OFFSET, NTP_MAX_ROOT_DISTANCE
 //
 //	PROBE ENDPOINT:
 //	  - PROBE_ENDPOINT_ENABLED, PROBE_ENDPOINT_ONLY
@@ -102,22 +102,25 @@ type ServerConfig struct {
 
 // NTPConfig contains NTP client configuration
 type NTPConfig struct {
-	Servers          []string        `yaml:"servers"`
-	Pools            []PoolConfig    `yaml:"pools"`
-	Timeout          time.Duration   `yaml:"timeout"`
-	Version          int             `yaml:"version"`
-	SamplesPerServer int             `yaml:"samples_per_server"`
-	SampleSpacing    time.Duration   `yaml:"sample_spacing"` // Delay between two samples sent to the same server
-	MaxConcurrency   int             `yaml:"max_concurrency"`
-	IPFamily         string          `yaml:"ip_family"`     // auto, ipv4 or ipv6
-	EnableKernel     bool            `yaml:"enable_kernel"` // Deprecated: use kernel.enabled
-	Kernel           KernelConfig    `yaml:"kernel"`
-	Chrony           ChronyConfig    `yaml:"chrony"`
-	ScrapeInterval   time.Duration   `yaml:"scrape_interval"`  // Interval between NTP collections
-	MaxClockOffset   time.Duration   `yaml:"max_clock_offset"` // Maximum acceptable clock offset threshold
-	KoD              KoDConfig       `yaml:"kod"`
-	Consensus        ConsensusConfig `yaml:"consensus"`
-	DNSCache         DNSCacheConfig  `yaml:"dns_cache"`
+	Servers          []string      `yaml:"servers"`
+	Pools            []PoolConfig  `yaml:"pools"`
+	Timeout          time.Duration `yaml:"timeout"`
+	Version          int           `yaml:"version"`
+	SamplesPerServer int           `yaml:"samples_per_server"`
+	SampleSpacing    time.Duration `yaml:"sample_spacing"` // Delay between two samples sent to the same server
+	MaxConcurrency   int           `yaml:"max_concurrency"`
+	IPFamily         string        `yaml:"ip_family"`     // auto, ipv4 or ipv6
+	EnableKernel     bool          `yaml:"enable_kernel"` // Deprecated: use kernel.enabled
+	Kernel           KernelConfig  `yaml:"kernel"`
+	Chrony           ChronyConfig  `yaml:"chrony"`
+	ScrapeInterval   time.Duration `yaml:"scrape_interval"`  // Interval between NTP collections
+	MaxClockOffset   time.Duration `yaml:"max_clock_offset"` // Maximum acceptable clock offset threshold
+	// MaxRootDistance rejects the responses of servers whose synchronization
+	// distance exceeds it (MAXDIST, 1.5s in ntpd)
+	MaxRootDistance time.Duration   `yaml:"max_root_distance"`
+	KoD             KoDConfig       `yaml:"kod"`
+	Consensus       ConsensusConfig `yaml:"consensus"`
+	DNSCache        DNSCacheConfig  `yaml:"dns_cache"`
 }
 
 // PoolConfig represents NTP pool configuration
@@ -418,6 +421,7 @@ func applyEnvOverrides(cfg *Config) error {
 	e.string("NTP_IP_FAMILY", &cfg.NTP.IPFamily)
 	e.duration("NTP_SCRAPE_INTERVAL", &cfg.NTP.ScrapeInterval)
 	e.duration("NTP_MAX_CLOCK_OFFSET", &cfg.NTP.MaxClockOffset)
+	e.duration("NTP_MAX_ROOT_DISTANCE", &cfg.NTP.MaxRootDistance)
 
 	// CONSENSUS
 	e.boolPtr("NTP_CONSENSUS_ENABLED", &cfg.NTP.Consensus.Enabled)

@@ -85,6 +85,9 @@ config:
   # Maximum clock offset threshold
   maxClockOffset: 100ms
 
+  # Responses whose root distance exceeds this value are invalid (MAXDIST)
+  maxRootDistance: 1.5s
+
   # Logging configuration
   logging:
     level: info

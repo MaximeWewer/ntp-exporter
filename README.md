@@ -146,9 +146,10 @@ Every `scrape_interval` (60 s by default), the exporter runs one **cycle**:
    `sample_spacing` (2 s: NTP servers rate-limit clients sending packets closer
    than that). Up to `max_concurrency` targets are probed in parallel.
 3. **Filtering**: responses that are not valid time measurements (Kiss-o'-Death,
-   leap indicator 3, invalid stratum, failed RFC 5905 checks) are counted in
-   `ntp_invalid_responses_total` and never published as measurements. The
-   offset comes from the valid sample with the lowest delay.
+   leap indicator 3, invalid stratum, failed RFC 5905 checks, root distance
+   above `max_root_distance`) are counted in `ntp_invalid_responses_total` and
+   never published as measurements nor used by the consensus. The offset comes
+   from the valid sample with the lowest delay.
 4. **Kiss-o'-Death**: the burst stops at the first Kiss-o'-Death (RFC 5905
    §7.4). `RATE` doubles the polling interval of the target (up to
    `kod.max_backoff`), `DENY` and `RSTR` stop queries for `kod.suspend_duration`.
@@ -284,6 +285,7 @@ probe_endpoint:
 | `NTP_MAX_CONCURRENCY` | `10` | Servers probed in parallel |
 | `NTP_IP_FAMILY` | `auto` | `auto`, `ipv4` or `ipv6` |
 | `NTP_MAX_CLOCK_OFFSET` | `100ms` | Threshold of `ntp_clock_offset_exceeded` |
+| `NTP_MAX_ROOT_DISTANCE` | `1.5s` | Responses with a larger root distance are invalid (`reason="root_distance"`), like ntpd's MAXDIST (chrony uses 3 s); 100 ms to 16 s |
 | `NTP_CONSENSUS_ENABLED` | enabled with 3+ servers or pools | Consensus and falseticker detection |
 | `NTP_KOD_MAX_BACKOFF` | `1024s` | Longest polling interval after repeated `RATE` |
 | `NTP_KOD_SUSPEND_DURATION` | `1h` | Suspension after `DENY` or `RSTR` |
