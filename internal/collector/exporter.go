@@ -316,9 +316,20 @@ func (e *Exporter) collectMeasurement(ch chan<- prometheus.Metric, meas *probe.M
 	}
 
 	best := writeMeasurement(ch, e.descs, e.cfg, meas)
-	if best != nil && e.kernelState != nil && e.kernelState.IsSynchronized() {
+	if best != nil && e.kernelState != nil && e.kernelState.IsSynchronized() && e.trustedReference(server) {
 		e.collectBoundViolation(ch, server, best)
 	}
+}
+
+// trustedReference reports whether a server may be used to judge the kernel
+// error bounds. When a consensus is computed, only the servers agreeing with
+// a majority qualify: a falseticker, or a split without majority, would blame
+// the local time daemon for the error of a remote server.
+func (e *Exporter) trustedReference(server string) bool {
+	if e.consensus == nil {
+		return true
+	}
+	return e.consensus.Majority && !e.consensus.Falsetickers[server]
 }
 
 // writeMeasurement emits the metrics of one measurement and returns its

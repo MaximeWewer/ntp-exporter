@@ -329,6 +329,51 @@ func TestExporter_KernelErrorBoundViolation(t *testing.T) {
 	}
 }
 
+func TestExporter_KernelBoundViolationNeedsTrustedServers(t *testing.T) {
+	// The mock servers have a 15ms root distance and the kernel announces a
+	// 100ms maximum error
+	tests := []struct {
+		name    string
+		offsets map[string]time.Duration
+		want    map[string]float64 // absent servers emit no violation
+	}{
+		{"falseticker is ignored", map[string]time.Duration{
+			"a.example.org": 10 * time.Millisecond, "b.example.org": 12 * time.Millisecond, "c.example.org": 300 * time.Millisecond,
+		}, map[string]float64{"a.example.org": 0, "b.example.org": 0}},
+		{"majority shifted", map[string]time.Duration{
+			"a.example.org": 300 * time.Millisecond, "b.example.org": 302 * time.Millisecond, "c.example.org": 301 * time.Millisecond,
+		}, map[string]float64{"a.example.org": 1, "b.example.org": 1, "c.example.org": 1}},
+		{"no majority", map[string]time.Duration{
+			"a.example.org": 0, "b.example.org": time.Millisecond,
+			"c.example.org": 300 * time.Millisecond, "d.example.org": 301 * time.Millisecond,
+		}, map[string]float64{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			servers := make([]string, 0, len(tt.offsets))
+			for s := range tt.offsets {
+				servers = append(servers, s)
+			}
+			h := newKernelHarness(t, &ntp.KernelTimex{MaxError: 100 * time.Millisecond, EstError: time.Second}, servers...)
+			for s, offset := range tt.offsets {
+				h.mock.SetupSuccessfulServer(s, offset, 2)
+			}
+
+			h.cycle()
+
+			for _, s := range servers {
+				labels := map[string]string{"node": "node1", "server": s, "bound": "maxerror"}
+				if want, ok := tt.want[s]; ok {
+					assert.Equal(t, want, h.mustValue("ntp_kernel_error_bound_violated", labels), s)
+				} else {
+					h.absent("ntp_kernel_error_bound_violated", labels)
+				}
+			}
+		})
+	}
+}
+
 func TestExporter_KernelUnsyncHasNoBound(t *testing.T) {
 	h := newKernelHarness(t, &ntp.KernelTimex{Status: ntp.STA_UNSYNC, MaxError: 16 * time.Second}, "a.example.org")
 	h.mock.SetupSuccessfulServer("a.example.org", time.Millisecond, 2)

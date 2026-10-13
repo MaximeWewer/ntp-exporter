@@ -445,6 +445,11 @@ bound, the daemon underestimates its error: it may be locked on a wrong source.
 Alert on `maxerror` (guaranteed bound, few false positives) and keep `esterror`
 for dashboards (earlier detection, noisier).
 
+With 3 servers or more, the bounds are only checked against the servers that
+agree with a majority of the others: a falseticker, or a split without
+majority, would otherwise blame the local daemon for the error of a remote
+server. With 1 or 2 servers, every server is used.
+
 The other kernel metrics are equivalent to the `timex` collector of
 node_exporter (`node_timex_*`). If node_exporter already runs on your nodes,
 set `kernel.violation_only` to only expose `ntp_kernel_error_bound_violated`
