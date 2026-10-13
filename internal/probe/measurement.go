@@ -19,6 +19,9 @@ type Target struct {
 	Address string
 	// policy restricts the addresses of /probe targets
 	policy *TargetPolicy
+	// onDemand marks a /probe target: its state is kept apart from the
+	// configured targets
+	onDemand bool
 }
 
 // Measurement is the result of one burst of queries to a target

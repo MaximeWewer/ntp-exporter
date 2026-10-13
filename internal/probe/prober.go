@@ -35,10 +35,13 @@ type Prober struct {
 	// cycleTimeout bounds a cycle so that it always ends before the next one
 	cycleTimeout time.Duration
 	backoff      *Backoff
-	// probeBackoff holds the Kiss-o'-Death state of /probe targets, apart
-	// from the configured targets
-	probeBackoff *Backoff
-	families     *families
+	// probeBackoff, probeFamilies and probeNTS hold the state of /probe
+	// targets, apart from the configured targets: unique /probe targets
+	// cannot evict the state of the configured ones
+	probeBackoff  *Backoff
+	probeFamilies *families
+	probeNTS      NTSQuerier
+	families      *families
 	// policy restricts the addresses /probe requests may reach
 	policy *TargetPolicy
 
@@ -56,22 +59,33 @@ func New(cfg *config.Config, client ntp.NTPQuerier) *Prober {
 	}
 
 	return &Prober{
-		cfg:          cfg,
-		client:       client,
-		nts:          ntp.NewNTSClient(cfg.NTP.Timeout, cfg.NTP.SampleSpacing),
-		pools:        pools,
-		resolver:     net.DefaultResolver,
-		cycleTimeout: CycleTimeout(cfg.NTP.ScrapeInterval),
-		backoff:      NewBackoff(cfg.NTP.ScrapeInterval, cfg.NTP.KoD.MaxBackoff, cfg.NTP.KoD.SuspendDuration),
-		probeBackoff: NewBackoff(cfg.NTP.ScrapeInterval, cfg.NTP.KoD.MaxBackoff, cfg.NTP.KoD.SuspendDuration),
-		families:     newFamilies(cfg.NTP.IPFamily),
-		previous:     make(map[string]*Measurement),
+		cfg:           cfg,
+		client:        client,
+		nts:           ntp.NewNTSClient(cfg.NTP.Timeout, cfg.NTP.SampleSpacing),
+		pools:         pools,
+		resolver:      net.DefaultResolver,
+		cycleTimeout:  CycleTimeout(cfg.NTP.ScrapeInterval),
+		backoff:       NewBackoff(cfg.NTP.ScrapeInterval, cfg.NTP.KoD.MaxBackoff, cfg.NTP.KoD.SuspendDuration),
+		probeBackoff:  NewBackoff(cfg.NTP.ScrapeInterval, cfg.NTP.KoD.MaxBackoff, cfg.NTP.KoD.SuspendDuration),
+		families:      newFamilies(cfg.NTP.IPFamily),
+		probeFamilies: newFamilies(cfg.NTP.IPFamily),
+		probeNTS:      ntp.NewNTSClient(cfg.NTP.Timeout, cfg.NTP.SampleSpacing),
+		previous:      make(map[string]*Measurement),
 	}
 }
 
-// SetNTSClient replaces the NTS client
+// SetNTSClient replaces the NTS client of the configured and /probe targets
 func (p *Prober) SetNTSClient(c NTSQuerier) {
 	p.nts = c
+	p.probeNTS = c
+}
+
+// familiesFor returns the address family state of a target
+func (p *Prober) familiesFor(target Target) *families {
+	if target.onDemand {
+		return p.probeFamilies
+	}
+	return p.families
 }
 
 // SetTargetPolicy sets the addresses /probe requests may reach
@@ -106,6 +120,7 @@ func (p *Prober) Run(ctx context.Context) *CycleResult {
 	defer cancel()
 
 	p.families.refresh()
+	p.probeFamilies.copyRoutes(p.families)
 	targets := p.resolveTargets(cycleCtx, result)
 	result.Measurements = make([]*Measurement, len(targets))
 
@@ -193,7 +208,7 @@ func (p *Prober) resolve(ctx context.Context, target Target) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve %s: %w", host, err)
 	}
-	candidates := p.families.candidates(target.key(), addrs)
+	candidates := p.familiesFor(target).candidates(target.key(), addrs)
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no %s address found for %s", p.cfg.NTP.IPFamily, host)
 	}
@@ -259,7 +274,7 @@ func (p *Prober) forget(targets []Target) {
 // suspended target, or one backing off after RATE, is not queried and the
 // measurement carries no response.
 func (p *Prober) Probe(ctx context.Context, server string, samples int) *Measurement {
-	target := Target{Server: server, policy: p.policy}
+	target := Target{Server: server, policy: p.policy, onDemand: true}
 	key := target.key()
 
 	decision := p.probeBackoff.Allow(key)
@@ -342,7 +357,7 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 		}
 	}
 	if len(m.Responses) > 0 {
-		p.families.remember(target.key(), address)
+		p.familiesFor(target).remember(target.key(), address)
 	}
 
 	// Responses are labelled with the configured server name
@@ -380,7 +395,11 @@ func (p *Prober) measureNTS(ctx context.Context, m *Measurement, samples int) {
 		}
 	}
 
-	res := p.nts.Burst(ctx, host, samples)
+	client := p.nts
+	if m.Target.onDemand {
+		client = p.probeNTS
+	}
+	res := client.Burst(ctx, host, samples)
 	if res.State.Address != "" {
 		if err := checkAddresses(m.Target, []string{res.State.Address}); err != nil {
 			m.Err = err

@@ -340,3 +340,17 @@ func TestProber_NTSKeyExchangeFailure(t *testing.T) {
 	assert.Equal(t, 0, m.Sent)
 	assert.False(t, m.NTS.KESuccess)
 }
+
+func TestProber_ProbeStateIsApartFromConfiguredTargets(t *testing.T) {
+	static := &fakeNTS{result: ntp.NTSResult{Responses: []*ntp.Response{sample(0, time.Millisecond)}}}
+	onDemand := &fakeNTS{result: ntp.NTSResult{Responses: []*ntp.Response{sample(0, time.Millisecond)}}}
+	p := newProber(newTestConfig("nts://static.example.org"), ntptest.NewMockNTPClient())
+	p.nts = static
+	p.probeNTS = onDemand
+
+	p.Run(context.Background())
+	p.Probe(context.Background(), "nts://other.example.org", 1)
+
+	assert.Equal(t, []string{"static.example.org"}, static.hosts)
+	assert.Equal(t, []string{"other.example.org"}, onDemand.hosts, "/probe targets use their own NTS sessions")
+}

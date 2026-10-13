@@ -3,6 +3,7 @@ package probe
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -183,4 +184,18 @@ func TestProber_PoolMembersFilteredByFamily(t *testing.T) {
 
 	members := p.families.filter([]string{v6, v4})
 	assert.Equal(t, []string{v4}, members)
+}
+
+func TestFamilies_EvictsLeastRecentlyUsed(t *testing.T) {
+	f := newFamilies(config.IPFamilyAuto)
+	f.remember("static", "2001:db8::1")
+	for i := 0; i < maxRemembered+10; i++ {
+		f.remember(fmt.Sprintf("probe-%d", i), "192.0.2.1")
+		if i%1000 == 0 {
+			f.candidates("static", []string{"192.0.2.1", "2001:db8::1"})
+		}
+	}
+	assert.LessOrEqual(t, len(f.preferred), maxRemembered)
+	assert.Contains(t, f.preferred, "static", "a target in use is kept")
+	assert.NotContains(t, f.preferred, "probe-0")
 }

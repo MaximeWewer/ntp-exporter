@@ -3,6 +3,7 @@ package ntp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -204,4 +205,28 @@ func TestNTSClient_BusyServerHonorsContext(t *testing.T) {
 	assert.ErrorIs(t, res.Err, context.DeadlineExceeded)
 	assert.Equal(t, 0, res.Sent)
 	<-done
+}
+
+func TestNTSClient_EvictsLeastRecentlyUsedSession(t *testing.T) {
+	exchanges := map[string]int{}
+	var mu sync.Mutex
+	c := newTestNTSClient(func(host string, _ time.Duration) (ntsSession, time.Time, error) {
+		mu.Lock()
+		exchanges[host]++
+		mu.Unlock()
+		return &fakeSession{}, time.Time{}, nil
+	})
+
+	c.Burst(context.Background(), "static.example.org", 1)
+	for i := 0; i < maxNTSSessions+500; i++ {
+		c.Burst(context.Background(), fmt.Sprintf("probe-%d.example.org", i), 1)
+		if i%100 == 0 {
+			// The configured server keeps being used every cycle
+			c.Burst(context.Background(), "static.example.org", 1)
+		}
+	}
+
+	assert.LessOrEqual(t, len(c.targets), maxNTSSessions)
+	assert.Equal(t, 1, exchanges["static.example.org"], "a server in use keeps its session")
+	assert.NotContains(t, c.targets, "probe-0.example.org", "the least recently used session is evicted")
 }

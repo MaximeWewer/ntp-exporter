@@ -64,6 +64,8 @@ type ntsTarget struct {
 	slot    chan struct{}
 	session ntsSession
 	state   NTSState
+	// used orders the uses of the targets, for the LRU eviction
+	used uint64
 }
 
 // NTSClient queries NTS servers. A session (keys and cookies) is kept per
@@ -79,6 +81,7 @@ type NTSClient struct {
 
 	mu      sync.Mutex
 	targets map[string]*ntsTarget
+	tick    uint64
 }
 
 // NewNTSClient creates an NTS client
@@ -140,11 +143,22 @@ func (c *NTSClient) target(host string) *ntsTarget {
 	t, ok := c.targets[host]
 	if !ok {
 		if len(c.targets) >= maxNTSSessions {
-			clear(c.targets)
+			// Evict the least recently used session: a burst still holding
+			// it keeps its own reference
+			var oldest string
+			var oldestUse uint64
+			for h, s := range c.targets {
+				if oldest == "" || s.used < oldestUse {
+					oldest, oldestUse = h, s.used
+				}
+			}
+			delete(c.targets, oldest)
 		}
 		t = &ntsTarget{slot: make(chan struct{}, 1)}
 		c.targets[host] = t
 	}
+	c.tick++
+	t.used = c.tick
 	return t
 }
 

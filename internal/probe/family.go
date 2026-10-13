@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"maps"
 	"net"
 	"sync"
 
@@ -52,7 +53,16 @@ type families struct {
 
 	mu        sync.Mutex
 	routable  map[string]bool
-	preferred map[string]string
+	preferred map[string]preference
+	// tick orders the uses of the preferences, to evict the least recently
+	// used one when the memory is full
+	tick uint64
+}
+
+// preference is the family that answered a target last
+type preference struct {
+	family string
+	used   uint64
 }
 
 func newFamilies(setting string) *families {
@@ -63,7 +73,7 @@ func newFamilies(setting string) *families {
 		setting:   setting,
 		hasRoute:  hasRoute,
 		routable:  map[string]bool{familyIPv4: true, familyIPv6: true},
-		preferred: make(map[string]string),
+		preferred: make(map[string]preference),
 	}
 }
 
@@ -73,6 +83,16 @@ func (f *families) refresh() {
 		familyIPv4: f.hasRoute(familyIPv4),
 		familyIPv6: f.hasRoute(familyIPv6),
 	}
+	f.mu.Lock()
+	f.routable = routable
+	f.mu.Unlock()
+}
+
+// copyRoutes takes the routes checked by another instance
+func (f *families) copyRoutes(from *families) {
+	from.mu.Lock()
+	routable := maps.Clone(from.routable)
+	from.mu.Unlock()
 	f.mu.Lock()
 	f.routable = routable
 	f.mu.Unlock()
@@ -121,9 +141,14 @@ func (f *families) candidates(key string, addrs []string) []string {
 	}
 
 	f.mu.Lock()
-	preferred := f.preferred[key]
+	pref, ok := f.preferred[key]
+	if ok {
+		f.tick++
+		pref.used = f.tick
+		f.preferred[key] = pref
+	}
 	f.mu.Unlock()
-	if len(out) == 2 && addressFamily(out[1]) == preferred {
+	if len(out) == 2 && addressFamily(out[1]) == pref.family {
 		out[0], out[1] = out[1], out[0]
 	}
 	return out
@@ -138,9 +163,18 @@ func (f *families) remember(key, address string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if _, ok := f.preferred[key]; !ok && len(f.preferred) >= maxRemembered {
-		clear(f.preferred)
+		// Evict the least recently used target
+		var oldest string
+		var oldestUse uint64
+		for k, p := range f.preferred {
+			if oldest == "" || p.used < oldestUse {
+				oldest, oldestUse = k, p.used
+			}
+		}
+		delete(f.preferred, oldest)
 	}
-	f.preferred[key] = addressFamily(address)
+	f.tick++
+	f.preferred[key] = preference{family: addressFamily(address), used: f.tick}
 }
 
 // forget drops the state of targets that are no longer probed
