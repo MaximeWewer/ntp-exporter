@@ -95,9 +95,7 @@ func (b *Backoff) Record(server string, m *Measurement) {
 			b.purge(now)
 		}
 		if len(b.states) >= maxBackoffStates {
-			logger.SafeWarn("probe", "Too many targets backing off, state not recorded", map[string]interface{}{
-				"server": server,
-			})
+			logger.Warn("probe", "Too many targets backing off, state not recorded", "server", server)
 			return
 		}
 		st = &backoffState{factor: 1}
@@ -119,21 +117,21 @@ func (b *Backoff) Record(server string, m *Measurement) {
 		}
 		st.suspendCode = code
 		st.suspendedUntil = now.Add(b.suspend)
-		logger.SafeWarn("probe", "Kiss-o'-Death received, target suspended", map[string]interface{}{
-			"server":  server,
-			"code":    code,
-			"resume":  st.suspendedUntil.Format(time.RFC3339),
-			"suspend": b.suspend.String(),
-		})
+		logger.Warn("probe", "Kiss-o'-Death received, target suspended",
+			"server", server,
+			"code", code,
+			"resume", st.suspendedUntil.Format(time.RFC3339),
+			"suspend", b.suspend.String(),
+		)
 	case codes[KoDRate]:
 		if time.Duration(st.factor*2)*b.interval <= b.max {
 			st.factor *= 2
 		}
 		st.nextAllowed = now.Add(time.Duration(st.factor) * b.interval)
-		logger.SafeWarn("probe", "Kiss-o'-Death RATE received, slowing down", map[string]interface{}{
-			"server":   server,
-			"interval": (time.Duration(st.factor) * b.interval).String(),
-		})
+		logger.Warn("probe", "Kiss-o'-Death RATE received, slowing down",
+			"server", server,
+			"interval", (time.Duration(st.factor) * b.interval).String(),
+		)
 	case m.Reachable():
 		if st.factor > 1 {
 			st.factor /= 2

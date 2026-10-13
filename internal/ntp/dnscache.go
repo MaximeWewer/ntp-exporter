@@ -70,18 +70,16 @@ func (c *DNSCache) ResolveCached(ctx context.Context, hostname string) ([]string
 	c.mu.RUnlock()
 
 	if exists && c.now().Before(entry.ExpiresAt) {
-		logger.SafeDebug("dns", "DNS cache hit", map[string]interface{}{
-			"hostname": hostname,
-			"ips":      len(entry.IPs),
-			"ttl":      entry.TTL.String(),
-		})
+		logger.Debug("dns", "DNS cache hit",
+			"hostname", hostname,
+			"ips", len(entry.IPs),
+			"ttl", entry.TTL.String(),
+		)
 		return entry.IPs, true, nil
 	}
 
 	// Cache miss or expired - perform resolution
-	logger.SafeDebug("dns", "DNS cache miss, resolving", map[string]interface{}{
-		"hostname": hostname,
-	})
+	logger.Debug("dns", "DNS cache miss, resolving", "hostname", hostname)
 
 	ips, err := c.resolveWithTimeout(ctx, hostname)
 	if err != nil {
@@ -91,11 +89,11 @@ func (c *DNSCache) ResolveCached(ctx context.Context, hostname string) ([]string
 			entry.ErrorCount++
 			c.mu.Unlock()
 
-			logger.SafeWarn("dns", "DNS resolution failed, using stale cache", map[string]interface{}{
-				"hostname":    hostname,
-				"error":       err.Error(),
-				"error_count": entry.ErrorCount,
-			})
+			logger.Warn("dns", "DNS resolution failed, using stale cache",
+				"hostname", hostname,
+				"error", err.Error(),
+				"error_count", entry.ErrorCount,
+			)
 			return entry.IPs, true, nil
 		}
 		return nil, false, err
@@ -114,11 +112,11 @@ func (c *DNSCache) ResolveCached(ctx context.Context, hostname string) ([]string
 	}
 	c.mu.Unlock()
 
-	logger.SafeDebug("dns", "DNS cache updated", map[string]interface{}{
-		"hostname": hostname,
-		"ips":      len(ips),
-		"ttl":      ttl.String(),
-	})
+	logger.Debug("dns", "DNS cache updated",
+		"hostname", hostname,
+		"ips", len(ips),
+		"ttl", ttl.String(),
+	)
 
 	return ips, false, nil
 }
@@ -149,10 +147,7 @@ func (c *DNSCache) calculateAdaptiveTTL(exists bool, entry *DNSCacheEntry) time.
 		// If previous resolution had errors, use shorter TTL
 		if entry.ErrorCount > 0 {
 			ttl = c.minTTL
-			logger.SafeDebug("dns", "Using minimum TTL due to previous errors", map[string]interface{}{
-				"error_count": entry.ErrorCount,
-				"ttl":         ttl.String(),
-			})
+			logger.Debug("dns", "Using minimum TTL due to previous errors", "error_count", entry.ErrorCount, "ttl", ttl.String())
 		} else {
 			// Successful resolution history - increase TTL
 			ttl = c.maxTTL

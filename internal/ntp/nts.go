@@ -239,10 +239,7 @@ func (c *NTSClient) Burst(ctx context.Context, host string, count int) NTSResult
 		}
 		if err != nil {
 			lastErr = err
-			logger.SafeDebug("ntp", "NTS query failed", map[string]interface{}{
-				"server": host,
-				"error":  err.Error(),
-			})
+			logger.Debug("ntp", "NTS query failed", "server", host, "error", err.Error())
 			if ctx.Err() != nil {
 				// The abandoned query may still use the session: drop it
 				t.session = nil
@@ -303,10 +300,7 @@ func (c *NTSClient) renew(ctx context.Context, t *ntsTarget, host string) {
 	if r.err != nil {
 		t.session = nil
 		t.state.Address = ""
-		logger.SafeWarn("ntp", "NTS key exchange failed", map[string]interface{}{
-			"server": host,
-			"error":  r.err.Error(),
-		})
+		logger.Warn("ntp", "NTS key exchange failed", "server", host, "error", r.err.Error())
 		return
 	}
 	t.session = r.session

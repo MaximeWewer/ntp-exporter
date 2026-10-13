@@ -85,21 +85,18 @@ func (h *ProbeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	duration := time.Since(start)
 
 	if errors.Is(meas.Err, probe.ErrTargetForbidden) {
-		logger.SafeWarn("probe", "Probe request refused", map[string]interface{}{
-			"target": target,
-			"error":  meas.Err.Error(),
-		})
+		logger.Warn("probe", "Probe request refused", "target", target, "error", meas.Err.Error())
 		http.Error(w, meas.Err.Error(), http.StatusForbidden)
 		return
 	}
 
-	logger.SafeDebug("probe", "Probe request served", map[string]interface{}{
-		"target":   target,
-		"address":  meas.Target.Address,
-		"samples":  samples,
-		"success":  meas.Best() != nil,
-		"duration": duration.Seconds(),
-	})
+	logger.Debug("probe", "Probe request served",
+		"target", target,
+		"address", meas.Target.Address,
+		"samples", samples,
+		"success", meas.Best() != nil,
+		"duration", duration.Seconds(),
+	)
 
 	registry := prometheus.NewRegistry()
 	registerer := prometheus.WrapRegistererWith(h.cfg.Metrics.Labels, registry)

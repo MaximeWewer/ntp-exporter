@@ -96,13 +96,10 @@ func chronyAnswers(address string) bool {
 		_, err = client.Tracking(context.Background())
 	}
 	if err != nil {
-		logger.SafeInfo("collector", "chronyd not found, chrony option disabled", map[string]interface{}{
-			"address": address,
-			"error":   err.Error(),
-		})
+		logger.Info("collector", "chronyd not found, chrony option disabled", "address", address, "error", err.Error())
 		return false
 	}
-	logger.SafeInfo("collector", "chronyd found, chrony option enabled", map[string]interface{}{"address": address})
+	logger.Info("collector", "chronyd found, chrony option enabled", "address", address)
 	return true
 }
 
@@ -129,9 +126,7 @@ func (e *Exporter) Update(result *probe.CycleResult) {
 	if e.kernelReader != nil {
 		state, err := e.kernelReader.Read()
 		if err != nil {
-			logger.SafeWarn("collector", "Failed to read kernel timex state", map[string]interface{}{
-				"error": err.Error(),
-			})
+			logger.Warn("collector", "Failed to read kernel timex state", "error", err.Error())
 		}
 		kernelState = state
 	}
@@ -142,10 +137,7 @@ func (e *Exporter) Update(result *probe.CycleResult) {
 		tracking, err := e.chronyReader.Tracking(ctx)
 		cancel()
 		if err != nil {
-			logger.SafeWarn("collector", "Failed to read chronyd tracking report", map[string]interface{}{
-				"address": e.cfg.NTP.Chrony.Address,
-				"error":   err.Error(),
-			})
+			logger.Warn("collector", "Failed to read chronyd tracking report", "address", e.cfg.NTP.Chrony.Address, "error", err.Error())
 		}
 		chrony = &chronyState{tracking: tracking, err: err}
 	}
@@ -160,9 +152,7 @@ func (e *Exporter) Update(result *probe.CycleResult) {
 			for s := range consensus.Falsetickers {
 				servers = append(servers, s)
 			}
-			logger.SafeWarn("collector", "Falsetickers detected", map[string]interface{}{
-				"servers": servers,
-			})
+			logger.Warn("collector", "Falsetickers detected", "servers", servers)
 		}
 	}
 

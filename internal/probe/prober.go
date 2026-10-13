@@ -136,10 +136,7 @@ func (p *Prober) Run(ctx context.Context) *CycleResult {
 	result.Duration = time.Since(result.Start)
 	result.Overrun = errors.Is(cycleCtx.Err(), context.DeadlineExceeded)
 	if result.Overrun {
-		logger.SafeWarn("probe", "Collection cycle reached its deadline", map[string]interface{}{
-			"deadline": p.cycleTimeout.String(),
-			"targets":  len(targets),
-		})
+		logger.Warn("probe", "Collection cycle reached its deadline", "deadline", p.cycleTimeout.String(), "targets", len(targets))
 	}
 
 	return result
@@ -165,18 +162,12 @@ func (p *Prober) resolveTargets(ctx context.Context, result *CycleResult) []Targ
 			Err:     err,
 		})
 		if err != nil {
-			logger.SafeWarn("probe", "Pool resolution failed", map[string]interface{}{
-				"pool":  pool.Name(),
-				"error": err.Error(),
-			})
+			logger.Warn("probe", "Pool resolution failed", "pool", pool.Name(), "error", err.Error())
 			continue
 		}
 		for _, member := range p.families.filter(members) {
 			if seen[member] {
-				logger.SafeDebug("probe", "Pool member already probed, skipped", map[string]interface{}{
-					"pool":   pool.Name(),
-					"member": member,
-				})
+				logger.Debug("probe", "Pool member already probed, skipped", "pool", pool.Name(), "member", member)
 				continue
 			}
 			seen[member] = true
@@ -307,10 +298,7 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 		if err != nil {
 			m.Sent = samples
 			m.Err = err
-			logger.SafeDebug("probe", "Target resolution failed", map[string]interface{}{
-				"server": target.Server,
-				"error":  err.Error(),
-			})
+			logger.Debug("probe", "Target resolution failed", "server", target.Server, "error", err.Error())
 			return m
 		}
 	}
@@ -335,11 +323,11 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 			}
 			break
 		}
-		logger.SafeDebug("probe", "No answer, trying the other address family", map[string]interface{}{
-			"server":  target.Server,
-			"address": candidate,
-			"error":   err.Error(),
-		})
+		logger.Debug("probe", "No answer, trying the other address family",
+			"server", target.Server,
+			"address", candidate,
+			"error", err.Error(),
+		)
 	}
 	m.Target.Address = address
 
@@ -368,12 +356,12 @@ func (p *Prober) measure(ctx context.Context, target Target, samples int) *Measu
 
 	if err != nil && len(m.Responses) == 0 {
 		m.Err = err
-		logger.SafeDebug("probe", "Target unreachable", map[string]interface{}{
-			"server":  target.Server,
-			"address": address,
-			"pool":    target.Pool,
-			"error":   err.Error(),
-		})
+		logger.Debug("probe", "Target unreachable",
+			"server", target.Server,
+			"address", address,
+			"pool", target.Pool,
+			"error", err.Error(),
+		)
 	}
 
 	return m
@@ -419,10 +407,7 @@ func (p *Prober) measureNTS(ctx context.Context, m *Measurement, samples int) {
 	}
 	if res.Err != nil && len(m.Responses) == 0 {
 		m.Err = res.Err
-		logger.SafeDebug("probe", "NTS target unreachable", map[string]interface{}{
-			"server": m.Target.Server,
-			"error":  res.Err.Error(),
-		})
+		logger.Debug("probe", "NTS target unreachable", "server", m.Target.Server, "error", res.Err.Error())
 	}
 }
 

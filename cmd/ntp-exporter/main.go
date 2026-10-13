@@ -155,7 +155,7 @@ func waitAndShutdown(cancel context.CancelFunc, signals <-chan os.Signal, server
 	serverDone, collectorDone := false, false
 	select {
 	case sig := <-signals:
-		logger.SafeInfo("main", "Received shutdown signal", map[string]interface{}{"signal": sig.String()})
+		logger.Info("main", "Received shutdown signal", "signal", sig.String())
 	case err := <-serverErr:
 		serverDone = true
 		if err != nil {
@@ -184,7 +184,7 @@ func waitAndShutdown(cancel context.CancelFunc, signals <-chan os.Signal, server
 				logger.Error("main", "Collector error", err)
 			}
 		case sig := <-signals:
-			logger.SafeWarn("main", "Second signal, forcing shutdown", map[string]interface{}{"signal": sig.String()})
+			logger.Warn("main", "Second signal, forcing shutdown", "signal", sig.String())
 			return "forced"
 		case <-deadline.C:
 			logger.Warn("main", "Shutdown timed out")
@@ -228,9 +228,7 @@ func runCollectionLoop(
 	ticker := time.NewTicker(cfg.NTP.CollectionInterval)
 	defer ticker.Stop()
 
-	logger.SafeInfo("main", "Collection loop started", map[string]interface{}{
-		"collection_interval": cfg.NTP.CollectionInterval,
-	})
+	logger.Info("main", "Collection loop started", "collection_interval", cfg.NTP.CollectionInterval)
 
 	for {
 		select {
@@ -262,15 +260,15 @@ func logCycle(result *probe.CycleResult) {
 		}
 	}
 
-	logger.SafeInfo("main", "Collection cycle completed", map[string]interface{}{
-		"targets":   len(result.Measurements),
-		"reachable": reachable,
-		"valid":     valid,
-		"backoff":   skipped,
-		"suspended": suspended,
-		"duration":  result.Duration.Round(time.Millisecond).String(),
-		"overrun":   result.Overrun,
-	})
+	logger.Info("main", "Collection cycle completed",
+		"targets", len(result.Measurements),
+		"reachable", reachable,
+		"valid", valid,
+		"backoff", skipped,
+		"suspended", suspended,
+		"duration", result.Duration.Round(time.Millisecond).String(),
+		"overrun", result.Overrun,
+	)
 }
 
 // runHealthcheck queries the liveness endpoint of the local exporter and

@@ -23,13 +23,13 @@ func (k *KernelReader) Read() (*KernelTimex, error) {
 
 	result := fromTimex(&tx, state)
 
-	logger.SafeDebug("ntp", "Kernel timex state read", map[string]interface{}{
-		"offset_ns":   result.Offset.Nanoseconds(),
-		"frequency":   result.Frequency,
-		"status":      result.SyncStatus,
-		"status_code": result.StatusCode,
-		"state":       result.State,
-	})
+	logger.Debug("ntp", "Kernel timex state read",
+		"offset_ns", result.Offset.Nanoseconds(),
+		"frequency", result.Frequency,
+		"status", result.SyncStatus,
+		"status_code", result.StatusCode,
+		"state", result.State,
+	)
 
 	return result, nil
 }

@@ -1,22 +1,21 @@
+// Package logger is the structured logger of the exporter, built on log/slog
+// and shared with exporter-toolkit so that every line has the same format.
+// The JSON and text handlers escape the values: data coming from the network
+// (server names, DNS answers, /probe targets) cannot forge log lines.
 package logger
 
 import (
+	"context"
+	"io"
+	"log/slog"
 	"os"
-	"regexp"
 	"strings"
 	"time"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 var (
-	// Global logger instance
-	Logger zerolog.Logger
-
-	// Pre-compiled regex patterns for sensitive data detection
-	passwordPattern   = regexp.MustCompile(`(?i)(password|passwd|pwd|secret|token|api[_-]?key|auth)`)
-	credentialPattern = regexp.MustCompile(`(?i)://([^:]+):([^@]+)@`)
+	level = new(slog.LevelVar)
+	log   = newLogger(os.Stdout, "json", "ntp-exporter")
 )
 
 // Config holds logger configuration
@@ -26,185 +25,91 @@ type Config struct {
 	Component string // component name for structured logging
 }
 
-// InitLogger initializes the global logger with the provided configuration
+// InitLogger configures the logger: level, format, standard output
 func InitLogger(cfg Config) error {
-	// Set log level
-	level := parseLevel(cfg.Level)
-	zerolog.SetGlobalLevel(level)
-
-	// Configure output format
-	var output zerolog.ConsoleWriter
-	if cfg.Format == "console" {
-		output = zerolog.ConsoleWriter{
-			Out:        os.Stdout,
-			TimeFormat: time.RFC3339,
-			NoColor:    false,
-		}
-		Logger = zerolog.New(output).With().Timestamp().Str("component", cfg.Component).Logger()
-	} else {
-		// JSON format on the standard output: the container runtime, journald
-		// or the service manager handle the logs
-		Logger = zerolog.New(os.Stdout).With().Timestamp().Str("component", cfg.Component).Logger()
-	}
-
-	// Set global logger
-	log.Logger = Logger
-
+	level.Set(parseLevel(cfg.Level))
+	log = newLogger(os.Stdout, cfg.Format, cfg.Component)
 	return nil
 }
 
-// parseLevel converts string level to zerolog.Level
-func parseLevel(level string) zerolog.Level {
-	switch strings.ToLower(level) {
+func newLogger(w io.Writer, format, component string) *slog.Logger {
+	opts := &slog.HandlerOptions{Level: level}
+	var handler slog.Handler
+	if format == "console" {
+		handler = slog.NewTextHandler(w, opts)
+	} else {
+		handler = slog.NewJSONHandler(w, opts)
+	}
+	return slog.New(handler).With("component", component)
+}
+
+// Slog returns the underlying logger, for libraries such as exporter-toolkit
+func Slog() *slog.Logger {
+	return log
+}
+
+// parseLevel converts a level name, info by default
+func parseLevel(name string) slog.Level {
+	switch strings.ToLower(name) {
 	case "debug":
-		return zerolog.DebugLevel
-	case "info":
-		return zerolog.InfoLevel
+		return slog.LevelDebug
 	case "warn", "warning":
-		return zerolog.WarnLevel
+		return slog.LevelWarn
 	case "error":
-		return zerolog.ErrorLevel
-	case "fatal":
-		return zerolog.FatalLevel
-	case "panic":
-		return zerolog.PanicLevel
+		return slog.LevelError
 	default:
-		return zerolog.InfoLevel
+		return slog.LevelInfo
 	}
 }
 
-// sanitizeFields removes or redacts sensitive information from fields
-func sanitizeFields(fields map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
-	for key, value := range fields {
-		// Check if key contains sensitive keywords
-		if passwordPattern.MatchString(key) {
-			result[key] = "***REDACTED***"
-			continue
-		}
-
-		// Sanitize string values
-		if strValue, ok := value.(string); ok {
-			result[key] = sanitizeString(strValue)
-		} else {
-			result[key] = value
-		}
+// logAt logs a message of a package with key/value pairs. A disabled level
+// returns before building the record.
+func logAt(l slog.Level, pkg, message string, args []any) {
+	ctx := context.Background()
+	if !log.Enabled(ctx, l) {
+		return
 	}
-
-	return result
+	log.Log(ctx, l, message, append([]any{"package", pkg}, args...)...)
 }
 
-// sanitizeString removes sensitive information from strings
-func sanitizeString(s string) string {
-	// Redact credentials in URLs
-	s = credentialPattern.ReplaceAllString(s, "://$1:***@")
-
-	return s
+// Debug logs a debug message with key/value pairs
+func Debug(pkg, message string, args ...any) {
+	logAt(slog.LevelDebug, pkg, message, args)
 }
 
-// Info logs an info message
-func Info(pkg, message string) {
-	Logger.Info().
-		Str("package", pkg).
-		Msg(message)
+// Info logs an info message with key/value pairs
+func Info(pkg, message string, args ...any) {
+	logAt(slog.LevelInfo, pkg, message, args)
 }
 
-// Infof logs a formatted info message
-func Infof(pkg, format string, args ...interface{}) {
-	Logger.Info().
-		Str("package", pkg).
-		Msgf(format, args...)
+// Warn logs a warning with key/value pairs
+func Warn(pkg, message string, args ...any) {
+	logAt(slog.LevelWarn, pkg, message, args)
 }
 
-// Warn logs a warning message
-func Warn(pkg, message string) {
-	Logger.Warn().
-		Str("package", pkg).
-		Msg(message)
+// Error logs an error with key/value pairs
+func Error(pkg, message string, err error, args ...any) {
+	logAt(slog.LevelError, pkg, message, append([]any{"error", err}, args...))
 }
 
-// Error logs an error message
-func Error(pkg, message string, err error) {
-	Logger.Error().
-		Str("package", pkg).
-		Err(err).
-		Msg(message)
-}
-
-// Fatal logs a fatal message and exits
+// Fatal logs an error and exits
 func Fatal(pkg, message string, err error) {
-	Logger.Fatal().
-		Str("package", pkg).
-		Err(err).
-		Msg(message)
+	Error(pkg, message, err)
+	os.Exit(1)
 }
 
-// SafeDebug logs a debug message with sanitized fields
-func SafeDebug(pkg, message string, fields map[string]interface{}) {
-	sanitized := sanitizeFields(fields)
-	event := Logger.Debug().Str("package", pkg)
-	for k, v := range sanitized {
-		event = event.Interface(k, v)
-	}
-	event.Msg(message)
-}
-
-// SafeInfo logs an info message with sanitized fields
-func SafeInfo(pkg, message string, fields map[string]interface{}) {
-	sanitized := sanitizeFields(fields)
-	event := Logger.Info().Str("package", pkg)
-	for k, v := range sanitized {
-		event = event.Interface(k, v)
-	}
-	event.Msg(message)
-}
-
-// SafeWarn logs a warning message with sanitized fields
-func SafeWarn(pkg, message string, fields map[string]interface{}) {
-	sanitized := sanitizeFields(fields)
-	event := Logger.Warn().Str("package", pkg)
-	for k, v := range sanitized {
-		event = event.Interface(k, v)
-	}
-	event.Msg(message)
-}
-
-// SafeError logs an error message with sanitized fields
-func SafeError(pkg, message string, err error, fields map[string]interface{}) {
-	sanitized := sanitizeFields(fields)
-	event := Logger.Error().Str("package", pkg).Err(err)
-	for k, v := range sanitized {
-		event = event.Interface(k, v)
-	}
-	event.Msg(message)
-}
-
-// HTTP logs HTTP request information
+// HTTP logs an HTTP request, at debug level
 func HTTP(method, path string, statusCode int, duration time.Duration, remoteAddr string) {
-	Logger.Info().
-		Str("package", "http").
-		Str("method", method).
-		Str("path", path).
-		Int("status", statusCode).
-		Dur("duration", duration).
-		Str("remote_addr", sanitizeString(remoteAddr)).
-		Msg("HTTP request")
+	Debug("http", "HTTP request", "method", method, "path", path, "status", statusCode,
+		"duration", duration, "remote_addr", remoteAddr)
 }
 
 // Startup logs application startup information
-func Startup(version, commit string, config interface{}) {
-	Logger.Info().
-		Str("package", "main").
-		Str("version", version).
-		Str("commit", commit).
-		Interface("config", config).
-		Msg("NTP Exporter starting")
+func Startup(version, commit string, config any) {
+	Info("main", "NTP Exporter starting", "version", version, "commit", commit, "config", config)
 }
 
 // Shutdown logs application shutdown
 func Shutdown(reason string) {
-	Logger.Info().
-		Str("package", "main").
-		Str("reason", reason).
-		Msg("NTP Exporter shutting down")
+	Info("main", "NTP Exporter shutting down", "reason", reason)
 }

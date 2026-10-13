@@ -98,21 +98,18 @@ func (c *Client) Query(ctx context.Context, server string) (*Response, error) {
 			return resp, nil
 		}
 		if result.err != nil {
-			logger.SafeDebug("ntp", "NTP query failed", map[string]interface{}{
-				"server": server,
-				"error":  result.err.Error(),
-			})
+			logger.Debug("ntp", "NTP query failed", "server", server, "error", result.err.Error())
 			return nil, fmt.Errorf("ntp query to %s failed: %w", server, result.err)
 		}
 
 		resp := fromNTP(server, result.response)
 
-		logger.SafeDebug("ntp", "NTP query successful", map[string]interface{}{
-			"server":  server,
-			"offset":  resp.Offset.Seconds(),
-			"rtt":     resp.RTT.Seconds(),
-			"stratum": resp.Stratum,
-		})
+		logger.Debug("ntp", "NTP query successful",
+			"server", server,
+			"offset", resp.Offset.Seconds(),
+			"rtt", resp.RTT.Seconds(),
+			"stratum", resp.Stratum,
+		)
 
 		return resp, nil
 	}
@@ -129,10 +126,7 @@ func protocolErrorResponse(server string, err error) (*Response, bool) {
 		!errors.Is(err, ntp.ErrInvalidMode) {
 		return nil, false
 	}
-	logger.SafeDebug("ntp", "NTP response rejected", map[string]interface{}{
-		"server": server,
-		"error":  err.Error(),
-	})
+	logger.Debug("ntp", "NTP response rejected", "server", server, "error", err.Error())
 	return &Response{Server: server, ValidateError: err}, true
 }
 
@@ -142,10 +136,7 @@ func protocolErrorResponse(server string, err error) (*Response, bool) {
 func fromNTP(server string, r *ntp.Response) *Response {
 	validateErr := r.Validate()
 	if validateErr != nil {
-		logger.SafeDebug("ntp", "NTP response validation failed", map[string]interface{}{
-			"server": server,
-			"error":  validateErr.Error(),
-		})
+		logger.Debug("ntp", "NTP response validation failed", "server", server, "error", validateErr.Error())
 	}
 
 	return &Response{
@@ -188,21 +179,21 @@ func (c *Client) QueryMultiple(ctx context.Context, server string, count int) ([
 		resp, err := c.Query(ctx, server)
 		if err != nil {
 			lastErr = err
-			logger.SafeDebug("ntp", "NTP query attempt failed", map[string]interface{}{
-				"server":  server,
-				"attempt": i + 1,
-				"error":   err.Error(),
-			})
+			logger.Debug("ntp", "NTP query attempt failed",
+				"server", server,
+				"attempt", i+1,
+				"error", err.Error(),
+			)
 			continue
 		}
 
 		responses = append(responses, resp)
 		if resp.IsKissOfDeath() {
-			logger.SafeDebug("ntp", "Kiss-o'-Death received, burst stopped", map[string]interface{}{
-				"server":  server,
-				"code":    resp.KissCode,
-				"attempt": i + 1,
-			})
+			logger.Debug("ntp", "Kiss-o'-Death received, burst stopped",
+				"server", server,
+				"code", resp.KissCode,
+				"attempt", i+1,
+			)
 			break
 		}
 
@@ -222,11 +213,11 @@ func (c *Client) QueryMultiple(ctx context.Context, server string, count int) ([
 		return nil, sent, fmt.Errorf("all %d NTP queries failed for server %s: %w", sent, server, lastErr)
 	}
 
-	logger.SafeDebug("ntp", "Multiple NTP queries completed", map[string]interface{}{
-		"server":     server,
-		"successful": len(responses),
-		"total":      sent,
-	})
+	logger.Debug("ntp", "Multiple NTP queries completed",
+		"server", server,
+		"successful", len(responses),
+		"total", sent,
+	)
 
 	return responses, sent, nil
 }

@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
@@ -79,8 +77,8 @@ func (s *Server) Start(ctx context.Context) error {
 	systemd := false
 	webConfig := s.config.Server.WebConfigFile
 	flags := &web.FlagConfig{WebListenAddresses: &listen, WebSystemdSocket: &systemd, WebConfigFile: &webConfig}
-	logger.Infof("server", "Starting HTTP server on %s", addr)
-	go func() { errChan <- web.ListenAndServe(s.server, flags, toolkitLogger) }()
+	// exporter-toolkit logs the listen address with the logger of the exporter
+	go func() { errChan <- web.ListenAndServe(s.server, flags, logger.Slog().With("package", "server")) }()
 
 	// Wait for context cancellation or server error
 	select {
@@ -114,7 +112,3 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	logger.Info("server", "HTTP server stopped")
 	return nil
 }
-
-// toolkitLogger only reports exporter-toolkit warnings and errors: startup
-// information is already logged by the exporter
-var toolkitLogger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))

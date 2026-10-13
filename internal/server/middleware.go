@@ -27,11 +27,11 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				logger.SafeError("server", "Panic recovered", nil, map[string]interface{}{
-					"panic":  err,
-					"method": r.Method,
-					"path":   r.URL.Path,
-				})
+				logger.Error("server", "Panic recovered", nil,
+					"panic", err,
+					"method", r.Method,
+					"path", r.URL.Path,
+				)
 				w.WriteHeader(http.StatusInternalServerError)
 				_, _ = w.Write([]byte(`{"error":"internal server error"}`))
 			}
