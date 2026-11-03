@@ -4,7 +4,7 @@
 # Stage 1: Builder
 # =============================================================================
 # Base images pinned by digest, updated by Dependabot
-FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS builder
 
 # Target platform, set automatically by Docker Buildx
 ARG TARGETOS
@@ -37,7 +37,7 @@ RUN GOARM="${TARGETVARIANT#v}" CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARC
 # =============================================================================
 # Stage 2: Runtime image (distroless, non-root)
 # =============================================================================
-FROM gcr.io/distroless/static:nonroot@sha256:516757106de35205efb70b91ba03f6f1298424a0678c603255cf2852a7000087
+FROM gcr.io/distroless/static:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329
 
 ARG VERSION=dev
 ARG COMMIT=unknown
