@@ -221,8 +221,9 @@ jobs:
           exit-code: '1'
 
       - name: Upload Trivy results
-        # no artifact/code scanning API when run locally with act
-        if: ${{ !cancelled() && !env.ACT }}
+        # no artifact/code scanning API when run locally with act; skipped when
+        # an earlier step failed before Trivy produced the report
+        if: ${{ !cancelled() && !env.ACT && hashFiles('trivy-results.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: 'trivy-results.sarif'

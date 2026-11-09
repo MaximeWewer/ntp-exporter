@@ -1,6 +1,6 @@
 module github.com/maximewewer/ntp-exporter
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/beevik/ntp v1.6.0
@@ -34,7 +34,7 @@ require (
 	github.com/secure-io/siv-go v0.0.0-20180922214919-5ff40651e2c4 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
