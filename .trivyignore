@@ -1,0 +1,4 @@
+# golang.org/x/crypto/openpgp is deprecated and neither imported nor compiled
+# into the binary; x/crypto is required for bcrypt only. The fix exists only as
+# an untagged pseudo-version: drop this entry once x/crypto v0.59.0 is released.
+GO-2026-5932 exp:2027-02-01

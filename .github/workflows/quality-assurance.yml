@@ -202,8 +202,9 @@ jobs:
 
       # govulncheck fails on vulnerabilities reachable from the code. Advisories
       # on modules whose vulnerable packages are not imported are informational:
-      # GO-2026-5932 (golang.org/x/crypto/openpgp, deprecated, no fix) comes from
-      # x/crypto, required by exporter-toolkit for bcrypt; openpgp is not built in.
+      # GO-2026-5932 (golang.org/x/crypto/openpgp, deprecated, fix not yet tagged)
+      # comes from x/crypto, required by exporter-toolkit for bcrypt; openpgp is
+      # not built in. Trivy skips it through .trivyignore.
       - name: Check for known vulnerabilities
         run: |
           go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
